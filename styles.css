@@ -1,0 +1,1242 @@
+/* ==========================================================================
+   THE COMPLETE AI ENGINEER — Print-Ready CSS Design System
+   6×9 inch trade paperback | Professional typography
+   Author: Ram Awasthi
+   ========================================================================== */
+
+/* ---- Google Fonts ---- */
+@import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;0,900;1,300;1,400;1,700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;0,900;1,400;1,700&family=Source+Code+Pro:wght@400;500;600;700&family=Source+Sans+3:wght@300;400;600;700&display=swap');
+
+/* ---- CSS Custom Properties ---- */
+:root {
+  /* Colors */
+  --color-text: #1a1a1a;
+  --color-heading: #0d1b2a;
+  --color-accent: #1b4965;
+  --color-accent-light: #5fa8d3;
+  --color-muted: #555;
+  --color-light: #888;
+  --color-bg: #fafaf8;
+  --color-code-bg: #f4f4f0;
+  --color-border: #e0ddd5;
+  --color-highlight: #fff3cd;
+  
+  /* Company Badge Colors */
+  --google-color: #4285f4;
+  --meta-color: #1877f2;
+  --amazon-color: #ff9900;
+  --microsoft-color: #00a4ef;
+  --apple-color: #555;
+  --netflix-color: #e50914;
+  --tesla-color: #cc0000;
+  --openai-color: #10a37f;
+  --deepmind-color: #4285f4;
+  
+  /* Difficulty Colors */
+  --easy-color: #2ecc71;
+  --medium-color: #f39c12;
+  --hard-color: #e74c3c;
+  
+  /* Level Colors */
+  --foundation-color: #27ae60;
+  --intermediate-color: #2980b9;
+  --advanced-color: #8e44ad;
+  --codelab-color: #e67e22;
+  
+  /* Typography */
+  --font-body: 'Merriweather', Georgia, 'Times New Roman', serif;
+  --font-heading: 'Playfair Display', Georgia, serif;
+  --font-code: 'Source Code Pro', 'Courier New', monospace;
+  --font-ui: 'Source Sans 3', 'Helvetica Neue', Arial, sans-serif;
+  
+  /* Spacing */
+  --line-height: 1.72;
+  --paragraph-spacing: 0.85em;
+}
+
+/* ---- Page Setup ---- */
+@page {
+  size: 6in 9in;
+  margin: 0.85in 0.75in;
+}
+
+@page :left {
+  margin-left: 0.85in;
+  margin-right: 0.70in;
+}
+
+@page :right {
+  margin-left: 0.70in;
+  margin-right: 0.85in;
+}
+
+/* ---- Base Styles ---- */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 11pt;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: var(--line-height);
+  color: var(--color-text);
+  background: var(--color-bg);
+  text-align: justify;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  orphans: 3;
+  widows: 3;
+  margin: 0;
+  padding: 0;
+}
+
+/* ---- Headings ---- */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  color: var(--color-heading);
+  line-height: 1.25;
+  text-align: left;
+  hyphens: none;
+  page-break-after: avoid;
+}
+
+h1 { font-size: 2.2rem; font-weight: 800; margin: 0 0 0.5em; }
+h2 { font-size: 1.65rem; font-weight: 700; margin: 1.5em 0 0.5em; }
+h3 { font-size: 1.3rem; font-weight: 600; margin: 1.3em 0 0.4em; color: var(--color-accent); }
+h4 { font-size: 1.1rem; font-weight: 600; margin: 1.1em 0 0.3em; }
+
+/* ---- Paragraphs ---- */
+p {
+  margin: 0 0 var(--paragraph-spacing);
+}
+
+/* ---- Links ---- */
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--color-accent-light);
+}
+
+a:hover {
+  color: var(--color-accent-light);
+}
+
+/* ==========================================================================
+   COVER PAGES
+   ========================================================================== */
+
+.cover-page {
+  page-break-after: always;
+  margin: 0;
+  padding: 0;
+  width: 6in;
+  height: 9in;
+  overflow: hidden;
+  position: relative;
+}
+
+.cover-page img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* ==========================================================================
+   TITLE PAGE
+   ========================================================================== */
+
+.title-page {
+  page-break-after: always;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  min-height: 90vh;
+  padding: 2in 0.5in;
+}
+
+.title-page .book-title {
+  font-family: var(--font-heading);
+  font-size: 2.8rem;
+  font-weight: 900;
+  color: var(--color-heading);
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  margin-bottom: 0.3em;
+  text-transform: uppercase;
+}
+
+.title-page .book-subtitle {
+  font-family: var(--font-ui);
+  font-size: 1.15rem;
+  font-weight: 300;
+  color: var(--color-muted);
+  letter-spacing: 0.08em;
+  margin-bottom: 1.5em;
+  text-transform: uppercase;
+}
+
+.title-page .ornament {
+  font-size: 1.2rem;
+  color: var(--color-accent);
+  letter-spacing: 0.5em;
+  margin-bottom: 1.5em;
+}
+
+.title-page .author-name {
+  font-family: var(--font-ui);
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   COPYRIGHT PAGE
+   ========================================================================== */
+
+.copyright-page {
+  page-break-after: always;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 85vh;
+  padding: 0 0.5in 1in;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--color-muted);
+}
+
+.copyright-page p {
+  margin: 0 0 0.3em;
+}
+
+/* ==========================================================================
+   MESSAGE FROM THE BOOK
+   ========================================================================== */
+
+.message-page {
+  page-break-after: always;
+  padding: 1.5in 0.3in 1in;
+}
+
+.message-page h2 {
+  font-size: 1.8rem;
+  color: var(--color-accent);
+  margin-bottom: 1em;
+  text-align: center;
+}
+
+.message-page h3 {
+  font-size: 1.15rem;
+  color: var(--color-heading);
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+/* ==========================================================================
+   TABLE OF CONTENTS
+   ========================================================================== */
+
+.toc {
+  page-break-after: always;
+  padding: 1in 0;
+}
+
+.toc h2 {
+  font-size: 2rem;
+  text-align: center;
+  margin-bottom: 1.5em;
+  color: var(--color-heading);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.toc-part {
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 1.5em 0 0.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 2px solid var(--color-accent);
+}
+
+.toc-entry {
+  display: flex;
+  align-items: baseline;
+  margin: 0.35em 0;
+  padding-left: 0.5em;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.toc-chapter-num {
+  font-weight: 700;
+  color: var(--color-accent);
+  min-width: 2em;
+  flex-shrink: 0;
+}
+
+.toc-chapter-title {
+  flex-grow: 1;
+}
+
+.toc-project {
+  display: flex;
+  align-items: baseline;
+  margin: 0.2em 0 0.2em 2.5em;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.toc-project::before {
+  content: "🔨 ";
+  font-style: normal;
+}
+
+/* ==========================================================================
+   PART PAGES
+   ========================================================================== */
+
+.part-page {
+  page-break-before: right;
+  page-break-after: always;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  min-height: 90vh;
+  padding: 2in 0.5in;
+  background: linear-gradient(180deg, var(--color-bg) 0%, #f0ede5 100%);
+}
+
+.part-number {
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  margin-bottom: 0.5em;
+}
+
+.part-title {
+  font-family: var(--font-heading);
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: var(--color-heading);
+  line-height: 1.2;
+  margin-bottom: 0.3em;
+}
+
+.part-subtitle {
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  font-weight: 300;
+  color: var(--color-muted);
+  font-style: italic;
+  max-width: 80%;
+  margin: 0 auto;
+}
+
+.part-ornament {
+  font-size: 1.2rem;
+  color: var(--color-accent);
+  letter-spacing: 0.5em;
+  margin-top: 1em;
+}
+
+/* ==========================================================================
+   CHAPTERS
+   ========================================================================== */
+
+.chapter {
+  page-break-before: right;
+  padding-top: 1.5in;
+}
+
+.chapter-header {
+  text-align: center;
+  margin-bottom: 2em;
+}
+
+.chapter-number {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  margin-bottom: 0.3em;
+}
+
+.chapter-title {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--color-heading);
+  margin: 0 0 0.2em;
+  line-height: 1.2;
+}
+
+.chapter-subtitle {
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: 300;
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.chapter-ornament {
+  display: block;
+  font-size: 1rem;
+  color: var(--color-accent);
+  margin-top: 0.5em;
+}
+
+/* ---- Epigraphs ---- */
+.epigraph {
+  margin: 1em 1.5em 2em;
+  padding: 0.8em 1.2em;
+  border-left: 3px solid var(--color-accent-light);
+  font-style: italic;
+  font-size: 0.95rem;
+  color: var(--color-muted);
+  background: linear-gradient(135deg, rgba(95,168,211,0.04), transparent);
+}
+
+.epigraph .attribution {
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-style: normal;
+  color: var(--color-accent);
+  margin-top: 0.5em;
+}
+
+/* ---- Drop Cap ---- */
+.chapter-body > p:first-of-type::first-letter {
+  font-family: var(--font-heading);
+  font-size: 3.8em;
+  float: left;
+  line-height: 0.8;
+  margin: 0.05em 0.08em 0 0;
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+/* ---- Section Headings within Chapters ---- */
+.chapter-body h3 {
+  font-size: 1.25rem;
+  color: var(--color-accent);
+  margin: 1.8em 0 0.6em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.chapter-body h4 {
+  font-size: 1.05rem;
+  color: var(--color-heading);
+  margin: 1.3em 0 0.4em;
+}
+
+/* ==========================================================================
+   LEARNING LEVEL INDICATORS
+   ========================================================================== */
+
+.level-badge {
+  display: inline-block;
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0.15em 0.6em;
+  border-radius: 3px;
+  margin-right: 0.5em;
+  vertical-align: middle;
+}
+
+.level-foundation {
+  background: #e8f5e9;
+  color: var(--foundation-color);
+  border: 1px solid var(--foundation-color);
+}
+
+.level-intermediate {
+  background: #e3f2fd;
+  color: var(--intermediate-color);
+  border: 1px solid var(--intermediate-color);
+}
+
+.level-advanced {
+  background: #f3e5f5;
+  color: var(--advanced-color);
+  border: 1px solid var(--advanced-color);
+}
+
+.level-codelab {
+  background: #fff3e0;
+  color: var(--codelab-color);
+  border: 1px solid var(--codelab-color);
+}
+
+/* ==========================================================================
+   KEY INSIGHT BOXES
+   ========================================================================== */
+
+.key-insight {
+  margin: 1.5em 0;
+  padding: 1em 1.2em;
+  background: linear-gradient(135deg, #fff9e6, #fff3cd);
+  border-left: 4px solid #f4b400;
+  border-radius: 0 6px 6px 0;
+  page-break-inside: avoid;
+}
+
+.key-insight::before {
+  content: "💡 KEY INSIGHT";
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #b8860b;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.4em;
+}
+
+.key-insight p {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #5a4e00;
+}
+
+/* ==========================================================================
+   PRACTICE PROBLEMS
+   ========================================================================== */
+
+.practice-set {
+  margin: 2em 0;
+  page-break-before: auto;
+}
+
+.practice-set > h3 {
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  color: var(--color-heading);
+  text-align: center;
+  margin-bottom: 1em;
+  padding-bottom: 0.3em;
+  border-bottom: 2px solid var(--color-accent);
+}
+
+.problem {
+  margin: 1.5em 0;
+  padding: 1em 1.2em;
+  background: #fafaf8;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  page-break-inside: avoid;
+}
+
+.problem-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 0.6em;
+  flex-wrap: wrap;
+}
+
+.problem-number {
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-heading);
+}
+
+/* Difficulty Badges */
+.difficulty {
+  display: inline-block;
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.15em 0.5em;
+  border-radius: 3px;
+}
+
+.difficulty-easy {
+  background: #d4edda;
+  color: var(--easy-color);
+  border: 1px solid var(--easy-color);
+}
+
+.difficulty-medium {
+  background: #fff3cd;
+  color: #b8860b;
+  border: 1px solid var(--medium-color);
+}
+
+.difficulty-hard {
+  background: #f8d7da;
+  color: var(--hard-color);
+  border: 1px solid var(--hard-color);
+}
+
+/* Company Tags */
+.company-tag {
+  display: inline-block;
+  font-family: var(--font-ui);
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 0.1em 0.4em;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.company-google { background: #e8f0fe; color: var(--google-color); }
+.company-meta { background: #e7f3ff; color: var(--meta-color); }
+.company-amazon { background: #fff4e5; color: #c77d00; }
+.company-microsoft { background: #e6f7ff; color: var(--microsoft-color); }
+.company-apple { background: #f0f0f0; color: var(--apple-color); }
+.company-netflix { background: #fce4e4; color: var(--netflix-color); }
+.company-tesla { background: #fce4e4; color: var(--tesla-color); }
+.company-openai { background: #e6f9f1; color: var(--openai-color); }
+.company-deepmind { background: #e8f0fe; color: var(--deepmind-color); }
+.company-flipkart { background: #fff4e5; color: #f4b400; }
+.company-adobe { background: #fce4e4; color: #ff0000; }
+.company-goldman { background: #e8f0fe; color: #003399; }
+.company-uber { background: #f0f0f0; color: #000; }
+.company-stripe { background: #e8f0fe; color: #6772e5; }
+.company-airbnb { background: #fce4e4; color: #ff5a5f; }
+
+.problem-question {
+  margin: 0.5em 0;
+  font-size: 0.95rem;
+}
+
+.problem-question strong {
+  color: var(--color-heading);
+}
+
+/* Solution Blocks */
+.solution {
+  margin: 0.8em 0 0;
+  padding: 0.8em 1em;
+  background: #f8f9fa;
+  border-left: 3px solid var(--color-accent);
+  border-radius: 0 4px 4px 0;
+  font-size: 0.9rem;
+}
+
+.solution-label {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.4em;
+}
+
+.solution p {
+  margin: 0.3em 0;
+}
+
+.solution .step {
+  margin: 0.3em 0;
+  padding-left: 0.5em;
+}
+
+.solution .step strong {
+  color: var(--color-accent);
+}
+
+/* ==========================================================================
+   CODE BLOCKS & CODE LABS
+   ========================================================================== */
+
+.code-lab {
+  margin: 2em 0;
+  padding: 1.2em 1.5em;
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  border-radius: 8px;
+  page-break-inside: avoid;
+}
+
+.code-lab-header {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #5fa8d3;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-bottom: 0.8em;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid rgba(95,168,211,0.3);
+}
+
+.code-lab-header::before {
+  content: "⌨️ ";
+}
+
+pre {
+  margin: 1em 0;
+  padding: 1em 1.2em;
+  background: #1e1e2e;
+  color: #cdd6f4;
+  border-radius: 6px;
+  font-family: var(--font-code);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre;
+  border: 1px solid #313244;
+  page-break-inside: avoid;
+}
+
+code {
+  font-family: var(--font-code);
+  font-size: 0.88em;
+  background: var(--color-code-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  color: #c7254e;
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: 1em;
+}
+
+/* Syntax Highlighting (Catppuccin Mocha inspired) */
+.keyword { color: #cba6f7; }
+.string { color: #a6e3a1; }
+.number { color: #fab387; }
+.comment { color: #6c7086; font-style: italic; }
+.function { color: #89b4fa; }
+.builtin { color: #f9e2af; }
+.operator { color: #89dceb; }
+.decorator { color: #f5c2e7; }
+.class-name { color: #f9e2af; }
+
+/* ==========================================================================
+   PROJECT SECTIONS
+   ========================================================================== */
+
+.project-section {
+  margin: 2.5em 0;
+  padding: 1.5em;
+  background: linear-gradient(135deg, #e8f5e9, #f1f8e9);
+  border: 2px solid #4caf50;
+  border-radius: 10px;
+  page-break-before: auto;
+}
+
+.project-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 0.8em;
+}
+
+.project-icon {
+  font-size: 1.8rem;
+}
+
+.project-title {
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #2e7d32;
+  margin: 0;
+}
+
+.project-subtitle {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  color: #558b2f;
+  font-style: italic;
+  margin-bottom: 1em;
+}
+
+.project-section h4 {
+  color: #2e7d32;
+  font-size: 1.05rem;
+}
+
+.project-section .what-you-build {
+  background: white;
+  padding: 0.8em 1em;
+  border-radius: 6px;
+  margin: 0.8em 0;
+  border: 1px solid #c8e6c9;
+}
+
+/* ==========================================================================
+   EXERCISE SECTIONS
+   ========================================================================== */
+
+.exercises {
+  margin: 2em 0;
+  padding: 1.2em 1.5em;
+  background: #f3f0ff;
+  border: 1px solid #d1c4e9;
+  border-radius: 8px;
+}
+
+.exercises > h3 {
+  font-family: var(--font-heading);
+  color: var(--advanced-color);
+  margin-top: 0;
+}
+
+.exercises ol li {
+  margin: 0.6em 0;
+  font-size: 0.95rem;
+}
+
+/* ==========================================================================
+   BLOCKQUOTES & CALLOUTS
+   ========================================================================== */
+
+blockquote {
+  margin: 1.2em 1em;
+  padding: 0.8em 1.2em;
+  border-left: 4px solid var(--color-accent-light);
+  background: rgba(95,168,211,0.05);
+  font-style: italic;
+  color: var(--color-muted);
+  border-radius: 0 4px 4px 0;
+}
+
+blockquote p {
+  margin: 0.3em 0;
+}
+
+/* Warning / Note / Tip callouts */
+.callout {
+  margin: 1.5em 0;
+  padding: 1em 1.2em;
+  border-radius: 6px;
+  page-break-inside: avoid;
+}
+
+.callout-note {
+  background: #e3f2fd;
+  border-left: 4px solid #2196f3;
+}
+
+.callout-tip {
+  background: #e8f5e9;
+  border-left: 4px solid #4caf50;
+}
+
+.callout-warning {
+  background: #fff3e0;
+  border-left: 4px solid #ff9800;
+}
+
+.callout-label {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.3em;
+}
+
+/* ==========================================================================
+   MATH FORMULAS
+   ========================================================================== */
+
+.math-block {
+  margin: 1.2em 0;
+  padding: 0.8em 1em;
+  background: #fafbfc;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  text-align: center;
+  font-family: var(--font-code);
+  font-size: 1rem;
+  color: var(--color-heading);
+  page-break-inside: avoid;
+}
+
+.math-inline {
+  font-family: var(--font-code);
+  font-size: 0.92em;
+  color: var(--color-heading);
+  background: #f8f9fa;
+  padding: 0.05em 0.25em;
+  border-radius: 2px;
+}
+
+/* ==========================================================================
+   TABLES
+   ========================================================================== */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.2em 0;
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  page-break-inside: avoid;
+}
+
+th {
+  background: var(--color-accent);
+  color: white;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.6em 0.8em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+}
+
+td {
+  padding: 0.5em 0.8em;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+tr:nth-child(even) {
+  background: #f8f8f6;
+}
+
+/* ==========================================================================
+   LISTS
+   ========================================================================== */
+
+ul, ol {
+  margin: 0.8em 0;
+  padding-left: 1.5em;
+}
+
+li {
+  margin: 0.3em 0;
+}
+
+li::marker {
+  color: var(--color-accent);
+}
+
+/* ==========================================================================
+   GLOSSARY
+   ========================================================================== */
+
+.glossary {
+  page-break-before: right;
+  padding-top: 1.5in;
+}
+
+.glossary h2 {
+  text-align: center;
+  margin-bottom: 1.5em;
+}
+
+.glossary dl {
+  margin: 0;
+}
+
+.glossary dt {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  color: var(--color-accent);
+  margin-top: 0.8em;
+  font-size: 0.95rem;
+}
+
+.glossary dd {
+  margin: 0.2em 0 0.8em 1.2em;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.6em;
+}
+
+/* ==========================================================================
+   ABOUT THE AUTHOR
+   ========================================================================== */
+
+.about-author {
+  page-break-before: right;
+  padding: 1.5in 0.3in 1in;
+  text-align: center;
+}
+
+.about-author h2 {
+  font-size: 1.8rem;
+  margin-bottom: 1.5em;
+}
+
+.about-author p {
+  text-align: justify;
+  font-size: 0.95rem;
+  max-width: 4in;
+  margin: 0.5em auto;
+}
+
+/* ==========================================================================
+   BACK COVER
+   ========================================================================== */
+
+.back-cover-page {
+  break-before: right;
+  margin: 0;
+  padding: 0;
+  width: 6in;
+  height: 9in;
+  overflow: hidden;
+  background: linear-gradient(135deg, #050a15, #0a1128, #0d1b2a, #050a15);
+  position: relative;
+}
+
+.back-cover-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  padding: 1in 0.8in;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  color: white;
+}
+
+.back-tagline {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #5fa8d3;
+  line-height: 1.8;
+  margin-bottom: 1.5em;
+}
+
+.back-synopsis {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: #b0bec5;
+  margin-bottom: 1.5em;
+}
+
+.back-synopsis p {
+  margin: 0 0 0.8em;
+}
+
+.back-stats {
+  display: flex;
+  gap: 1em;
+  margin: 1em 0;
+  flex-wrap: wrap;
+}
+
+.back-stat {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #5fa8d3;
+  padding: 0.3em 0.6em;
+  border: 1px solid rgba(95,168,211,0.3);
+  border-radius: 4px;
+}
+
+.back-quote {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-style: italic;
+  color: #e8d5a3;
+  margin: 1em 0;
+  padding: 0.5em 0;
+  border-top: 1px solid rgba(232,213,163,0.3);
+  border-bottom: 1px solid rgba(232,213,163,0.3);
+}
+
+.back-author {
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  font-weight: 600;
+  color: white;
+  letter-spacing: 0.1em;
+  margin-top: 1em;
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   SCAFFOLDED / TODO CHAPTERS
+   ========================================================================== */
+
+.chapter-scaffold {
+  page-break-before: right;
+  padding-top: 1.5in;
+}
+
+.scaffold-notice {
+  margin: 2em 0;
+  padding: 1em 1.2em;
+  background: #fff3e0;
+  border: 2px dashed #ff9800;
+  border-radius: 8px;
+  text-align: center;
+  font-family: var(--font-ui);
+  color: #e65100;
+}
+
+.scaffold-outline {
+  margin: 1.5em 0;
+  padding: 1em 1.2em;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+
+.scaffold-outline h4 {
+  color: var(--color-accent);
+  margin-top: 0;
+}
+
+.scaffold-outline ul {
+  color: var(--color-muted);
+}
+
+/* ==========================================================================
+   FURTHER READING
+   ========================================================================== */
+
+.further-reading {
+  margin: 2em 0;
+  padding: 1em 1.2em;
+  background: #f0f4f8;
+  border-radius: 6px;
+  border: 1px solid #d0d7de;
+}
+
+.further-reading h4 {
+  font-family: var(--font-ui);
+  color: var(--color-accent);
+  margin-top: 0;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.further-reading h4::before {
+  content: "📚 ";
+}
+
+.further-reading ul {
+  font-size: 0.88rem;
+  color: var(--color-muted);
+}
+
+/* ==========================================================================
+   GITHUB LINK SECTIONS
+   ========================================================================== */
+
+.github-link {
+  margin: 1.5em 0;
+  padding: 0.8em 1em;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.github-link::before {
+  content: "🔗";
+  font-size: 1.2rem;
+}
+
+/* ==========================================================================
+   PRINT OPTIMIZATION
+   ========================================================================== */
+
+@media print {
+  body {
+    background: white;
+  }
+  
+  .cover-page,
+  .back-cover-page {
+    margin: 0;
+    padding: 0;
+  }
+  
+  .chapter {
+    page-break-before: right;
+  }
+  
+  .part-page {
+    page-break-before: right;
+    page-break-after: always;
+  }
+  
+  .problem,
+  .code-lab,
+  .key-insight,
+  .project-section,
+  .math-block {
+    page-break-inside: avoid;
+  }
+  
+  pre {
+    page-break-inside: avoid;
+    white-space: pre-wrap;
+  }
+  
+  a {
+    color: var(--color-text);
+    border-bottom: none;
+  }
+  
+  .scaffold-notice {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   RESPONSIVE (for browser preview)
+   ========================================================================== */
+
+@media screen {
+  body {
+    max-width: 6in;
+    margin: 0 auto;
+    padding: 1in 0.75in;
+    box-shadow: 0 0 30px rgba(0,0,0,0.1);
+  }
+  
+  .cover-page,
+  .back-cover-page {
+    margin-left: -0.75in;
+    margin-right: -0.75in;
+  }
+}

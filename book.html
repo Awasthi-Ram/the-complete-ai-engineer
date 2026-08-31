@@ -1,0 +1,2678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Complete AI Engineer — From Absolute Beginner to Production-Ready Engineer</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Cover-specific styles (full-bleed, no margins) */
+    .cover-page { page-break-after: always; margin: 0; padding: 0; width: 6in; height: 9in; overflow: hidden; }
+    .cover-page img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .back-cover-page { break-before: right; margin: 0; padding: 0; width: 6in; height: 9in; overflow: hidden; background: linear-gradient(135deg, #050a15, #0a1128, #0d1b2a, #050a15); }
+    .back-cover-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; padding: 1in 0.8in; display: flex; flex-direction: column; justify-content: center; color: white; }
+  </style>
+</head>
+<body>
+
+<!-- ====================================================================
+     FRONT COVER
+     ==================================================================== -->
+<div class="cover-page"><img src="front_cover.png" alt="The Complete AI Engineer — Book Cover"></div>
+
+<!-- ====================================================================
+     TITLE PAGE
+     ==================================================================== -->
+<div class="title-page">
+  <div class="book-title">The Complete<br>AI Engineer</div>
+  <div class="book-subtitle">From Absolute Beginner to Production-Ready Engineer</div>
+  <div class="ornament">✦ ✦ ✦</div>
+  <div class="author-name">Ram Awasthi</div>
+</div>
+
+<!-- ====================================================================
+     COPYRIGHT PAGE
+     ==================================================================== -->
+<div class="copyright-page">
+  <p><strong>The Complete AI Engineer: From Absolute Beginner to Production-Ready Engineer</strong></p>
+  <p>Copyright © 2026 Ram Awasthi</p>
+  <p>All rights reserved. No part of this publication may be reproduced, distributed, or transmitted in any form or by any means, including photocopying, recording, or other electronic or mechanical methods, without the prior written permission of the publisher, except in the case of brief quotations embodied in critical reviews and certain other non-commercial uses permitted by copyright law.</p>
+  <p>First Edition, 2026</p>
+  <p>ISBN: To be assigned</p>
+  <p style="margin-top: 1em;">Every effort has been made to ensure the accuracy of the information presented in this book. However, the information contained in this book is sold without warranty, either express or implied. The author and publisher will not be held liable for any damages caused or alleged to be caused directly or indirectly by this book.</p>
+  <p>All code examples in this book are available on GitHub and are released under the MIT License.</p>
+  <p style="margin-top: 1em;">Typeset in Merriweather, Playfair Display, and Source Code Pro.</p>
+</div>
+
+<!-- ====================================================================
+     A MESSAGE FROM THE BOOK
+     ==================================================================== -->
+<div class="message-page">
+  <h2>A Message From the Book</h2>
+  
+  <h3>Who This Book Is For</h3>
+  <p>This book is for anyone who wants to become an AI engineer. Not just someone who can use AI tools — but someone who truly understands how AI systems are designed, built, trained, evaluated, and deployed in the real world. You do not need a PhD. You do not need a research background. You need curiosity, dedication, and this book.</p>
+
+  <h3>What Makes This Book Different</h3>
+  <p>Most AI books are written by researchers for researchers. This one is written like a great teacher explains something to a motivated student. Every concept begins with intuition — what it is and why it exists in the real world. Only then does the math appear, and only the math that is actually needed. Every topic ends with working code that you can run, modify, and learn from.</p>
+
+  <h3>How to Use This Book</h3>
+  <p>Start at the beginning. The book is designed to build on itself — each chapter assumes you know the previous ones. If you are already comfortable with Python and basic math, you may skim Part 0 and start at Part 1. Each chapter has the same structure: concept → intuition → math → worked examples → practice problems → exercises → code lab → project. Work through the problems. Run the code. That is how this knowledge becomes yours.</p>
+
+  <h3>On the Code and GitHub</h3>
+  <p>Every code lab in this book is available as a fully working Jupyter notebook on GitHub. The repository contains updated content, corrections, and new chapters as the field evolves.</p>
+
+  <h3>On the Length of This Book</h3>
+  <p>This book is long. That is intentional. AI engineering is a deep field. There are no shortcuts. But every page earns its place. No filler, no repetition, no fluff — just a methodical, thorough education in how modern AI systems are built.</p>
+</div>
+
+<!-- ====================================================================
+     TABLE OF CONTENTS
+     ==================================================================== -->
+<div class="toc">
+  <h2>Contents</h2>
+
+  <!-- Part 0 -->
+  <div class="toc-part">Part 0 — Foundations Before Foundations</div>
+  <div class="toc-entry"><span class="toc-chapter-num">0.1</span><span class="toc-chapter-title">How to Learn AI — Setting Up Your Mind and Machine</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">0.2</span><span class="toc-chapter-title">Python Foundations — Your First Language of AI</span></div>
+  <div class="toc-project">Project: Build Your AI Development Dashboard</div>
+
+  <!-- Part 1 -->
+  <div class="toc-part">Part 1 — The Mathematics of AI</div>
+  <div class="toc-entry"><span class="toc-chapter-num">1.1</span><span class="toc-chapter-title">Linear Algebra — The Language Machines Think In</span></div>
+  <div class="toc-project">Project: Image Transformation Engine</div>
+  <div class="toc-entry"><span class="toc-chapter-num">1.2</span><span class="toc-chapter-title">Calculus — The Engine of Learning</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">1.3</span><span class="toc-chapter-title">Probability &amp; Statistics — Thinking in Uncertainty</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">1.4</span><span class="toc-chapter-title">Information Theory — Measuring What Machines Know</span></div>
+
+  <!-- Part 2 -->
+  <div class="toc-part">Part 2 — Classical Machine Learning</div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.1</span><span class="toc-chapter-title">What Is Machine Learning? — The Paradigm Shift</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.2</span><span class="toc-chapter-title">Linear Regression — The Line of Best Fit</span></div>
+  <div class="toc-project">Project: House Price Predictor from Scratch</div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.3</span><span class="toc-chapter-title">Logistic Regression — From Lines to Decisions</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.4</span><span class="toc-chapter-title">Decision Trees — Splitting Data by Questions</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.5</span><span class="toc-chapter-title">KNN &amp; SVMs — Similarity and Boundaries</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.6</span><span class="toc-chapter-title">Unsupervised Learning — Finding Structure Without Labels</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.7</span><span class="toc-chapter-title">Feature Engineering — The Art of Data Preparation</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.8</span><span class="toc-chapter-title">Model Evaluation — Measuring What Matters</span></div>
+
+  <!-- Part 3 -->
+  <div class="toc-part">Part 3 — Neural Networks from Scratch</div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.1</span><span class="toc-chapter-title">The Neuron &amp; Perceptron — Where It All Began</span></div>
+  <div class="toc-project">Project: Handwritten Digit Classifier from Scratch</div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.2</span><span class="toc-chapter-title">Feedforward Networks — Layers of Intelligence</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.3</span><span class="toc-chapter-title">Backpropagation — How Networks Learn</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.4</span><span class="toc-chapter-title">Optimization — Making Learning Faster and Better</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.5</span><span class="toc-chapter-title">Regularization — Preventing Overfitting</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.6</span><span class="toc-chapter-title">Training in Practice — PyTorch and TensorFlow</span></div>
+
+  <!-- Part 4 -->
+  <div class="toc-part">Part 4 — Deep Learning Architectures</div>
+  <div class="toc-entry"><span class="toc-chapter-num">4.1</span><span class="toc-chapter-title">CNNs — How Machines See</span></div>
+  <div class="toc-project">Project: Real-Time Image Classifier</div>
+  <div class="toc-entry"><span class="toc-chapter-num">4.2</span><span class="toc-chapter-title">RNNs &amp; LSTMs — Learning from Sequences</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">4.3</span><span class="toc-chapter-title">Attention &amp; Seq2Seq — Looking at Everything at Once</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">4.4</span><span class="toc-chapter-title">Transformers — The Architecture That Changed Everything</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">4.5</span><span class="toc-chapter-title">Generative Models — Autoencoders, VAEs, and GANs</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">4.6</span><span class="toc-chapter-title">Audio &amp; Speech — How Machines Hear</span></div>
+
+  <!-- Part 5 -->
+  <div class="toc-part">Part 5 — Large Language Models (LLMs)</div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.1</span><span class="toc-chapter-title">Text to Numbers — NLP Foundations</span></div>
+  <div class="toc-project">Project: Sentiment Analysis Engine</div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.2</span><span class="toc-chapter-title">The LLM Revolution — From Transformer to GPT</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.3</span><span class="toc-chapter-title">Prompt Engineering — The Art of Talking to AI</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.4</span><span class="toc-chapter-title">Fine-Tuning LLMs — Teaching Models New Tricks</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.5</span><span class="toc-chapter-title">RAG — Retrieval-Augmented Generation</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.6</span><span class="toc-chapter-title">AI Agents — Autonomous Problem Solvers</span></div>
+
+  <!-- Part 6 -->
+  <div class="toc-part">Part 6 — MLOps &amp; Production AI</div>
+  <div class="toc-entry"><span class="toc-chapter-num">6.1</span><span class="toc-chapter-title">Experiment Tracking &amp; Versioning — The Science of ML</span></div>
+  <div class="toc-project">Project: End-to-End ML Pipeline</div>
+  <div class="toc-entry"><span class="toc-chapter-num">6.2</span><span class="toc-chapter-title">Model Serving &amp; Deployment — From Notebook to Production</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">6.3</span><span class="toc-chapter-title">Monitoring &amp; Drift Detection — Keeping Models Honest</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">6.4</span><span class="toc-chapter-title">Data Pipelines &amp; Feature Stores</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">6.5</span><span class="toc-chapter-title">Cloud ML Platforms — AWS, GCP, and Azure</span></div>
+
+  <!-- Part 7 -->
+  <div class="toc-part">Part 7 — System Design for AI Engineers</div>
+  <div class="toc-entry"><span class="toc-chapter-num">7.1</span><span class="toc-chapter-title">AI System Design Framework</span></div>
+  <div class="toc-project">Project: Design a Recommendation System</div>
+  <div class="toc-entry"><span class="toc-chapter-num">7.2</span><span class="toc-chapter-title">Real-World System Designs — YouTube, Google, Spam Detection</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">7.3</span><span class="toc-chapter-title">Ethics, Fairness &amp; Explainability</span></div>
+
+  <!-- Part 8 -->
+  <div class="toc-part">Part 8 — Advanced Topics &amp; The Frontier</div>
+  <div class="toc-entry"><span class="toc-chapter-num">8.1</span><span class="toc-chapter-title">Multimodal AI — Vision Meets Language</span></div>
+  <div class="toc-project">Project: Image Caption Generator</div>
+  <div class="toc-entry"><span class="toc-chapter-num">8.2</span><span class="toc-chapter-title">Reinforcement Learning — Learning by Doing</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">8.3</span><span class="toc-chapter-title">Model Optimization — Quantization, Pruning, Distillation</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">8.4</span><span class="toc-chapter-title">Your Career as an AI Engineer</span></div>
+
+  <!-- Back matter -->
+  <div class="toc-part">Appendices</div>
+  <div class="toc-entry"><span class="toc-chapter-num">A</span><span class="toc-chapter-title">Glossary</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">B</span><span class="toc-chapter-title">About the Author</span></div>
+</div>
+
+
+<!-- ████████████████████████████████████████████████████████████████████████
+     PART 0 — FOUNDATIONS BEFORE FOUNDATIONS
+     ████████████████████████████████████████████████████████████████████████ -->
+
+<div class="part-page">
+  <div class="part-number">Part 0</div>
+  <div class="part-title">Foundations Before Foundations</div>
+  <div class="part-subtitle">Setting up your mind and your machine</div>
+  <div class="part-ornament">✦ ✦ ✦</div>
+</div>
+
+
+<!-- ======================================================================
+     CHAPTER 0.1 — HOW TO LEARN AI (FULL CHAPTER)
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 0.1</span>
+    <h2 class="chapter-title">How to Learn AI</h2>
+    <span class="chapter-subtitle">Setting Up Your Mind and Your Machine</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"The expert in anything was once a beginner."</p>
+    <p class="attribution">— Helen Hayes</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Before we write a single line of code, before we look at a single equation, we need to talk about something far more important: how to learn. Artificial intelligence is one of the most rapidly evolving fields in human history. New papers are published every day. New models are released every week. New frameworks appear every month. The volume of information is overwhelming, and the temptation to chase every shiny new thing is real. But here is a truth that separates the engineers who thrive from those who drown: the fundamentals never change.</p>
+
+    <h3>The Learning Philosophy of This Book</h3>
+
+    <p>This book is modeled after the greatest mathematics textbooks ever written — books like R.D. Sharma's mathematics series that taught millions of students not just how to solve problems, but how to <em>think</em> about problems. The philosophy is simple:</p>
+
+    <ol>
+      <li><strong>Concept First</strong> — Before any math, we explain what something is in plain language. What is the intuition? What mental picture should you hold?</li>
+      <li><strong>Why It Exists</strong> — Every mathematical tool, every algorithm, every technique was invented to solve a real problem. We tell you that story. When you understand <em>why</em> something was invented, the <em>how</em> becomes obvious.</li>
+      <li><strong>The Math</strong> — Introduced gently. Built from school-level concepts. No sudden jumps. No "it can be shown that..." skipping.</li>
+      <li><strong>Worked Examples</strong> — A teacher walks through complete problems step by step, explaining not just what to do but why.</li>
+      <li><strong>Practice Problems</strong> — Graded from Easy to Hard. Each problem is tagged with real companies that have asked similar questions in interviews — Google, Meta, Amazon, Microsoft, OpenAI, and more.</li>
+      <li><strong>Code Labs</strong> — Python implementations you can run yourself. Every line explained.</li>
+      <li><strong>Projects</strong> — Real-world mini-projects that apply the chapter's concepts to build something tangible.</li>
+    </ol>
+
+    <div class="key-insight">
+      <p>Understanding beats memorization. If you understand the "why" behind every concept, you will never forget the "how." This is the single most important principle in this entire book.</p>
+    </div>
+
+    <h3>The Three Pillars of AI Engineering</h3>
+
+    <p>To become a complete AI engineer, you need mastery in three areas, and this book covers all three:</p>
+
+    <table>
+      <tr>
+        <th>Pillar</th>
+        <th>What It Covers</th>
+        <th>Book Parts</th>
+      </tr>
+      <tr>
+        <td><strong>Theory</strong></td>
+        <td>Mathematics, probability, information theory, algorithm design</td>
+        <td>Parts 0–1</td>
+      </tr>
+      <tr>
+        <td><strong>Implementation</strong></td>
+        <td>ML algorithms, neural networks, deep learning, LLMs, coding from scratch</td>
+        <td>Parts 2–5</td>
+      </tr>
+      <tr>
+        <td><strong>Engineering</strong></td>
+        <td>MLOps, deployment, monitoring, system design, ethics</td>
+        <td>Parts 6–8</td>
+      </tr>
+    </table>
+
+    <h3>Setting Up Your Machine</h3>
+
+    <p>Before we begin, let's set up the tools you'll need throughout this book. Don't skip this — a proper environment saves hundreds of hours of debugging.</p>
+
+    <h4>Step 1: Install Python</h4>
+    <p>We use Python 3.10 or later. The recommended approach is through Anaconda, which bundles Python with all the scientific computing libraries you'll need:</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — Installing Your AI Environment</div>
+<pre><code><span class="comment"># Option 1: Install Anaconda (recommended for beginners)</span>
+<span class="comment"># Download from: https://www.anaconda.com/download</span>
+<span class="comment"># This gives you Python + NumPy + Pandas + Jupyter + 250 packages</span>
+
+<span class="comment"># Option 2: Install Miniconda (lightweight, recommended for experienced users)</span>
+<span class="comment"># Download from: https://docs.conda.io/en/latest/miniconda.html</span>
+
+<span class="comment"># After installation, create a dedicated environment:</span>
+conda create -n ai-engineer python=3.11 -y
+conda activate ai-engineer
+
+<span class="comment"># Install core packages</span>
+pip install numpy pandas matplotlib seaborn scikit-learn
+pip install torch torchvision torchaudio
+pip install tensorflow
+pip install jupyter notebook
+pip install transformers datasets
+
+<span class="comment"># Verify your installation</span>
+python -c <span class="string">"import torch; print(f'PyTorch: {torch.__version__}')"</span>
+python -c <span class="string">"import numpy; print(f'NumPy: {numpy.__version__}')"</span></code></pre>
+    </div>
+
+    <h4>Step 2: Choose Your Code Editor</h4>
+    <p>We recommend Visual Studio Code (VS Code) with the following extensions:</p>
+    <ul>
+      <li><strong>Python</strong> — Language support, IntelliSense, debugging</li>
+      <li><strong>Jupyter</strong> — Run notebooks directly in VS Code</li>
+      <li><strong>GitHub Copilot</strong> — AI-powered code completion (optional but helpful)</li>
+      <li><strong>Pylance</strong> — Advanced type checking and code analysis</li>
+    </ul>
+
+    <h4>Step 3: Set Up Google Colab</h4>
+    <p>For GPU-intensive chapters (deep learning, LLMs), you'll want access to a GPU. Google Colab provides free GPU access. Go to <code>colab.research.google.com</code>, sign in with your Google account, and you're ready. Every code lab in this book can be run on Colab.</p>
+
+    <h3>How to Read Practice Problems</h3>
+
+    <p>Throughout this book, practice problems follow a consistent format. Here's how to read them:</p>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 1</span>
+        <span class="difficulty difficulty-easy">Easy</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> This is where the problem statement appears. Each problem is clearly labeled with its difficulty level (Easy, Medium, or Hard) and the companies that have asked similar questions in their interviews or assessments.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Solution</div>
+        <p class="step"><strong>Step 1:</strong> Solutions are always step-by-step. We never just give you an answer — we walk through the thinking process.</p>
+        <p class="step"><strong>Step 2:</strong> Each step explains not just <em>what</em> to do, but <em>why</em> you do it.</p>
+        <p class="step"><strong>Step 3:</strong> The final answer includes real-world interpretation — what does this result actually mean?</p>
+      </div>
+    </div>
+
+    <h3>The Learning Level System</h3>
+
+    <p>Every section in this book is tagged with a learning level:</p>
+
+    <table>
+      <tr>
+        <th>Badge</th>
+        <th>Meaning</th>
+        <th>Action</th>
+      </tr>
+      <tr>
+        <td><span class="level-badge level-foundation">Foundation</span></td>
+        <td>Core concept. Every reader must understand this.</td>
+        <td>Read carefully, do all problems</td>
+      </tr>
+      <tr>
+        <td><span class="level-badge level-intermediate">Intermediate</span></td>
+        <td>Builds on foundation. Requires prior chapters.</td>
+        <td>Read after completing prerequisites</td>
+      </tr>
+      <tr>
+        <td><span class="level-badge level-advanced">Advanced</span></td>
+        <td>For deeper mastery. Can be skipped on first read.</td>
+        <td>Return to this after completing the book</td>
+      </tr>
+      <tr>
+        <td><span class="level-badge level-codelab">Code Lab</span></td>
+        <td>Hands-on Python implementation.</td>
+        <td>Open your editor and code along</td>
+      </tr>
+    </table>
+
+    <h3>A Note on Patience</h3>
+
+    <p>AI engineering is not learned in a week. This book contains over 500 practice problems, 200 code labs, and dozens of projects. If you spend 2–3 hours per day, working through one chapter at a time, you will complete this book in approximately 3–4 months. At the end, you will have a depth of understanding that most online courses never provide. The engineers who will define the next decade of AI are not the ones who used the most tools — they are the ones who understood the most fundamentals.</p>
+
+    <div class="key-insight">
+      <p>Start at Chapter 0.1. Do the work. Do not skip problems. Do not skip code labs. You will get there.</p>
+    </div>
+
+    <div class="further-reading">
+      <h4>Further Reading</h4>
+      <ul>
+        <li><strong>"How to Read a Paper"</strong> by S. Keshav — A guide to reading research papers efficiently</li>
+        <li><strong>fast.ai</strong> (course.fast.ai) — Practical deep learning for coders</li>
+        <li><strong>3Blue1Brown</strong> (youtube.com/3blue1brown) — The best visual math explanations on the internet</li>
+        <li><strong>"Mathematics for Machine Learning"</strong> by Deisenroth, Faisal, Ong — Free textbook at mml-book.github.io</li>
+      </ul>
+    </div>
+
+    <div class="github-link">
+      <strong>GitHub:</strong> All setup scripts and environment files are available at <code>github.com/ramawasthi/the-complete-ai-engineer/ch0-setup</code>
+    </div>
+  </div>
+</div>
+
+
+<!-- ======================================================================
+     CHAPTER 0.2 — PYTHON FOUNDATIONS (FULL CHAPTER)
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 0.2</span>
+    <h2 class="chapter-title">Python Foundations</h2>
+    <span class="chapter-subtitle">Your First Language of AI</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Programs must be written for people to read, and only incidentally for machines to execute."</p>
+    <p class="attribution">— Harold Abelson, Structure and Interpretation of Computer Programs</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Python is the undisputed language of artificial intelligence. Not because it's the fastest — C++ and Rust are faster. Not because it's the most elegant — Haskell and Lisp have their admirers. Python dominates AI because it hits the sweet spot: it's readable enough for researchers to prototype ideas quickly, and powerful enough (through libraries like NumPy, PyTorch, and TensorFlow) to train models on billions of parameters. If you already know Python well, skim this chapter. If you don't, this chapter will give you exactly the Python you need to succeed in the rest of this book.</p>
+
+    <h3>Variables and Data Types</h3>
+
+    <p>In Python, a variable is simply a name that points to a value in memory. Unlike languages like Java or C++, you don't need to declare the type — Python figures it out:</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — Variables and Types</div>
+<pre><code><span class="comment"># Numbers</span>
+learning_rate = <span class="number">0.001</span>          <span class="comment"># float — decimal numbers</span>
+num_epochs = <span class="number">100</span>               <span class="comment"># int — whole numbers</span>
+batch_size = <span class="number">32</span>                <span class="comment"># int</span>
+
+<span class="comment"># Strings</span>
+model_name = <span class="string">"GPT-4"</span>           <span class="comment"># str — text data</span>
+framework = <span class="string">'PyTorch'</span>          <span class="comment"># str — single or double quotes</span>
+
+<span class="comment"># Booleans</span>
+is_training = <span class="keyword">True</span>             <span class="comment"># bool — True or False</span>
+use_gpu = <span class="keyword">False</span>                <span class="comment"># bool</span>
+
+<span class="comment"># Check types</span>
+<span class="builtin">print</span>(<span class="builtin">type</span>(learning_rate))      <span class="comment"># &lt;class 'float'&gt;</span>
+<span class="builtin">print</span>(<span class="builtin">type</span>(model_name))         <span class="comment"># &lt;class 'str'&gt;</span>
+<span class="builtin">print</span>(<span class="builtin">type</span>(is_training))        <span class="comment"># &lt;class 'bool'&gt;</span></code></pre>
+    </div>
+
+    <h3>Lists — Ordered Collections</h3>
+
+    <p>A list is an ordered, mutable collection. In AI, lists hold data, model predictions, training losses, and more:</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — Lists in AI</div>
+<pre><code><span class="comment"># A list of training losses across epochs</span>
+losses = [<span class="number">2.45</span>, <span class="number">1.89</span>, <span class="number">1.32</span>, <span class="number">0.98</span>, <span class="number">0.67</span>, <span class="number">0.45</span>]
+
+<span class="comment"># Access elements (0-indexed)</span>
+first_loss = losses[<span class="number">0</span>]        <span class="comment"># 2.45</span>
+last_loss = losses[-<span class="number">1</span>]        <span class="comment"># 0.45</span>
+
+<span class="comment"># Slicing — get a range</span>
+first_three = losses[:<span class="number">3</span>]      <span class="comment"># [2.45, 1.89, 1.32]</span>
+
+<span class="comment"># Add to list</span>
+losses.append(<span class="number">0.33</span>)           <span class="comment"># [2.45, 1.89, 1.32, 0.98, 0.67, 0.45, 0.33]</span>
+
+<span class="comment"># List comprehension — the Pythonic way</span>
+squared = [x**<span class="number">2</span> <span class="keyword">for</span> x <span class="keyword">in</span> losses]
+below_one = [x <span class="keyword">for</span> x <span class="keyword">in</span> losses <span class="keyword">if</span> x &lt; <span class="number">1.0</span>]
+
+<span class="comment"># Length</span>
+<span class="builtin">print</span>(<span class="builtin">len</span>(losses))              <span class="comment"># 7</span></code></pre>
+    </div>
+
+    <h3>Dictionaries — Key-Value Storage</h3>
+
+    <p>Dictionaries are the backbone of configuration in AI. Model hyperparameters, training configs, result logs — all use dictionaries:</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — Dictionaries for AI Configuration</div>
+<pre><code><span class="comment"># A model's hyperparameters</span>
+config = {
+    <span class="string">"model"</span>: <span class="string">"ResNet-50"</span>,
+    <span class="string">"learning_rate"</span>: <span class="number">0.001</span>,
+    <span class="string">"batch_size"</span>: <span class="number">32</span>,
+    <span class="string">"epochs"</span>: <span class="number">100</span>,
+    <span class="string">"optimizer"</span>: <span class="string">"Adam"</span>,
+    <span class="string">"dropout"</span>: <span class="number">0.3</span>,
+}
+
+<span class="comment"># Access values</span>
+lr = config[<span class="string">"learning_rate"</span>]    <span class="comment"># 0.001</span>
+model = config.get(<span class="string">"model"</span>)      <span class="comment"># "ResNet-50" (safe access)</span>
+
+<span class="comment"># Add or update</span>
+config[<span class="string">"weight_decay"</span>] = <span class="number">1e-4</span>
+
+<span class="comment"># Iterate</span>
+<span class="keyword">for</span> key, value <span class="keyword">in</span> config.items():
+    <span class="builtin">print</span>(<span class="string">f"  {key}: {value}"</span>)</code></pre>
+    </div>
+
+    <h3>Functions — Reusable Logic</h3>
+
+    <p>Functions are the building blocks of all code. In AI, functions compute loss values, preprocess data, make predictions, and evaluate models:</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — Functions for AI</div>
+<pre><code><span class="keyword">def</span> <span class="function">mean_squared_error</span>(y_true, y_pred):
+    <span class="string">"""
+    Calculate Mean Squared Error — the most common regression loss.
+    
+    Args:
+        y_true: list of actual values
+        y_pred: list of predicted values
+    
+    Returns:
+        float: the mean of squared differences
+    """</span>
+    n = <span class="builtin">len</span>(y_true)
+    total_error = <span class="number">0</span>
+    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="builtin">range</span>(n):
+        error = (y_true[i] - y_pred[i]) ** <span class="number">2</span>
+        total_error += error
+    <span class="keyword">return</span> total_error / n
+
+<span class="comment"># Test it</span>
+actual =    [<span class="number">3.0</span>, <span class="number">5.0</span>, <span class="number">7.0</span>, <span class="number">9.0</span>]
+predicted = [<span class="number">2.8</span>, <span class="number">5.2</span>, <span class="number">6.5</span>, <span class="number">9.1</span>]
+
+mse = mean_squared_error(actual, predicted)
+<span class="builtin">print</span>(<span class="string">f"MSE: {mse:.4f}"</span>)  <span class="comment"># MSE: 0.0825</span></code></pre>
+    </div>
+
+    <h3>NumPy — The Backbone of AI Computation</h3>
+
+    <p>NumPy is the single most important library for AI programming. Every AI framework (PyTorch, TensorFlow, scikit-learn) is built on top of NumPy's concepts. NumPy arrays are to AI what spreadsheets are to business — the fundamental unit of data.</p>
+
+    <div class="key-insight">
+      <p>NumPy is not just a library — it's a way of thinking. "Vectorized thinking" means expressing computations as operations on entire arrays rather than looping through individual elements. This shift is the #1 thing that separates AI programmers from regular programmers.</p>
+    </div>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — NumPy Essentials</div>
+<pre><code><span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="comment"># Creating arrays</span>
+a = np.array([<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>])          <span class="comment"># 1D array (vector)</span>
+b = np.array([[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>],
+              [<span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>]])              <span class="comment"># 2D array (matrix)</span>
+
+<span class="comment"># Shape and dimensions</span>
+<span class="builtin">print</span>(a.shape)    <span class="comment"># (5,)    — 5 elements, 1 dimension</span>
+<span class="builtin">print</span>(b.shape)    <span class="comment"># (2, 3)  — 2 rows, 3 columns</span>
+<span class="builtin">print</span>(b.ndim)     <span class="comment"># 2       — number of dimensions</span>
+
+<span class="comment"># Vectorized operations — NO LOOPS!</span>
+x = np.array([<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>])
+y = np.array([<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>])
+
+<span class="builtin">print</span>(x + y)      <span class="comment"># [11, 22, 33]     — element-wise addition</span>
+<span class="builtin">print</span>(x * y)      <span class="comment"># [10, 40, 90]     — element-wise multiply</span>
+<span class="builtin">print</span>(x ** <span class="number">2</span>)     <span class="comment"># [100, 400, 900]  — element-wise square</span>
+
+<span class="comment"># Dot product — the most important operation in AI</span>
+dot = np.dot(x, y)  <span class="comment"># 10*1 + 20*2 + 30*3 = 140</span>
+
+<span class="comment"># Matrix multiplication</span>
+A = np.array([[<span class="number">1</span>, <span class="number">2</span>], [<span class="number">3</span>, <span class="number">4</span>]])
+B = np.array([[<span class="number">5</span>, <span class="number">6</span>], [<span class="number">7</span>, <span class="number">8</span>]])
+C = A @ B  <span class="comment"># or np.matmul(A, B)</span>
+<span class="builtin">print</span>(C)
+<span class="comment"># [[19, 22],</span>
+<span class="comment">#  [43, 50]]</span>
+
+<span class="comment"># Random numbers — essential for initializing neural networks</span>
+weights = np.random.randn(<span class="number">3</span>, <span class="number">4</span>)  <span class="comment"># 3x4 matrix of random values</span>
+<span class="builtin">print</span>(weights.shape)              <span class="comment"># (3, 4)</span></code></pre>
+    </div>
+
+    <h3>Pandas — Working with Data Tables</h3>
+
+    <p>While NumPy handles raw numerical computation, Pandas handles structured, tabular data — the kind you'll find in real-world datasets:</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — Pandas for Data Exploration</div>
+<pre><code><span class="keyword">import</span> pandas <span class="keyword">as</span> pd
+
+<span class="comment"># Create a DataFrame — like an Excel sheet</span>
+data = {
+    <span class="string">"model"</span>: [<span class="string">"GPT-4"</span>, <span class="string">"Claude"</span>, <span class="string">"Gemini"</span>, <span class="string">"LLaMA"</span>],
+    <span class="string">"params_billion"</span>: [<span class="number">1760</span>, <span class="number">175</span>, <span class="number">540</span>, <span class="number">70</span>],
+    <span class="string">"year"</span>: [<span class="number">2023</span>, <span class="number">2024</span>, <span class="number">2024</span>, <span class="number">2024</span>],
+    <span class="string">"open_source"</span>: [<span class="keyword">False</span>, <span class="keyword">False</span>, <span class="keyword">False</span>, <span class="keyword">True</span>],
+}
+df = pd.DataFrame(data)
+<span class="builtin">print</span>(df)
+
+<span class="comment"># Basic exploration</span>
+<span class="builtin">print</span>(df.shape)         <span class="comment"># (4, 4)</span>
+<span class="builtin">print</span>(df.describe())    <span class="comment"># Statistics for numeric columns</span>
+<span class="builtin">print</span>(df.dtypes)        <span class="comment"># Data types per column</span>
+
+<span class="comment"># Filtering</span>
+large_models = df[df[<span class="string">"params_billion"</span>] &gt; <span class="number">100</span>]
+open_models = df[df[<span class="string">"open_source"</span>] == <span class="keyword">True</span>]
+
+<span class="comment"># Sorting</span>
+by_size = df.sort_values(<span class="string">"params_billion"</span>, ascending=<span class="keyword">False</span>)</code></pre>
+    </div>
+
+    <!-- Practice Set -->
+    <div class="practice-set">
+      <h3>Practice Set — Chapter 0.2</h3>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-google">Google</span>
+          <span class="company-tag company-amazon">Amazon</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Write a Python function <code>sigmoid(x)</code> that takes a number <code>x</code> and returns the sigmoid value: σ(x) = 1 / (1 + e^(-x)). Test it with x = 0, x = 2, and x = -2.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Solution</div>
+          <p class="step"><strong>Step 1:</strong> Import the math module for the exponential function <code>e</code>.</p>
+          <p class="step"><strong>Step 2:</strong> The sigmoid formula is σ(x) = 1 / (1 + e^(-x)). At x=0, e^0 = 1, so σ(0) = 1/2 = 0.5.</p>
+          <p class="step"><strong>Step 3:</strong> At x=2, e^(-2) ≈ 0.135, so σ(2) = 1/(1+0.135) ≈ 0.881.</p>
+          <p class="step"><strong>Step 4:</strong> At x=-2, e^(2) ≈ 7.389, so σ(-2) = 1/(1+7.389) ≈ 0.119.</p>
+<pre><code><span class="keyword">import</span> math
+
+<span class="keyword">def</span> <span class="function">sigmoid</span>(x):
+    <span class="keyword">return</span> <span class="number">1</span> / (<span class="number">1</span> + math.exp(-x))
+
+<span class="builtin">print</span>(sigmoid(<span class="number">0</span>))    <span class="comment"># 0.5</span>
+<span class="builtin">print</span>(sigmoid(<span class="number">2</span>))    <span class="comment"># 0.8808</span>
+<span class="builtin">print</span>(sigmoid(-<span class="number">2</span>))   <span class="comment"># 0.1192</span></code></pre>
+          <p><strong>Interpretation:</strong> The sigmoid function squishes any real number into the range (0, 1). This is why it's used in logistic regression and neural network output layers for binary classification.</p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-meta">Meta</span>
+          <span class="company-tag company-microsoft">Microsoft</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Using only NumPy (no loops), write a function that takes two vectors of equal length and computes their cosine similarity: cos(θ) = (A · B) / (||A|| × ||B||).</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Solution</div>
+          <p class="step"><strong>Step 1:</strong> The dot product A · B = Σ(ai × bi).</p>
+          <p class="step"><strong>Step 2:</strong> The magnitude ||A|| = √(Σ ai²).</p>
+          <p class="step"><strong>Step 3:</strong> Cosine similarity = dot product / (magnitude_A × magnitude_B).</p>
+<pre><code><span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="keyword">def</span> <span class="function">cosine_similarity</span>(a, b):
+    dot_product = np.dot(a, b)
+    magnitude_a = np.sqrt(np.sum(a ** <span class="number">2</span>))
+    magnitude_b = np.sqrt(np.sum(b ** <span class="number">2</span>))
+    <span class="keyword">return</span> dot_product / (magnitude_a * magnitude_b)
+
+<span class="comment"># Test</span>
+v1 = np.array([<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>])
+v2 = np.array([<span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>])
+<span class="builtin">print</span>(<span class="string">f"Cosine similarity: {cosine_similarity(v1, v2):.4f}"</span>)  <span class="comment"># 0.9746</span></code></pre>
+          <p><strong>Interpretation:</strong> Cosine similarity ranges from -1 (opposite) to 1 (identical direction). A value of 0.97 means the vectors are nearly parallel. This metric is the backbone of semantic search, recommendation systems, and word embeddings.</p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 3</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-openai">OpenAI</span>
+          <span class="company-tag company-deepmind">DeepMind</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Implement a function <code>softmax(x)</code> using NumPy that takes an array of numbers and returns the softmax probabilities. Include the numerical stability trick (subtract the max). Verify that the output sums to 1.0.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Solution</div>
+          <p class="step"><strong>Step 1:</strong> Softmax formula: softmax(xi) = e^xi / Σ(e^xj). This converts any vector of real numbers into a probability distribution.</p>
+          <p class="step"><strong>Step 2:</strong> Numerical stability: Large values of x cause e^x to overflow. Trick: subtract max(x) from all elements first. This doesn't change the result (proof: it cancels out in the fraction) but prevents overflow.</p>
+          <p class="step"><strong>Step 3:</strong> Compute e^(x - max(x)), then divide by the sum.</p>
+<pre><code><span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="keyword">def</span> <span class="function">softmax</span>(x):
+    <span class="comment"># Subtract max for numerical stability</span>
+    x_stable = x - np.max(x)
+    exp_x = np.exp(x_stable)
+    <span class="keyword">return</span> exp_x / np.sum(exp_x)
+
+<span class="comment"># Test</span>
+logits = np.array([<span class="number">2.0</span>, <span class="number">1.0</span>, <span class="number">0.1</span>])
+probs = softmax(logits)
+<span class="builtin">print</span>(<span class="string">f"Probabilities: {probs}"</span>)
+<span class="builtin">print</span>(<span class="string">f"Sum: {np.sum(probs):.6f}"</span>)  <span class="comment"># 1.000000</span>
+
+<span class="comment"># Test with large numbers (would overflow without stability trick)</span>
+large = np.array([<span class="number">1000</span>, <span class="number">1001</span>, <span class="number">1002</span>])
+<span class="builtin">print</span>(softmax(large))  <span class="comment"># Works! [0.0900, 0.2447, 0.6652]</span></code></pre>
+          <p><strong>Interpretation:</strong> Softmax is the standard output activation for multi-class classification. Every LLM uses softmax to convert raw logits into token probabilities. Understanding why we subtract the max is essential — this trick appears in every production AI system.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Exercises -->
+    <div class="exercises">
+      <h3>Exercises — Chapter 0.2</h3>
+      <ol>
+        <li>Write a function <code>normalize(x)</code> that takes a NumPy array and normalizes it to zero mean and unit variance (z-score normalization).</li>
+        <li>Create a dictionary representing a neural network config with at least 8 hyperparameters. Write a function that prints each parameter formatted nicely.</li>
+        <li>Using Pandas, load any CSV dataset (e.g., Iris) and compute: number of rows, number of columns, data types, mean of each numeric column, and count of missing values.</li>
+        <li><strong>Challenge:</strong> Implement matrix multiplication from scratch using only Python lists (no NumPy). Then compare its speed with <code>np.matmul</code> on 100×100 matrices.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+
+<!-- ======================================================================
+     PROJECT: BUILD YOUR AI DEVELOPMENT DASHBOARD
+     ====================================================================== -->
+<div class="project-section">
+  <div class="project-header">
+    <span class="project-icon">🔨</span>
+    <h3 class="project-title">Project: Build Your AI Development Dashboard</h3>
+  </div>
+  <p class="project-subtitle">Apply everything from Part 0 — Python, NumPy, Pandas, data visualization</p>
+
+  <div class="what-you-build">
+    <h4>What You'll Build</h4>
+    <p>A Python script that analyzes a training log CSV file and generates a visual dashboard showing:</p>
+    <ul>
+      <li>Training and validation loss curves</li>
+      <li>Accuracy progression across epochs</li>
+      <li>Learning rate schedule visualization</li>
+      <li>A summary statistics table</li>
+    </ul>
+  </div>
+
+  <h4>Requirements</h4>
+  <ol>
+    <li>Generate a synthetic training log using NumPy random functions (simulating 50 epochs)</li>
+    <li>Save it as a CSV using Pandas</li>
+    <li>Read the CSV back and compute: best epoch, average loss, improvement rate</li>
+    <li>Use Matplotlib to create a 2×2 subplot dashboard</li>
+    <li>Save the dashboard as a PNG image</li>
+  </ol>
+
+  <h4>Starter Code</h4>
+<pre><code><span class="keyword">import</span> numpy <span class="keyword">as</span> np
+<span class="keyword">import</span> pandas <span class="keyword">as</span> pd
+<span class="keyword">import</span> matplotlib.pyplot <span class="keyword">as</span> plt
+
+<span class="comment"># Step 1: Generate synthetic training log</span>
+np.random.seed(<span class="number">42</span>)
+epochs = <span class="builtin">range</span>(<span class="number">1</span>, <span class="number">51</span>)
+train_loss = <span class="number">2.5</span> * np.exp(-<span class="number">0.05</span> * np.array(epochs)) + np.random.normal(<span class="number">0</span>, <span class="number">0.05</span>, <span class="number">50</span>)
+val_loss = <span class="number">2.5</span> * np.exp(-<span class="number">0.04</span> * np.array(epochs)) + np.random.normal(<span class="number">0</span>, <span class="number">0.08</span>, <span class="number">50</span>)
+accuracy = <span class="number">1</span> - <span class="number">0.5</span> * np.exp(-<span class="number">0.06</span> * np.array(epochs)) + np.random.normal(<span class="number">0</span>, <span class="number">0.02</span>, <span class="number">50</span>)
+
+<span class="comment"># Step 2: Create DataFrame and save</span>
+df = pd.DataFrame({
+    <span class="string">"epoch"</span>: epochs,
+    <span class="string">"train_loss"</span>: train_loss,
+    <span class="string">"val_loss"</span>: val_loss,
+    <span class="string">"accuracy"</span>: np.clip(accuracy, <span class="number">0</span>, <span class="number">1</span>)
+})
+df.to_csv(<span class="string">"training_log.csv"</span>, index=<span class="keyword">False</span>)
+
+<span class="comment"># Step 3: YOUR CODE HERE — analyze and visualize</span>
+<span class="comment"># Create a 2x2 subplot dashboard</span>
+<span class="comment"># ...</span></code></pre>
+
+  <div class="github-link">
+    <strong>Full solution available at:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/projects/p0-dashboard</code>
+  </div>
+</div>
+
+
+<!-- ████████████████████████████████████████████████████████████████████████
+     PART 1 — THE MATHEMATICS OF AI
+     ████████████████████████████████████████████████████████████████████████ -->
+
+<div class="part-page">
+  <div class="part-number">Part 1</div>
+  <div class="part-title">The Mathematics of AI</div>
+  <div class="part-subtitle">Building the mathematical foundation — from school math to AI math</div>
+  <div class="part-ornament">✦ ✦ ✦</div>
+</div>
+
+
+<!-- ======================================================================
+     CHAPTER 1.1 — LINEAR ALGEBRA (FULL CHAPTER)
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 1.1</span>
+    <h2 class="chapter-title">Linear Algebra</h2>
+    <span class="chapter-subtitle">The Language Machines Think In</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"In God we trust; all others must bring data."</p>
+    <p class="attribution">— W. Edwards Deming</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Every image you've ever seen on a screen is a matrix of numbers. Every word a language model processes is a vector of numbers. Every neural network is, at its core, a series of matrix multiplications. Linear algebra is not just a math subject you study before AI — it <em>is</em> the language of AI. Without it, everything that follows in this book will feel like magic. With it, everything will feel like engineering.</p>
+
+    <h3>Scalars, Vectors, Matrices, and Tensors</h3>
+
+    <p>These four objects form a hierarchy, and understanding this hierarchy is essential:</p>
+
+    <table>
+      <tr>
+        <th>Object</th>
+        <th>Dimensions</th>
+        <th>Example in AI</th>
+        <th>NumPy Shape</th>
+      </tr>
+      <tr>
+        <td><strong>Scalar</strong></td>
+        <td>0 (single number)</td>
+        <td>Learning rate: 0.001</td>
+        <td><code>()</code></td>
+      </tr>
+      <tr>
+        <td><strong>Vector</strong></td>
+        <td>1 (a list of numbers)</td>
+        <td>Word embedding for "king": [0.2, -0.1, ...]</td>
+        <td><code>(n,)</code></td>
+      </tr>
+      <tr>
+        <td><strong>Matrix</strong></td>
+        <td>2 (grid of numbers)</td>
+        <td>A weight matrix in a neural network layer</td>
+        <td><code>(m, n)</code></td>
+      </tr>
+      <tr>
+        <td><strong>Tensor</strong></td>
+        <td>3+ (cube or higher)</td>
+        <td>A batch of 32 RGB images: (32, 224, 224, 3)</td>
+        <td><code>(b, h, w, c)</code></td>
+      </tr>
+    </table>
+
+    <div class="key-insight">
+      <p>A tensor is just a generalization. A scalar is a 0-dimensional tensor. A vector is 1D. A matrix is 2D. When someone says "tensor" in AI, they usually mean "an n-dimensional array of numbers." That's it. Don't be intimidated by the word.</p>
+    </div>
+
+    <h3>Vector Operations</h3>
+
+    <h4>Addition and Subtraction</h4>
+    <p>Vectors add element-wise. If <strong>a</strong> = [1, 2, 3] and <strong>b</strong> = [4, 5, 6], then <strong>a</strong> + <strong>b</strong> = [5, 7, 9]. The vectors must be the same length.</p>
+
+    <h4>Scalar Multiplication</h4>
+    <p>Multiplying a vector by a scalar scales every element. If c = 3 and <strong>a</strong> = [1, 2, 3], then c<strong>a</strong> = [3, 6, 9]. In neural networks, this is how learning rates work — the gradient vector is scaled by the learning rate before updating weights.</p>
+
+    <h4>The Dot Product — The Most Important Operation in AI</h4>
+
+    <p>The dot product takes two vectors of equal length and returns a single number:</p>
+
+    <div class="math-block">
+      <strong>a</strong> · <strong>b</strong> = a₁b₁ + a₂b₂ + ... + aₙbₙ = Σ aᵢbᵢ
+    </div>
+
+    <p>Why is this important? Because the dot product measures <em>similarity</em>. When two vectors point in the same direction, their dot product is large and positive. When they're perpendicular, it's zero. When they point in opposite directions, it's negative. This is the mathematical foundation of:</p>
+
+    <ul>
+      <li><strong>Neural network layers:</strong> Every neuron computes a dot product of its inputs with its weights</li>
+      <li><strong>Attention mechanisms:</strong> The dot product between query and key vectors determines how much attention to pay</li>
+      <li><strong>Word embeddings:</strong> Similar words have similar vectors (high dot product)</li>
+      <li><strong>Recommendation systems:</strong> User and item vectors are compared via dot product</li>
+    </ul>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — Vector Operations</div>
+<pre><code><span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="comment"># Vectors</span>
+a = np.array([<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>])
+b = np.array([<span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>])
+
+<span class="comment"># Addition</span>
+<span class="builtin">print</span>(<span class="string">"a + b ="</span>, a + b)           <span class="comment"># [5, 7, 9]</span>
+
+<span class="comment"># Scalar multiplication</span>
+<span class="builtin">print</span>(<span class="string">"3 * a ="</span>, <span class="number">3</span> * a)            <span class="comment"># [3, 6, 9]</span>
+
+<span class="comment"># Dot product</span>
+dot = np.dot(a, b)                <span class="comment"># 1*4 + 2*5 + 3*6 = 32</span>
+<span class="builtin">print</span>(<span class="string">"a · b ="</span>, dot)
+
+<span class="comment"># Magnitude (length) of a vector</span>
+mag_a = np.linalg.norm(a)         <span class="comment"># √(1² + 2² + 3²) = √14 ≈ 3.742</span>
+<span class="builtin">print</span>(<span class="string">"||a|| ="</span>, mag_a)
+
+<span class="comment"># Unit vector (direction without magnitude)</span>
+unit_a = a / np.linalg.norm(a)
+<span class="builtin">print</span>(<span class="string">"â ="</span>, unit_a)               <span class="comment"># [0.267, 0.535, 0.802]</span></code></pre>
+    </div>
+
+    <h3>Matrix Multiplication — The Engine of AI</h3>
+
+    <p>Matrix multiplication is the single most performed operation in all of AI. When a neural network processes data, when a transformer generates text, when a CNN recognizes faces — matrix multiplication is what's happening under the hood, billions of times per second.</p>
+
+    <p>For two matrices A (shape m×n) and B (shape n×p), their product C = A × B has shape m×p. Each element C[i][j] is the dot product of row i of A and column j of B:</p>
+
+    <div class="math-block">
+      C[i][j] = Σₖ A[i][k] × B[k][j]
+    </div>
+
+    <p><strong>Worked Example:</strong> Let's multiply two matrices step by step.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — Matrix Multiplication from Scratch</div>
+<pre><code><span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="comment"># Two matrices</span>
+A = np.array([[<span class="number">1</span>, <span class="number">2</span>],
+              [<span class="number">3</span>, <span class="number">4</span>]])   <span class="comment"># Shape: (2, 2)</span>
+
+B = np.array([[<span class="number">5</span>, <span class="number">6</span>],
+              [<span class="number">7</span>, <span class="number">8</span>]])   <span class="comment"># Shape: (2, 2)</span>
+
+<span class="comment"># Method 1: NumPy (fast, production code)</span>
+C = A @ B
+<span class="builtin">print</span>(<span class="string">"A @ B ="</span>)
+<span class="builtin">print</span>(C)
+<span class="comment"># [[19, 22],</span>
+<span class="comment">#  [43, 50]]</span>
+
+<span class="comment"># Method 2: From scratch (for understanding)</span>
+<span class="keyword">def</span> <span class="function">matmul_scratch</span>(A, B):
+    m, n = A.shape
+    n2, p = B.shape
+    <span class="keyword">assert</span> n == n2, <span class="string">"Inner dimensions must match!"</span>
+    C = np.zeros((m, p))
+    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="builtin">range</span>(m):
+        <span class="keyword">for</span> j <span class="keyword">in</span> <span class="builtin">range</span>(p):
+            <span class="keyword">for</span> k <span class="keyword">in</span> <span class="builtin">range</span>(n):
+                C[i][j] += A[i][k] * B[k][j]
+    <span class="keyword">return</span> C
+
+<span class="comment"># Verify</span>
+C2 = matmul_scratch(A, B)
+<span class="builtin">print</span>(<span class="string">"From scratch:"</span>, np.allclose(C, C2))  <span class="comment"># True</span>
+
+<span class="comment"># Why it matters: a neural network layer is just y = Wx + b</span>
+<span class="comment"># W is a weight matrix, x is input vector, b is bias vector</span>
+W = np.random.randn(<span class="number">4</span>, <span class="number">3</span>)   <span class="comment"># 4 neurons, 3 inputs</span>
+x = np.array([<span class="number">0.5</span>, <span class="number">0.8</span>, <span class="number">0.2</span>])
+b = np.zeros(<span class="number">4</span>)
+y = W @ x + b                <span class="comment"># One layer's output!</span>
+<span class="builtin">print</span>(<span class="string">"Layer output:"</span>, y)</code></pre>
+    </div>
+
+    <h3>Transpose, Identity, and Inverse</h3>
+
+    <p><strong>Transpose</strong> (A^T) flips a matrix over its diagonal — rows become columns. If A is (3, 2), then A^T is (2, 3). This appears constantly in backpropagation.</p>
+
+    <p><strong>Identity Matrix</strong> (I) is the matrix equivalent of the number 1. It's a square matrix with 1s on the diagonal and 0s elsewhere. For any matrix A: A × I = A.</p>
+
+    <p><strong>Inverse</strong> (A⁻¹) is like division for matrices. If A × A⁻¹ = I, then A⁻¹ "undoes" what A does. Not all matrices have inverses (just like you can't divide by zero).</p>
+
+    <!-- Practice Set -->
+    <div class="practice-set">
+      <h3>Practice Set — Chapter 1.1</h3>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-google">Google</span>
+          <span class="company-tag company-microsoft">Microsoft</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Given vectors <strong>u</strong> = [3, -1, 2] and <strong>v</strong> = [1, 4, -2], compute: (a) u + v, (b) u · v (dot product), (c) ||u|| (magnitude of u).</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Solution</div>
+          <p class="step"><strong>(a) u + v</strong> = [3+1, -1+4, 2+(-2)] = [4, 3, 0]</p>
+          <p class="step"><strong>(b) u · v</strong> = 3(1) + (-1)(4) + 2(-2) = 3 - 4 - 4 = <strong>-5</strong></p>
+          <p class="step"><strong>(c) ||u||</strong> = √(3² + (-1)² + 2²) = √(9 + 1 + 4) = √14 ≈ <strong>3.742</strong></p>
+          <p><strong>Interpretation:</strong> The dot product is negative (-5), meaning these vectors point in somewhat opposite directions. In an embedding space, this would mean the concepts they represent are dissimilar.</p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-amazon">Amazon</span>
+          <span class="company-tag company-meta">Meta</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Given matrices A = [[1, 2], [3, 4]] and B = [[2, 0], [1, 3]], compute: (a) A × B, (b) B × A. Are they equal? Why or why not?</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Solution</div>
+          <p class="step"><strong>(a) A × B:</strong></p>
+          <p class="step">C[0][0] = 1(2) + 2(1) = 4</p>
+          <p class="step">C[0][1] = 1(0) + 2(3) = 6</p>
+          <p class="step">C[1][0] = 3(2) + 4(1) = 10</p>
+          <p class="step">C[1][1] = 3(0) + 4(3) = 12</p>
+          <p class="step"><strong>A × B = [[4, 6], [10, 12]]</strong></p>
+          <p class="step"><strong>(b) B × A:</strong></p>
+          <p class="step">D[0][0] = 2(1) + 0(3) = 2, D[0][1] = 2(2) + 0(4) = 4</p>
+          <p class="step">D[1][0] = 1(1) + 3(3) = 10, D[1][1] = 1(2) + 3(4) = 14</p>
+          <p class="step"><strong>B × A = [[2, 4], [10, 14]]</strong></p>
+          <p><strong>They are NOT equal!</strong> Matrix multiplication is not commutative: A × B ≠ B × A in general. This is critical in neural networks — the order of operations matters.</p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 3</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-openai">OpenAI</span>
+          <span class="company-tag company-deepmind">DeepMind</span>
+          <span class="company-tag company-tesla">Tesla</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In a neural network layer, the output is computed as <strong>y</strong> = σ(W<strong>x</strong> + <strong>b</strong>), where W is a (4×3) weight matrix, <strong>x</strong> is a 3D input vector, <strong>b</strong> is a 4D bias vector, and σ is the sigmoid function. If W = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9], [1.0, 1.1, 1.2]], x = [1, 0.5, -1], and b = [0, 0, 0, 0], compute the output vector y.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Solution</div>
+          <p class="step"><strong>Step 1:</strong> Compute z = Wx + b</p>
+          <p class="step">z₁ = 0.1(1) + 0.2(0.5) + 0.3(-1) + 0 = 0.1 + 0.1 - 0.3 = <strong>-0.1</strong></p>
+          <p class="step">z₂ = 0.4(1) + 0.5(0.5) + 0.6(-1) + 0 = 0.4 + 0.25 - 0.6 = <strong>0.05</strong></p>
+          <p class="step">z₃ = 0.7(1) + 0.8(0.5) + 0.9(-1) + 0 = 0.7 + 0.4 - 0.9 = <strong>0.2</strong></p>
+          <p class="step">z₄ = 1.0(1) + 1.1(0.5) + 1.2(-1) + 0 = 1.0 + 0.55 - 1.2 = <strong>0.35</strong></p>
+          <p class="step"><strong>Step 2:</strong> Apply sigmoid σ(z) = 1/(1 + e⁻ᶻ) to each element</p>
+          <p class="step">y₁ = σ(-0.1) = 1/(1 + e^0.1) ≈ 1/1.105 ≈ <strong>0.475</strong></p>
+          <p class="step">y₂ = σ(0.05) = 1/(1 + e^-0.05) ≈ 1/1.049 ≈ <strong>0.512</strong></p>
+          <p class="step">y₃ = σ(0.2) = 1/(1 + e^-0.2) ≈ 1/1.819 ≈ <strong>0.550</strong></p>
+          <p class="step">y₄ = σ(0.35) = 1/(1 + e^-0.35) ≈ 1/1.705 ≈ <strong>0.587</strong></p>
+          <p class="step"><strong>y ≈ [0.475, 0.512, 0.550, 0.587]</strong></p>
+          <p><strong>Interpretation:</strong> You just computed a forward pass through a single neural network layer by hand! This is exactly what PyTorch and TensorFlow do — billions of times per second — when training a model. The output values are all between 0 and 1 (thanks to sigmoid), making them interpretable as probabilities.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Exercises -->
+    <div class="exercises">
+      <h3>Exercises — Chapter 1.1</h3>
+      <ol>
+        <li>Prove that the dot product of two orthogonal vectors is always zero. Give a geometric explanation.</li>
+        <li>Show that (AB)^T = B^T × A^T for any conformable matrices A and B. (Hint: write out the element-wise definition.)</li>
+        <li>A grayscale image is a 2D matrix of pixel values (0–255). Write NumPy code that loads an image, applies a brightness transformation (multiply by 1.5, clip to 255), and saves the result.</li>
+        <li><strong>Challenge:</strong> Implement a simple image rotation using matrix multiplication. A 2D rotation matrix for angle θ is R = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]. Apply this to a set of 2D points and plot the result.</li>
+      </ol>
+    </div>
+
+    <div class="further-reading">
+      <h4>Further Reading</h4>
+      <ul>
+        <li><strong>"Linear Algebra and Its Applications"</strong> by Gilbert Strang — The gold standard textbook</li>
+        <li><strong>3Blue1Brown: Essence of Linear Algebra</strong> — Best visual explanation series on YouTube</li>
+        <li><strong>"Linear Algebra Done Right"</strong> by Sheldon Axler — For a more abstract, proof-based approach</li>
+        <li><strong>MIT OpenCourseWare 18.06</strong> — Gilbert Strang's full lecture series (free)</li>
+      </ul>
+    </div>
+
+    <div class="github-link">
+      <strong>GitHub:</strong> All code labs for this chapter at <code>github.com/ramawasthi/the-complete-ai-engineer/ch1-linear-algebra</code>
+    </div>
+  </div>
+</div>
+
+
+<!-- ======================================================================
+     PROJECT: IMAGE TRANSFORMATION ENGINE
+     ====================================================================== -->
+<div class="project-section">
+  <div class="project-header">
+    <span class="project-icon">🔨</span>
+    <h3 class="project-title">Project: Image Transformation Engine</h3>
+  </div>
+  <p class="project-subtitle">Apply linear algebra to manipulate images using matrix operations</p>
+
+  <div class="what-you-build">
+    <h4>What You'll Build</h4>
+    <p>A Python program that takes any image and applies the following transformations using only matrix operations (no image library built-in transforms):</p>
+    <ul>
+      <li>Rotation by any angle (using rotation matrices)</li>
+      <li>Scaling (using diagonal scaling matrices)</li>
+      <li>Horizontal and vertical flipping (using reflection matrices)</li>
+      <li>Brightness and contrast adjustment (scalar multiplication)</li>
+      <li>Grayscale conversion (using the luminosity vector [0.299, 0.587, 0.114])</li>
+    </ul>
+  </div>
+
+  <h4>Key Concepts Used</h4>
+  <ul>
+    <li>Matrix multiplication for geometric transformations</li>
+    <li>Dot product for color space conversion</li>
+    <li>Scalar multiplication for brightness</li>
+    <li>Matrix transpose for flipping</li>
+  </ul>
+
+  <div class="github-link">
+    <strong>Full solution:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/projects/p1-image-transform</code>
+  </div>
+</div>
+
+
+<!-- ======================================================================
+     CHAPTER 1.2 — CALCULUS (SCAFFOLDED)
+     ====================================================================== -->
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 1.2</span>
+    <h2 class="chapter-title">Calculus</h2>
+    <span class="chapter-subtitle">The Engine of Learning</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"If I have seen further, it is by standing on the shoulders of giants."</p>
+    <p class="attribution">— Isaac Newton</p>
+  </div>
+
+  <div class="chapter-body">
+    <div class="scaffold-notice">
+      📋 This chapter is outlined and will be written in full in a future session. See CHAT_HISTORY.md for continuation instructions.
+    </div>
+
+    <div class="scaffold-outline">
+      <h4>Planned Sections</h4>
+      <ul>
+        <li><strong>What is a Function?</strong> — Rate of change, slope, the meaning of "derivative"</li>
+        <li><strong>Derivatives</strong> — Intuition with graphs, then the formal definition, power rule, product rule, quotient rule</li>
+        <li><strong>Partial Derivatives</strong> — Functions of multiple variables, gradients as vectors</li>
+        <li><strong>The Chain Rule</strong> — The engine of neural network training, composition of functions</li>
+        <li><strong>Gradient Descent</strong> — Intuition: walking downhill blindfolded, update rule: w = w - α∇L</li>
+        <li><strong>Practice Set</strong> — 10+ problems (Easy/Medium/Hard) with company tags</li>
+        <li><strong>Code Lab</strong> — Implementing gradient descent from scratch in Python</li>
+        <li><strong>Project</strong> — Build a function optimizer that finds minima of any differentiable function</li>
+      </ul>
+    </div>
+    <!-- TODO: Write full content -->
+  </div>
+</div>
+
+
+<!-- ======================================================================
+     CHAPTER 1.3 — PROBABILITY & STATISTICS (SCAFFOLDED)
+     ====================================================================== -->
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 1.3</span>
+    <h2 class="chapter-title">Probability &amp; Statistics</h2>
+    <span class="chapter-subtitle">Thinking in Uncertainty</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Probability is the very guide of life."</p>
+    <p class="attribution">— Cicero</p>
+  </div>
+
+  <div class="chapter-body">
+    <div class="scaffold-notice">
+      📋 This chapter is outlined and will be written in full in a future session.
+    </div>
+
+    <div class="scaffold-outline">
+      <h4>Planned Sections</h4>
+      <ul>
+        <li><strong>What is Probability?</strong> — Events, sample space, outcomes</li>
+        <li><strong>Conditional Probability</strong> — P(A|B), Bayes' theorem deeply explained</li>
+        <li><strong>Random Variables</strong> — Discrete and continuous, PDF, PMF, CDF</li>
+        <li><strong>Common Distributions</strong> — Bernoulli, Binomial, Gaussian, Poisson</li>
+        <li><strong>Expected Value &amp; Variance</strong> — Mean, standard deviation, moments</li>
+        <li><strong>Bayes' Theorem</strong> — Prior, likelihood, posterior, real-world examples (spam detection, medical diagnosis)</li>
+        <li><strong>Practice Set</strong> — 10+ problems with company tags</li>
+        <li><strong>Code Lab</strong> — Monte Carlo simulation, Bayesian inference from scratch</li>
+        <li><strong>Project</strong> — Build a Naive Bayes Spam Classifier</li>
+      </ul>
+    </div>
+    <!-- TODO: Write full content -->
+  </div>
+</div>
+
+
+<!-- ======================================================================
+     CHAPTER 1.4 — INFORMATION THEORY (SCAFFOLDED)
+     ====================================================================== -->
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 1.4</span>
+    <h2 class="chapter-title">Information Theory</h2>
+    <span class="chapter-subtitle">Measuring What Machines Know</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Information is the resolution of uncertainty."</p>
+    <p class="attribution">— Claude Shannon</p>
+  </div>
+
+  <div class="chapter-body">
+    <div class="scaffold-notice">
+      📋 This chapter is outlined and will be written in full in a future session.
+    </div>
+
+    <div class="scaffold-outline">
+      <h4>Planned Sections</h4>
+      <ul>
+        <li><strong>What is Information?</strong> — Surprise, uncertainty, bits</li>
+        <li><strong>Entropy</strong> — Measuring uncertainty in a distribution, H(X) = -Σ p(x) log p(x)</li>
+        <li><strong>Cross-Entropy</strong> — How we measure AI prediction error, the standard loss function for classification</li>
+        <li><strong>KL Divergence</strong> — Measuring how different two distributions are</li>
+        <li><strong>Practice Set</strong> — 8+ problems with company tags</li>
+        <li><strong>Code Lab</strong> — Computing entropy and cross-entropy loss from scratch</li>
+        <li><strong>Project</strong> — Build a text compression algorithm using Huffman coding</li>
+      </ul>
+    </div>
+    <!-- TODO: Write full content -->
+  </div>
+</div>
+
+
+<!-- ████████████████████████████████████████████████████████████████████████
+     PART 2 — CLASSICAL MACHINE LEARNING
+     ████████████████████████████████████████████████████████████████████████ -->
+
+<div class="part-page">
+  <div class="part-number">Part 2</div>
+  <div class="part-title">Classical Machine Learning</div>
+  <div class="part-subtitle">The algorithms that started it all — still used every day</div>
+  <div class="part-ornament">✦ ✦ ✦</div>
+</div>
+
+
+<!-- ======================================================================
+     CHAPTER 2.1 — WHAT IS MACHINE LEARNING? (FULL CHAPTER)
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.1</span>
+    <h2 class="chapter-title">What Is Machine Learning?</h2>
+    <span class="chapter-subtitle">The Paradigm Shift</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"A computer program is said to learn from experience E with respect to some task T and some performance measure P, if its performance on T, as measured by P, improves with experience E."</p>
+    <p class="attribution">— Tom Mitchell, 1997</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Imagine you want to build a program that detects spam emails. In traditional programming, you would sit down and write rules: "if the email contains 'free money' AND the sender is unknown, mark as spam." You would write hundreds of these rules, covering every case you can think of. But spammers adapt. They change their wording. They find new tricks. Your rules break, and you have to write new ones. It never ends.</p>
+
+    <p>Now imagine a different approach. Instead of writing rules, you give the computer 10,000 emails — some labeled "spam" and some labeled "not spam." You say: "Figure out the pattern yourself." The computer looks at these examples, discovers patterns you never thought of (maybe spammers use certain punctuation patterns, or certain combinations of words, or send at certain times), and builds its own internal rules. That's machine learning.</p>
+
+    <div class="key-insight">
+      <p>Traditional programming: Human writes rules → Computer applies rules to data → Output.<br>
+      Machine learning: Human provides data + desired outputs → Computer learns rules → Rules apply to new data.</p>
+    </div>
+
+    <h3>The Three Types of Machine Learning</h3>
+
+    <table>
+      <tr>
+        <th>Type</th>
+        <th>What It Gets</th>
+        <th>What It Learns</th>
+        <th>Examples</th>
+      </tr>
+      <tr>
+        <td><strong>Supervised</strong></td>
+        <td>Input-output pairs (labeled data)</td>
+        <td>The mapping from input → output</td>
+        <td>Spam detection, image classification, price prediction</td>
+      </tr>
+      <tr>
+        <td><strong>Unsupervised</strong></td>
+        <td>Inputs only (no labels)</td>
+        <td>Hidden structure, patterns, groups</td>
+        <td>Customer segmentation, anomaly detection, topic modeling</td>
+      </tr>
+      <tr>
+        <td><strong>Reinforcement</strong></td>
+        <td>Environment + rewards/penalties</td>
+        <td>Strategy that maximizes reward</td>
+        <td>Game playing (AlphaGo), robotics, autonomous driving</td>
+      </tr>
+    </table>
+
+    <h3>Train, Validate, Test — The Holy Trinity</h3>
+
+    <p>One of the most common mistakes beginners make is evaluating a model on the same data it was trained on. This is like giving a student the exam answers, letting them memorize them, and then giving them the same exam. Of course they'll get 100%. But they haven't learned anything.</p>
+
+    <p>To truly measure how well a model has <em>learned</em> (not memorized), we split data into three sets:</p>
+
+    <table>
+      <tr>
+        <th>Set</th>
+        <th>Typical %</th>
+        <th>Purpose</th>
+      </tr>
+      <tr>
+        <td><strong>Training Set</strong></td>
+        <td>70-80%</td>
+        <td>The model learns from this data</td>
+      </tr>
+      <tr>
+        <td><strong>Validation Set</strong></td>
+        <td>10-15%</td>
+        <td>Used during training to tune hyperparameters and detect overfitting</td>
+      </tr>
+      <tr>
+        <td><strong>Test Set</strong></td>
+        <td>10-15%</td>
+        <td>Final, unbiased evaluation. Touched only once, at the very end.</td>
+      </tr>
+    </table>
+
+    <h3>Overfitting vs Underfitting</h3>
+
+    <p><strong>Overfitting</strong> is when a model memorizes the training data so well that it fails on new data. Think of a student who memorizes every practice exam but can't solve novel problems. The model is too complex for the amount of data.</p>
+
+    <p><strong>Underfitting</strong> is when a model is too simple to capture the patterns in the data. Think of trying to draw a straight line through data that follows a curve. The model isn't complex enough.</p>
+
+    <div class="key-insight">
+      <p>The goal of machine learning is not to minimize training error. It's to minimize the gap between training performance and real-world performance. This is called <em>generalization</em>, and it's the single hardest problem in ML.</p>
+    </div>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — Train-Test Split</div>
+<pre><code><span class="keyword">import</span> numpy <span class="keyword">as</span> np
+<span class="keyword">from</span> sklearn.model_selection <span class="keyword">import</span> train_test_split
+
+<span class="comment"># Synthetic dataset: 1000 samples, 5 features</span>
+np.random.seed(<span class="number">42</span>)
+X = np.random.randn(<span class="number">1000</span>, <span class="number">5</span>)
+y = (X[:, <span class="number">0</span>] + <span class="number">2</span> * X[:, <span class="number">1</span>] - X[:, <span class="number">2</span>] + np.random.randn(<span class="number">1000</span>) * <span class="number">0.5</span>) > <span class="number">0</span>
+y = y.astype(<span class="builtin">int</span>)
+
+<span class="comment"># Split: 70% train, 15% validation, 15% test</span>
+X_train, X_temp, y_train, y_temp = train_test_split(
+    X, y, test_size=<span class="number">0.3</span>, random_state=<span class="number">42</span>
+)
+X_val, X_test, y_val, y_test = train_test_split(
+    X_temp, y_temp, test_size=<span class="number">0.5</span>, random_state=<span class="number">42</span>
+)
+
+<span class="builtin">print</span>(<span class="string">f"Training set:   {X_train.shape[0]} samples"</span>)   <span class="comment"># 700</span>
+<span class="builtin">print</span>(<span class="string">f"Validation set: {X_val.shape[0]} samples"</span>)     <span class="comment"># 150</span>
+<span class="builtin">print</span>(<span class="string">f"Test set:       {X_test.shape[0]} samples"</span>)    <span class="comment"># 150</span></code></pre>
+    </div>
+
+    <div class="further-reading">
+      <h4>Further Reading</h4>
+      <ul>
+        <li><strong>"Pattern Recognition and Machine Learning"</strong> by Christopher Bishop — The classic ML textbook</li>
+        <li><strong>"An Introduction to Statistical Learning"</strong> (ISLR) — Free at statlearning.com, excellent for beginners</li>
+        <li><strong>Andrew Ng's Machine Learning course</strong> — Coursera, the course that started the ML education revolution</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+
+<!-- ======================================================================
+     CHAPTER 2.2 — LINEAR REGRESSION (FULL CHAPTER)
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.2</span>
+    <h2 class="chapter-title">Linear Regression</h2>
+    <span class="chapter-subtitle">The Line of Best Fit</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"All models are wrong, but some are useful."</p>
+    <p class="attribution">— George E. P. Box</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Linear regression is the "Hello World" of machine learning. It is the simplest possible supervised learning algorithm, and yet it teaches you almost every fundamental concept you need: what a model is, what a cost function is, what optimization means, what gradient descent does. If you truly understand linear regression — every detail, every equation, every intuition — you will find that everything else in this book is a variation on the same theme.</p>
+
+    <h3>The Idea</h3>
+
+    <p>You have data points: houses with their sizes (in square feet) and their prices. You plot them. They roughly follow a line. Linear regression finds the "best" line through these points — the line that makes the smallest total error.</p>
+
+    <p>The model is:</p>
+
+    <div class="math-block">
+      ŷ = wx + b
+    </div>
+
+    <p>Where:</p>
+    <ul>
+      <li><strong>x</strong> = input feature (e.g., house size)</li>
+      <li><strong>ŷ</strong> (y-hat) = predicted output (e.g., predicted price)</li>
+      <li><strong>w</strong> = weight (slope of the line) — the model <em>learns</em> this</li>
+      <li><strong>b</strong> = bias (y-intercept) — the model <em>learns</em> this too</li>
+    </ul>
+
+    <h3>The Cost Function: Mean Squared Error</h3>
+
+    <p>How do we measure how "wrong" our line is? We compute the Mean Squared Error (MSE):</p>
+
+    <div class="math-block">
+      MSE = (1/n) × Σ(yᵢ - ŷᵢ)² = (1/n) × Σ(yᵢ - (wxᵢ + b))²
+    </div>
+
+    <p>Why squared? Three reasons: (1) It penalizes large errors more than small ones. (2) It makes the function differentiable everywhere. (3) It's mathematically convenient — the derivative is clean.</p>
+
+    <h3>Gradient Descent — The Learning Algorithm</h3>
+
+    <p>We want to find the values of w and b that minimize the MSE. We could try every possible combination, but that would take forever. Instead, we use gradient descent:</p>
+
+    <ol>
+      <li><strong>Start</strong> with random values for w and b</li>
+      <li><strong>Compute</strong> the gradient (derivative) of MSE with respect to w and b</li>
+      <li><strong>Update</strong>: w = w - α × (∂MSE/∂w) and b = b - α × (∂MSE/∂b)</li>
+      <li><strong>Repeat</strong> until the MSE stops decreasing</li>
+    </ol>
+
+    <p>The gradient tells us the direction of steepest ascent. We move in the opposite direction (hence the minus sign) to descend toward the minimum. The learning rate α controls how big each step is.</p>
+
+    <div class="math-block">
+      ∂MSE/∂w = -(2/n) × Σ xᵢ(yᵢ - ŷᵢ)<br>
+      ∂MSE/∂b = -(2/n) × Σ (yᵢ - ŷᵢ)
+    </div>
+
+    <div class="key-insight">
+      <p>Gradient descent is not just for linear regression. It's the universal learning algorithm for ALL of machine learning and deep learning. Neural networks with billions of parameters are trained using the exact same idea: compute gradient, update weights, repeat.</p>
+    </div>
+
+    <h3>Solved Example — Teacher Walkthrough</h3>
+
+    <p><strong>Problem:</strong> Given 5 data points: (1, 2), (2, 4), (3, 5), (4, 4), (5, 5), find the best-fit line y = wx + b.</p>
+
+    <p><strong>Step 1:</strong> Initialize w = 0, b = 0, learning rate α = 0.01.</p>
+    <p><strong>Step 2:</strong> With w=0, b=0, all predictions ŷ = 0. Errors are [2, 4, 5, 4, 5]. MSE = (4+16+25+16+25)/5 = 17.2.</p>
+    <p><strong>Step 3:</strong> Compute gradients and update. After 1000 iterations of gradient descent, we converge to approximately w ≈ 0.6, b ≈ 2.2.</p>
+    <p><strong>Final line:</strong> ŷ = 0.6x + 2.2</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — Linear Regression from Scratch</div>
+<pre><code><span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="comment"># Data</span>
+X = np.array([<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>], dtype=<span class="builtin">float</span>)
+y = np.array([<span class="number">2</span>, <span class="number">4</span>, <span class="number">5</span>, <span class="number">4</span>, <span class="number">5</span>], dtype=<span class="builtin">float</span>)
+
+<span class="comment"># Initialize parameters</span>
+w = <span class="number">0.0</span>
+b = <span class="number">0.0</span>
+learning_rate = <span class="number">0.01</span>
+n = <span class="builtin">len</span>(X)
+
+<span class="comment"># Training loop</span>
+<span class="keyword">for</span> epoch <span class="keyword">in</span> <span class="builtin">range</span>(<span class="number">1000</span>):
+    <span class="comment"># Forward pass: predictions</span>
+    y_pred = w * X + b
+    
+    <span class="comment"># Compute loss (MSE)</span>
+    mse = np.mean((y - y_pred) ** <span class="number">2</span>)
+    
+    <span class="comment"># Compute gradients</span>
+    dw = -(<span class="number">2</span>/n) * np.sum(X * (y - y_pred))
+    db = -(<span class="number">2</span>/n) * np.sum(y - y_pred)
+    
+    <span class="comment"># Update parameters</span>
+    w = w - learning_rate * dw
+    b = b - learning_rate * db
+    
+    <span class="keyword">if</span> epoch % <span class="number">200</span> == <span class="number">0</span>:
+        <span class="builtin">print</span>(<span class="string">f"Epoch {epoch:4d} | MSE: {mse:.4f} | w: {w:.4f} | b: {b:.4f}"</span>)
+
+<span class="builtin">print</span>(<span class="string">f"\nFinal: y = {w:.4f}x + {b:.4f}"</span>)
+<span class="builtin">print</span>(<span class="string">f"Prediction for x=6: {w*6 + b:.2f}"</span>)</code></pre>
+    </div>
+
+    <!-- Practice Set -->
+    <div class="practice-set">
+      <h3>Practice Set — Chapter 2.2</h3>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-google">Google</span>
+          <span class="company-tag company-flipkart">Flipkart</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Given a linear model ŷ = 3x + 2, compute the MSE for the data points: (1, 6), (2, 7), (3, 12), (4, 13).</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Solution</div>
+          <p class="step"><strong>Step 1:</strong> Predictions: ŷ₁ = 3(1)+2=5, ŷ₂=3(2)+2=8, ŷ₃=3(3)+2=11, ŷ₄=3(4)+2=14</p>
+          <p class="step"><strong>Step 2:</strong> Errors: (6-5)²=1, (7-8)²=1, (12-11)²=1, (13-14)²=1</p>
+          <p class="step"><strong>Step 3:</strong> MSE = (1+1+1+1)/4 = <strong>1.0</strong></p>
+          <p><strong>Interpretation:</strong> An MSE of 1.0 means that on average, our predictions are off by √1 = 1 unit. Whether this is "good" depends on the scale of the data — for house prices in thousands, ±1 is excellent; for temperatures in degrees, it might be acceptable.</p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-amazon">Amazon</span>
+          <span class="company-tag company-uber">Uber</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Derive the gradient of the MSE cost function with respect to w for simple linear regression. Show every step.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Solution</div>
+          <p class="step"><strong>Step 1:</strong> MSE = (1/n) Σ(yᵢ - (wxᵢ + b))²</p>
+          <p class="step"><strong>Step 2:</strong> Let eᵢ = yᵢ - wxᵢ - b. Then MSE = (1/n) Σ eᵢ²</p>
+          <p class="step"><strong>Step 3:</strong> ∂MSE/∂w = (1/n) Σ 2eᵢ × ∂eᵢ/∂w (chain rule)</p>
+          <p class="step"><strong>Step 4:</strong> ∂eᵢ/∂w = ∂(yᵢ - wxᵢ - b)/∂w = -xᵢ</p>
+          <p class="step"><strong>Step 5:</strong> ∂MSE/∂w = (1/n) Σ 2(yᵢ - wxᵢ - b)(-xᵢ) = <strong>-(2/n) Σ xᵢ(yᵢ - ŷᵢ)</strong></p>
+          <p><strong>Interpretation:</strong> The gradient is negative when the error weighted by input is positive — meaning we need to increase w. This is how gradient descent "knows" which direction to move.</p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 3</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-meta">Meta</span>
+          <span class="company-tag company-apple">Apple</span>
+          <span class="company-tag company-goldman">Goldman Sachs</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Implement multiple linear regression (multiple features) from scratch using only NumPy. Your model should: ŷ = Xw + b where X is an (n × d) matrix, w is a (d,) vector, and b is a scalar. Train it on a synthetic dataset with 3 features and compare your results with scikit-learn's LinearRegression.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Solution</div>
+<pre><code><span class="keyword">import</span> numpy <span class="keyword">as</span> np
+<span class="keyword">from</span> sklearn.linear_model <span class="keyword">import</span> LinearRegression
+
+<span class="comment"># Generate synthetic data</span>
+np.random.seed(<span class="number">42</span>)
+n, d = <span class="number">200</span>, <span class="number">3</span>
+X = np.random.randn(n, d)
+true_w = np.array([<span class="number">2.0</span>, -<span class="number">1.5</span>, <span class="number">0.5</span>])
+true_b = <span class="number">3.0</span>
+y = X @ true_w + true_b + np.random.randn(n) * <span class="number">0.3</span>
+
+<span class="comment"># From-scratch gradient descent</span>
+w = np.zeros(d)
+b = <span class="number">0.0</span>
+lr = <span class="number">0.01</span>
+
+<span class="keyword">for</span> epoch <span class="keyword">in</span> <span class="builtin">range</span>(<span class="number">2000</span>):
+    y_pred = X @ w + b
+    error = y - y_pred
+    dw = -(<span class="number">2</span>/n) * (X.T @ error)
+    db = -(<span class="number">2</span>/n) * np.sum(error)
+    w -= lr * dw
+    b -= lr * db
+
+<span class="builtin">print</span>(<span class="string">f"From scratch: w={w}, b={b:.4f}"</span>)
+
+<span class="comment"># Compare with scikit-learn</span>
+model = LinearRegression()
+model.fit(X, y)
+<span class="builtin">print</span>(<span class="string">f"Sklearn:      w={model.coef_}, b={model.intercept_:.4f}"</span>)
+<span class="builtin">print</span>(<span class="string">f"True values:  w={true_w}, b={true_b}"</span>)</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="github-link">
+      <strong>GitHub:</strong> All code labs at <code>github.com/ramawasthi/the-complete-ai-engineer/ch2-linear-regression</code>
+    </div>
+  </div>
+</div>
+
+
+<!-- ======================================================================
+     PROJECT: HOUSE PRICE PREDICTOR FROM SCRATCH
+     ====================================================================== -->
+<div class="project-section">
+  <div class="project-header">
+    <span class="project-icon">🔨</span>
+    <h3 class="project-title">Project: House Price Predictor from Scratch</h3>
+  </div>
+  <p class="project-subtitle">Apply linear regression, gradient descent, and feature engineering to a real dataset</p>
+
+  <div class="what-you-build">
+    <h4>What You'll Build</h4>
+    <p>A complete house price prediction system using only NumPy (no scikit-learn):</p>
+    <ul>
+      <li>Data loading and preprocessing (handling missing values, encoding)</li>
+      <li>Feature normalization (z-score standardization)</li>
+      <li>Multiple linear regression with gradient descent</li>
+      <li>Training/validation/test split</li>
+      <li>Loss curve visualization</li>
+      <li>Final MSE and R² score evaluation</li>
+    </ul>
+  </div>
+
+  <div class="github-link">
+    <strong>Full solution:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/projects/p2-house-prices</code>
+  </div>
+</div>
+
+
+<!-- ======================================================================
+     CHAPTERS 2.3–2.8 (SCAFFOLDED)
+     ====================================================================== -->
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.3</span>
+    <h2 class="chapter-title">Logistic Regression</h2>
+    <span class="chapter-subtitle">From Lines to Decisions</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+  <div class="chapter-body">
+    <div class="scaffold-notice">📋 This chapter is outlined and will be written in full in a future session.</div>
+    <div class="scaffold-outline">
+      <h4>Planned Sections</h4>
+      <ul>
+        <li>From regression to classification — the sigmoid function</li>
+        <li>Binary cross-entropy loss — why we can't use MSE for classification</li>
+        <li>Decision boundary — where the model says "yes" vs "no"</li>
+        <li>Multiclass logistic regression (softmax)</li>
+        <li>Practice Set (10+ problems) + Code Lab + Project: Email Spam Classifier</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.4</span>
+    <h2 class="chapter-title">Decision Trees</h2>
+    <span class="chapter-subtitle">Splitting Data by Questions</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+  <div class="chapter-body">
+    <div class="scaffold-notice">📋 This chapter is outlined and will be written in full in a future session.</div>
+    <div class="scaffold-outline">
+      <h4>Planned Sections</h4>
+      <ul>
+        <li>How a decision tree splits data — questions at each node</li>
+        <li>Gini impurity and information gain — choosing the best split</li>
+        <li>Overfitting in trees — pruning as solution</li>
+        <li>Random forests and ensemble methods</li>
+        <li>Practice Set + Code Lab + Project: Customer Churn Predictor</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.5</span>
+    <h2 class="chapter-title">KNN &amp; SVMs</h2>
+    <span class="chapter-subtitle">Similarity and Boundaries</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+  <div class="chapter-body">
+    <div class="scaffold-notice">📋 This chapter is outlined and will be written in full in a future session.</div>
+    <div class="scaffold-outline">
+      <h4>Planned Sections</h4>
+      <ul>
+        <li>KNN: classify by similarity — the simplest idea</li>
+        <li>Distance metrics: Euclidean, Manhattan, Cosine</li>
+        <li>SVMs: finding the best boundary (hyperplane)</li>
+        <li>Kernel trick — going beyond linear boundaries</li>
+        <li>Practice Set + Code Lab + Project: Handwriting Character Recognizer</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.6</span>
+    <h2 class="chapter-title">Unsupervised Learning</h2>
+    <span class="chapter-subtitle">Finding Structure Without Labels</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+  <div class="chapter-body">
+    <div class="scaffold-notice">📋 This chapter is outlined and will be written in full in a future session.</div>
+    <div class="scaffold-outline">
+      <h4>Planned Sections</h4>
+      <ul>
+        <li>K-Means clustering — grouping by similarity</li>
+        <li>Choosing K: the elbow method</li>
+        <li>Hierarchical clustering — dendrograms</li>
+        <li>PCA — dimensionality reduction</li>
+        <li>Practice Set + Code Lab + Project: Customer Segmentation System</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.7</span>
+    <h2 class="chapter-title">Feature Engineering</h2>
+    <span class="chapter-subtitle">The Art of Data Preparation</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+  <div class="chapter-body">
+    <div class="scaffold-notice">📋 This chapter is outlined and will be written in full in a future session.</div>
+    <div class="scaffold-outline">
+      <h4>Planned Sections</h4>
+      <ul>
+        <li>Handling missing data — deletion, imputation strategies</li>
+        <li>Encoding categorical variables — one-hot, label, target encoding</li>
+        <li>Feature scaling — normalization and standardization</li>
+        <li>Feature selection — removing noise, mutual information</li>
+        <li>Practice Set + Code Lab + Project: Automated Data Cleaning Pipeline</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.8</span>
+    <h2 class="chapter-title">Model Evaluation</h2>
+    <span class="chapter-subtitle">Measuring What Matters</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+  <div class="chapter-body">
+    <div class="scaffold-notice">📋 This chapter is outlined and will be written in full in a future session.</div>
+    <div class="scaffold-outline">
+      <h4>Planned Sections</h4>
+      <ul>
+        <li>Accuracy, Precision, Recall, F1 Score — when each matters</li>
+        <li>ROC curve and AUC — ranking model quality</li>
+        <li>Confusion matrix — dissecting every type of error</li>
+        <li>Cross-validation — robust evaluation</li>
+        <li>Practice Set + Code Lab + Project: Model Evaluation Dashboard</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+
+<!-- ████████████████████████████████████████████████████████████████████████
+     PART 3 — NEURAL NETWORKS FROM SCRATCH
+     ████████████████████████████████████████████████████████████████████████ -->
+
+<div class="part-page">
+  <div class="part-number">Part 3</div>
+  <div class="part-title">Neural Networks from Scratch</div>
+  <div class="part-subtitle">Understanding the brain-inspired algorithms that power modern AI</div>
+  <div class="part-ornament">✦ ✦ ✦</div>
+</div>
+
+
+<!-- ======================================================================
+     CHAPTER 3.1 — THE NEURON & PERCEPTRON (FULL CHAPTER)
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 3.1</span>
+    <h2 class="chapter-title">The Neuron &amp; Perceptron</h2>
+    <span class="chapter-subtitle">Where It All Began</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"The brain is a world consisting of a number of unexplored continents and great stretches of unknown territory."</p>
+    <p class="attribution">— Santiago Ramón y Cajal</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>In 1943, Warren McCulloch and Walter Pitts published a paper that would change the course of computing forever. They asked a deceptively simple question: can we build a mathematical model of how a biological neuron works? The answer was yes, and that model — refined and expanded over the next 80 years — became the foundation of modern artificial intelligence.</p>
+
+    <h3>The Biological Neuron</h3>
+
+    <p>Your brain contains approximately 86 billion neurons, connected by roughly 100 trillion synapses. Each neuron works in a remarkably simple way:</p>
+
+    <ol>
+      <li><strong>Receive inputs</strong> — signals arrive from other neurons through connections called dendrites</li>
+      <li><strong>Weigh the inputs</strong> — each connection has a strength (synapse weight). Strong connections pass more signal.</li>
+      <li><strong>Sum and decide</strong> — if the total weighted input exceeds a threshold, the neuron "fires" (sends its own signal)</li>
+      <li><strong>Output</strong> — the signal travels along the axon to other neurons</li>
+    </ol>
+
+    <h3>The Artificial Neuron</h3>
+
+    <p>The artificial neuron mirrors this process with mathematics:</p>
+
+    <div class="math-block">
+      z = w₁x₁ + w₂x₂ + ... + wₙxₙ + b = <strong>w</strong>·<strong>x</strong> + b<br><br>
+      y = f(z)
+    </div>
+
+    <p>Where:</p>
+    <ul>
+      <li><strong>x₁, x₂, ..., xₙ</strong> = inputs (like dendrites receiving signals)</li>
+      <li><strong>w₁, w₂, ..., wₙ</strong> = weights (like synapse strengths)</li>
+      <li><strong>b</strong> = bias (the threshold)</li>
+      <li><strong>z</strong> = weighted sum (the neuron's internal signal)</li>
+      <li><strong>f(z)</strong> = activation function (the decision to "fire" or not)</li>
+    </ul>
+
+    <div class="key-insight">
+      <p>A single neuron is just a linear regression model followed by an activation function. That's it. The magic comes from connecting thousands of these simple units together in layers.</p>
+    </div>
+
+    <h3>Activation Functions — The Decision Makers</h3>
+
+    <p>Without activation functions, a neural network would be just a linear function — no matter how many layers you stack. Activation functions introduce non-linearity, which is what allows neural networks to learn complex patterns.</p>
+
+    <table>
+      <tr>
+        <th>Function</th>
+        <th>Formula</th>
+        <th>Range</th>
+        <th>Used For</th>
+      </tr>
+      <tr>
+        <td><strong>Step</strong></td>
+        <td>f(z) = 1 if z ≥ 0, else 0</td>
+        <td>{0, 1}</td>
+        <td>Original perceptron (historical)</td>
+      </tr>
+      <tr>
+        <td><strong>Sigmoid</strong></td>
+        <td>f(z) = 1/(1 + e⁻ᶻ)</td>
+        <td>(0, 1)</td>
+        <td>Binary classification output</td>
+      </tr>
+      <tr>
+        <td><strong>Tanh</strong></td>
+        <td>f(z) = (eᶻ - e⁻ᶻ)/(eᶻ + e⁻ᶻ)</td>
+        <td>(-1, 1)</td>
+        <td>Hidden layers (centered output)</td>
+      </tr>
+      <tr>
+        <td><strong>ReLU</strong></td>
+        <td>f(z) = max(0, z)</td>
+        <td>[0, ∞)</td>
+        <td>Default for hidden layers (modern)</td>
+      </tr>
+    </table>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — Implementing a Single Neuron</div>
+<pre><code><span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="keyword">class</span> <span class="class-name">Neuron</span>:
+    <span class="string">"""A single artificial neuron."""</span>
+    
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, n_inputs, activation=<span class="string">'sigmoid'</span>):
+        <span class="comment"># Initialize weights randomly, bias to zero</span>
+        self.weights = np.random.randn(n_inputs) * <span class="number">0.1</span>
+        self.bias = <span class="number">0.0</span>
+        self.activation = activation
+    
+    <span class="keyword">def</span> <span class="function">_activate</span>(self, z):
+        <span class="keyword">if</span> self.activation == <span class="string">'sigmoid'</span>:
+            <span class="keyword">return</span> <span class="number">1</span> / (<span class="number">1</span> + np.exp(-z))
+        <span class="keyword">elif</span> self.activation == <span class="string">'relu'</span>:
+            <span class="keyword">return</span> np.maximum(<span class="number">0</span>, z)
+        <span class="keyword">elif</span> self.activation == <span class="string">'step'</span>:
+            <span class="keyword">return</span> (<span class="number">1.0</span> <span class="keyword">if</span> z >= <span class="number">0</span> <span class="keyword">else</span> <span class="number">0.0</span>)
+    
+    <span class="keyword">def</span> <span class="function">forward</span>(self, x):
+        <span class="comment"># Step 1: Weighted sum</span>
+        z = np.dot(self.weights, x) + self.bias
+        <span class="comment"># Step 2: Activation</span>
+        <span class="keyword">return</span> self._activate(z)
+
+<span class="comment"># Create a neuron with 3 inputs</span>
+neuron = Neuron(n_inputs=<span class="number">3</span>, activation=<span class="string">'sigmoid'</span>)
+
+<span class="comment"># Feed it an input</span>
+x = np.array([<span class="number">0.5</span>, <span class="number">0.8</span>, <span class="number">-0.2</span>])
+output = neuron.forward(x)
+<span class="builtin">print</span>(<span class="string">f"Neuron output: {output:.4f}"</span>)
+
+<span class="comment"># This is the fundamental unit of ALL neural networks!</span></code></pre>
+    </div>
+
+    <h3>The Perceptron — Learning to Classify</h3>
+
+    <p>The Perceptron (Frank Rosenblatt, 1958) was the first artificial neuron that could <em>learn</em>. Its learning rule is beautifully simple:</p>
+
+    <div class="math-block">
+      If prediction is correct: do nothing<br>
+      If prediction is wrong: w = w + α(y - ŷ)x
+    </div>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — Perceptron Learning Algorithm</div>
+<pre><code><span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="keyword">class</span> <span class="class-name">Perceptron</span>:
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, n_features, lr=<span class="number">0.1</span>):
+        self.weights = np.zeros(n_features)
+        self.bias = <span class="number">0.0</span>
+        self.lr = lr
+    
+    <span class="keyword">def</span> <span class="function">predict</span>(self, x):
+        z = np.dot(self.weights, x) + self.bias
+        <span class="keyword">return</span> <span class="number">1</span> <span class="keyword">if</span> z >= <span class="number">0</span> <span class="keyword">else</span> <span class="number">0</span>
+    
+    <span class="keyword">def</span> <span class="function">train</span>(self, X, y, epochs=<span class="number">100</span>):
+        <span class="keyword">for</span> epoch <span class="keyword">in</span> <span class="builtin">range</span>(epochs):
+            errors = <span class="number">0</span>
+            <span class="keyword">for</span> xi, yi <span class="keyword">in</span> <span class="builtin">zip</span>(X, y):
+                pred = self.predict(xi)
+                error = yi - pred
+                <span class="keyword">if</span> error != <span class="number">0</span>:
+                    self.weights += self.lr * error * xi
+                    self.bias += self.lr * error
+                    errors += <span class="number">1</span>
+            <span class="keyword">if</span> errors == <span class="number">0</span>:
+                <span class="builtin">print</span>(<span class="string">f"Converged at epoch {epoch}!"</span>)
+                <span class="keyword">break</span>
+
+<span class="comment"># AND gate — classic perceptron example</span>
+X = np.array([[<span class="number">0</span>,<span class="number">0</span>], [<span class="number">0</span>,<span class="number">1</span>], [<span class="number">1</span>,<span class="number">0</span>], [<span class="number">1</span>,<span class="number">1</span>]])
+y = np.array([<span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>])  <span class="comment"># AND gate</span>
+
+p = Perceptron(n_features=<span class="number">2</span>)
+p.train(X, y)
+
+<span class="keyword">for</span> xi <span class="keyword">in</span> X:
+    <span class="builtin">print</span>(<span class="string">f"{xi} → {p.predict(xi)}"</span>)
+
+<span class="comment"># Output: [0,0]→0, [0,1]→0, [1,0]→0, [1,1]→1  ✓</span></code></pre>
+    </div>
+
+    <!-- Practice Set -->
+    <div class="practice-set">
+      <h3>Practice Set — Chapter 3.1</h3>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> A neuron has weights w = [0.5, -0.3, 0.8] and bias b = -0.1. If the input is x = [1, 2, 3], compute the output using: (a) step activation, (b) sigmoid activation, (c) ReLU activation.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Solution</div>
+          <p class="step"><strong>Step 1:</strong> z = 0.5(1) + (-0.3)(2) + 0.8(3) + (-0.1) = 0.5 - 0.6 + 2.4 - 0.1 = <strong>2.2</strong></p>
+          <p class="step"><strong>(a) Step:</strong> z = 2.2 ≥ 0, so output = <strong>1</strong></p>
+          <p class="step"><strong>(b) Sigmoid:</strong> σ(2.2) = 1/(1 + e^(-2.2)) = 1/(1 + 0.111) ≈ <strong>0.9002</strong></p>
+          <p class="step"><strong>(c) ReLU:</strong> max(0, 2.2) = <strong>2.2</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-openai">OpenAI</span>
+          <span class="company-tag company-deepmind">DeepMind</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Prove that a single perceptron cannot learn the XOR function. Then show that a network of 2 perceptrons in a hidden layer + 1 output perceptron can solve XOR. Implement this 3-neuron network from scratch.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Solution</div>
+          <p class="step"><strong>Proof (XOR is not linearly separable):</strong> XOR: (0,0)→0, (0,1)→1, (1,0)→1, (1,1)→0. To separate class 0 from class 1 with a line, we'd need: w₁(0)+w₂(0)+b &lt; 0, w₁(0)+w₂(1)+b ≥ 0, w₁(1)+w₂(0)+b ≥ 0, w₁(1)+w₂(1)+b &lt; 0. From constraints 2 and 3: w₂+b ≥ 0 and w₁+b ≥ 0. Adding these: w₁+w₂+2b ≥ 0. But constraint 4 says w₁+w₂+b &lt; 0, which means w₁+w₂ &lt; -b. Combined with constraint 1 (b &lt; 0), we get a contradiction. <strong>No single line can separate XOR.</strong></p>
+          <p class="step"><strong>Solution with 2 layers:</strong> Hidden neuron 1 computes (x₁ OR x₂). Hidden neuron 2 computes NOT(x₁ AND x₂). Output = h₁ AND h₂ = XOR.</p>
+<pre><code><span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="comment"># XOR with a 2-layer network (manually set weights)</span>
+<span class="keyword">def</span> <span class="function">step</span>(z):
+    <span class="keyword">return</span> <span class="number">1.0</span> <span class="keyword">if</span> z >= <span class="number">0.5</span> <span class="keyword">else</span> <span class="number">0.0</span>
+
+<span class="keyword">def</span> <span class="function">xor_network</span>(x1, x2):
+    <span class="comment"># Hidden layer</span>
+    h1 = step(x1 * <span class="number">1</span> + x2 * <span class="number">1</span> - <span class="number">0.5</span>)   <span class="comment"># OR gate</span>
+    h2 = step(x1 * (-<span class="number">1</span>) + x2 * (-<span class="number">1</span>) + <span class="number">1.5</span>)  <span class="comment"># NAND gate</span>
+    <span class="comment"># Output layer</span>
+    out = step(h1 * <span class="number">1</span> + h2 * <span class="number">1</span> - <span class="number">1.5</span>)   <span class="comment"># AND gate</span>
+    <span class="keyword">return</span> out
+
+<span class="keyword">for</span> x1, x2 <span class="keyword">in</span> [(<span class="number">0</span>,<span class="number">0</span>), (<span class="number">0</span>,<span class="number">1</span>), (<span class="number">1</span>,<span class="number">0</span>), (<span class="number">1</span>,<span class="number">1</span>)]:
+    <span class="builtin">print</span>(<span class="string">f"XOR({x1},{x2}) = {xor_network(x1, x2):.0f}"</span>)</code></pre>
+          <p><strong>Key takeaway:</strong> This limitation of single perceptrons (the "XOR problem") nearly killed AI research in the 1970s. It took the invention of backpropagation to train multi-layer networks, which revived the field.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="github-link">
+      <strong>GitHub:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/ch3-neurons</code>
+    </div>
+  </div>
+</div>
+
+
+<!-- Project for Part 3 -->
+<div class="project-section">
+  <div class="project-header">
+    <span class="project-icon">🔨</span>
+    <h3 class="project-title">Project: Handwritten Digit Classifier from Scratch</h3>
+  </div>
+  <p class="project-subtitle">Build a neural network that recognizes handwritten digits (0-9) without using any ML framework</p>
+
+  <div class="what-you-build">
+    <h4>What You'll Build</h4>
+    <p>A 3-layer neural network (784 → 128 → 64 → 10) trained on the MNIST dataset using only NumPy:</p>
+    <ul>
+      <li>Forward propagation through multiple layers</li>
+      <li>Backpropagation algorithm implemented from scratch</li>
+      <li>ReLU activation for hidden layers, softmax for output</li>
+      <li>Cross-entropy loss function</li>
+      <li>Mini-batch gradient descent</li>
+      <li>Achieve 95%+ accuracy on test set</li>
+    </ul>
+  </div>
+
+  <div class="github-link">
+    <strong>Full solution:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/projects/p3-mnist-from-scratch</code>
+  </div>
+</div>
+
+
+<!-- Scaffolded chapters 3.2–3.6 -->
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header"><span class="chapter-number">Chapter 3.2</span><h2 class="chapter-title">Feedforward Networks</h2><span class="chapter-subtitle">Layers of Intelligence</span><span class="chapter-ornament">✦</span></div>
+  <div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div>
+    <div class="scaffold-outline"><h4>Planned Sections</h4><ul><li>Input layer, hidden layers, output layer — architecture design</li><li>Forward propagation: data flows through the network</li><li>The math of a full forward pass (with worked example)</li><li>Universal approximation theorem — why deep networks can learn anything</li></ul></div></div>
+</div>
+
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header"><span class="chapter-number">Chapter 3.3</span><h2 class="chapter-title">Backpropagation</h2><span class="chapter-subtitle">How Networks Learn</span><span class="chapter-ornament">✦</span></div>
+  <div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div>
+    <div class="scaffold-outline"><h4>Planned Sections</h4><ul><li>The chain rule — reviewed and applied</li><li>Computing gradients layer by layer</li><li>The full backpropagation algorithm with equations</li><li>Computational graphs — visualizing gradient flow</li></ul></div></div>
+</div>
+
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header"><span class="chapter-number">Chapter 3.4</span><h2 class="chapter-title">Optimization</h2><span class="chapter-subtitle">Making Learning Faster and Better</span><span class="chapter-ornament">✦</span></div>
+  <div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div>
+    <div class="scaffold-outline"><h4>Planned Sections</h4><ul><li>Batch vs stochastic vs mini-batch gradient descent</li><li>Learning rate: too high, too low, and just right</li><li>Momentum, RMSProp, Adam optimizer</li><li>Learning rate schedulers</li></ul></div></div>
+</div>
+
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header"><span class="chapter-number">Chapter 3.5</span><h2 class="chapter-title">Regularization</h2><span class="chapter-subtitle">Preventing Overfitting</span><span class="chapter-ornament">✦</span></div>
+  <div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div>
+    <div class="scaffold-outline"><h4>Planned Sections</h4><ul><li>L1 and L2 regularization</li><li>Dropout — randomly turning off neurons</li><li>Batch Normalization</li><li>Early stopping</li></ul></div></div>
+</div>
+
+<div class="chapter chapter-scaffold">
+  <div class="chapter-header"><span class="chapter-number">Chapter 3.6</span><h2 class="chapter-title">Training in Practice</h2><span class="chapter-subtitle">PyTorch and TensorFlow</span><span class="chapter-ornament">✦</span></div>
+  <div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div>
+    <div class="scaffold-outline"><h4>Planned Sections</h4><ul><li>Weight initialization strategies (Xavier, He)</li><li>Training loop in PyTorch</li><li>Training loop in TensorFlow/Keras</li><li>Loss curves — reading and interpreting training progress</li></ul></div></div>
+</div>
+
+
+<!-- ████████████████████████████████████████████████████████████████████████
+     PART 4 — DEEP LEARNING ARCHITECTURES
+     ████████████████████████████████████████████████████████████████████████ -->
+
+<div class="part-page">
+  <div class="part-number">Part 4</div>
+  <div class="part-title">Deep Learning Architectures</div>
+  <div class="part-subtitle">The specialized networks that power vision, speech, and language AI</div>
+  <div class="part-ornament">✦ ✦ ✦</div>
+</div>
+
+
+<!-- ======================================================================
+     CHAPTER 4.1 — CNNs (FULL CHAPTER)
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 4.1</span>
+    <h2 class="chapter-title">Convolutional Neural Networks</h2>
+    <span class="chapter-subtitle">How Machines See</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"What I cannot create, I do not understand."</p>
+    <p class="attribution">— Richard Feynman</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-intermediate">Intermediate</span>
+
+    <p>Imagine you need to recognize whether a photo contains a cat. With a fully connected neural network, you'd flatten the image into a single vector — a 224×224 RGB image becomes a vector of 150,528 numbers. The network would need a separate weight for every single pixel-to-neuron connection. This is absurd: (1) it's astronomically expensive, (2) it ignores the spatial structure of images — the fact that nearby pixels are related, and (3) if the cat moves to a different position in the image, the network might not recognize it. Convolutional Neural Networks solve all three problems with one elegant idea: <em>local connectivity with shared weights</em>.</p>
+
+    <h3>The Convolution Operation</h3>
+
+    <p>Instead of connecting every pixel to every neuron, a CNN slides a small filter (also called a kernel) across the image. The filter is typically 3×3 or 5×5 pixels — tiny compared to the full image. At each position, the filter computes a dot product with the patch of the image it covers:</p>
+
+    <div class="math-block">
+      output[i][j] = Σₘ Σₙ input[i+m][j+n] × filter[m][n]
+    </div>
+
+    <p>This sliding dot product produces a <strong>feature map</strong> — a new 2D grid that highlights where certain patterns appear in the image.</p>
+
+    <div class="key-insight">
+      <p>A convolution is a template matcher. A 3×3 filter that detects vertical edges will produce high values wherever the image has a vertical edge, regardless of where in the image it appears. This is called <strong>translation invariance</strong> — the same pattern is detected everywhere.</p>
+    </div>
+
+    <h3>What Do Filters Detect?</h3>
+
+    <table>
+      <tr>
+        <th>Layer Depth</th>
+        <th>What Filters Learn</th>
+        <th>Example</th>
+      </tr>
+      <tr>
+        <td>Layer 1 (early)</td>
+        <td>Simple edges, gradients, colors</td>
+        <td>Horizontal edges, vertical edges, color blobs</td>
+      </tr>
+      <tr>
+        <td>Layer 2-3 (middle)</td>
+        <td>Textures, patterns, parts</td>
+        <td>Fur texture, whiskers, eye shapes</td>
+      </tr>
+      <tr>
+        <td>Layer 4+ (deep)</td>
+        <td>Object parts, whole objects</td>
+        <td>Cat faces, dog ears, car wheels</td>
+      </tr>
+    </table>
+
+    <h3>Pooling — Reducing Spatial Size</h3>
+
+    <p><strong>Max pooling</strong> takes a 2×2 window, slides it across the feature map, and at each position keeps only the maximum value. This reduces the spatial dimensions by half while keeping the strongest signals. It also provides a small amount of translation invariance.</p>
+
+    <h3>The Full CNN Architecture</h3>
+
+    <p>A typical CNN stacks these layers:</p>
+
+    <ol>
+      <li><strong>Input</strong> → image (e.g., 224×224×3)</li>
+      <li><strong>Conv + ReLU</strong> → detect features (e.g., 32 filters of 3×3)</li>
+      <li><strong>Max Pool</strong> → reduce spatial size (112×112×32)</li>
+      <li><strong>Conv + ReLU</strong> → more complex features (64 filters)</li>
+      <li><strong>Max Pool</strong> → further reduce (56×56×64)</li>
+      <li><strong>Flatten</strong> → reshape to 1D vector</li>
+      <li><strong>Fully Connected</strong> → classification (e.g., 10 classes)</li>
+      <li><strong>Softmax</strong> → probabilities</li>
+    </ol>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — CNN in PyTorch</div>
+<pre><code><span class="keyword">import</span> torch
+<span class="keyword">import</span> torch.nn <span class="keyword">as</span> nn
+
+<span class="keyword">class</span> <span class="class-name">SimpleCNN</span>(nn.Module):
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, num_classes=<span class="number">10</span>):
+        <span class="builtin">super</span>().__init__()
+        
+        <span class="comment"># Feature extraction layers</span>
+        self.features = nn.Sequential(
+            <span class="comment"># Conv block 1: 3 → 32 channels</span>
+            nn.Conv2d(<span class="number">3</span>, <span class="number">32</span>, kernel_size=<span class="number">3</span>, padding=<span class="number">1</span>),
+            nn.ReLU(),
+            nn.MaxPool2d(<span class="number">2</span>),   <span class="comment"># 224→112</span>
+            
+            <span class="comment"># Conv block 2: 32 → 64 channels</span>
+            nn.Conv2d(<span class="number">32</span>, <span class="number">64</span>, kernel_size=<span class="number">3</span>, padding=<span class="number">1</span>),
+            nn.ReLU(),
+            nn.MaxPool2d(<span class="number">2</span>),   <span class="comment"># 112→56</span>
+            
+            <span class="comment"># Conv block 3: 64 → 128 channels</span>
+            nn.Conv2d(<span class="number">64</span>, <span class="number">128</span>, kernel_size=<span class="number">3</span>, padding=<span class="number">1</span>),
+            nn.ReLU(),
+            nn.MaxPool2d(<span class="number">2</span>),   <span class="comment"># 56→28</span>
+        )
+        
+        <span class="comment"># Classification layers</span>
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(<span class="number">128</span> * <span class="number">28</span> * <span class="number">28</span>, <span class="number">256</span>),
+            nn.ReLU(),
+            nn.Dropout(<span class="number">0.5</span>),
+            nn.Linear(<span class="number">256</span>, num_classes),
+        )
+    
+    <span class="keyword">def</span> <span class="function">forward</span>(self, x):
+        x = self.features(x)
+        x = self.classifier(x)
+        <span class="keyword">return</span> x
+
+<span class="comment"># Test the model</span>
+model = SimpleCNN(num_classes=<span class="number">10</span>)
+x = torch.randn(<span class="number">1</span>, <span class="number">3</span>, <span class="number">224</span>, <span class="number">224</span>)  <span class="comment"># 1 image, 3 channels, 224x224</span>
+output = model(x)
+<span class="builtin">print</span>(<span class="string">f"Output shape: {output.shape}"</span>)  <span class="comment"># [1, 10]</span>
+<span class="builtin">print</span>(<span class="string">f"Total parameters: {sum(p.numel() for p in model.parameters()):,}"</span>)</code></pre>
+    </div>
+
+    <!-- Practice -->
+    <div class="practice-set">
+      <h3>Practice Set — Chapter 4.1</h3>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-google">Google</span>
+          <span class="company-tag company-tesla">Tesla</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> An input image is 32×32×3. A convolutional layer has 16 filters of size 5×5, stride 1, padding 2. (a) What is the output shape? (b) How many learnable parameters does this layer have?</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Solution</div>
+          <p class="step"><strong>(a) Output shape:</strong> Output size = (W - F + 2P)/S + 1 = (32 - 5 + 4)/1 + 1 = 32. With 16 filters → <strong>32×32×16</strong></p>
+          <p class="step"><strong>(b) Parameters:</strong> Each filter: 5×5×3 = 75 weights + 1 bias = 76. Total: 76 × 16 = <strong>1,216 parameters</strong></p>
+          <p>Compare this to a fully connected layer from 32×32×3=3072 inputs to 32×32×16=16384 outputs: that would need 3072×16384 = <strong>50 million parameters</strong>. CNNs achieve the same thing with 1,216. That's the power of parameter sharing.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="github-link">
+      <strong>GitHub:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/ch4-cnn</code>
+    </div>
+  </div>
+</div>
+
+
+<div class="project-section">
+  <div class="project-header">
+    <span class="project-icon">🔨</span>
+    <h3 class="project-title">Project: Real-Time Image Classifier</h3>
+  </div>
+  <p class="project-subtitle">Build and train a CNN to classify images from the CIFAR-10 dataset</p>
+  <div class="what-you-build">
+    <h4>What You'll Build</h4>
+    <ul>
+      <li>A CNN trained on CIFAR-10 (10 classes: airplane, car, bird, cat, deer, dog, frog, horse, ship, truck)</li>
+      <li>Data augmentation pipeline (random flips, rotations, color jitter)</li>
+      <li>Training loop with validation monitoring and early stopping</li>
+      <li>Confusion matrix and per-class accuracy analysis</li>
+      <li>Visualization of what filters have learned</li>
+    </ul>
+  </div>
+  <div class="github-link"><strong>Full solution:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/projects/p4-image-classifier</code></div>
+</div>
+
+
+<!-- Scaffolded Parts 4.2–4.6 -->
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 4.2</span><h2 class="chapter-title">RNNs &amp; LSTMs</h2><span class="chapter-subtitle">Learning from Sequences</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div><div class="scaffold-outline"><h4>Planned Sections</h4><ul><li>Why standard networks fail on sequences</li><li>RNN architecture: the hidden state loop</li><li>Vanishing gradient problem</li><li>LSTM: gates that control memory</li><li>GRU: a simpler alternative</li></ul></div></div></div>
+
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 4.3</span><h2 class="chapter-title">Attention &amp; Seq2Seq</h2><span class="chapter-subtitle">Looking at Everything at Once</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div><div class="scaffold-outline"><h4>Planned Sections</h4><ul><li>The encoder-decoder paradigm</li><li>Why RNNs struggle with long sequences</li><li>Attention mechanism — the breakthrough</li><li>Bahdanau attention vs Luong attention</li></ul></div></div></div>
+
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 4.4</span><h2 class="chapter-title">Transformers</h2><span class="chapter-subtitle">The Architecture That Changed Everything</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div><div class="scaffold-outline"><h4>Planned Sections</h4><ul><li>"Attention Is All You Need" — the 2017 paper that changed AI</li><li>Self-attention: Q, K, V matrices</li><li>Multi-head attention — running attention in parallel</li><li>Positional encoding — telling the model word order</li><li>Encoder-decoder transformer vs decoder-only (GPT)</li></ul></div></div></div>
+
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 4.5</span><h2 class="chapter-title">Generative Models</h2><span class="chapter-subtitle">Autoencoders, VAEs, and GANs</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div><div class="scaffold-outline"><h4>Planned Sections</h4><ul><li>Autoencoders — compressing and reconstructing data</li><li>Variational Autoencoders — generating new data</li><li>GANs — generator vs discriminator</li><li>Diffusion models — the architecture behind DALL-E and Stable Diffusion</li></ul></div></div></div>
+
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 4.6</span><h2 class="chapter-title">Audio &amp; Speech</h2><span class="chapter-subtitle">How Machines Hear</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div><div class="scaffold-outline"><h4>Planned Sections</h4><ul><li>Audio as data: waveforms, sampling, Fourier transform</li><li>Spectrograms and mel-spectrograms</li><li>Automatic Speech Recognition: CTC, encoder-decoder</li><li>How Whisper works</li></ul></div></div></div>
+
+
+<!-- ████████████████████████████████████████████████████████████████████████
+     PART 5 — LARGE LANGUAGE MODELS
+     ████████████████████████████████████████████████████████████████████████ -->
+
+<div class="part-page">
+  <div class="part-number">Part 5</div>
+  <div class="part-title">Large Language Models (LLMs)</div>
+  <div class="part-subtitle">The technology behind ChatGPT, Claude, Gemini — how it works, how to use it</div>
+  <div class="part-ornament">✦ ✦ ✦</div>
+</div>
+
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 5.1</span>
+    <h2 class="chapter-title">Text to Numbers</h2>
+    <span class="chapter-subtitle">NLP Foundations</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"The limits of my language mean the limits of my world."</p>
+    <p class="attribution">— Ludwig Wittgenstein</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Computers don't understand words. They understand numbers. The entire field of Natural Language Processing (NLP) exists because of this fundamental gap: how do you turn human language — rich, ambiguous, context-dependent — into numbers that a machine can process? This chapter covers the journey from raw text to numerical representations, which is the foundation everything in Parts 5 builds upon.</p>
+
+    <h3>Tokenization — Splitting Text into Pieces</h3>
+
+    <p>The first step in any NLP pipeline is breaking text into smaller units called tokens. There are three main approaches:</p>
+
+    <table>
+      <tr>
+        <th>Method</th>
+        <th>Example: "I love machine learning"</th>
+        <th>Pros</th>
+        <th>Cons</th>
+      </tr>
+      <tr>
+        <td><strong>Word</strong></td>
+        <td>["I", "love", "machine", "learning"]</td>
+        <td>Intuitive, preserves meaning</td>
+        <td>Huge vocabulary, can't handle unseen words</td>
+      </tr>
+      <tr>
+        <td><strong>Character</strong></td>
+        <td>["I", " ", "l", "o", "v", "e", ...]</td>
+        <td>Small vocabulary, handles any word</td>
+        <td>Sequences are very long, loses word meaning</td>
+      </tr>
+      <tr>
+        <td><strong>Subword (BPE)</strong></td>
+        <td>["I", "Ġlove", "Ġmachine", "Ġlearning"]</td>
+        <td>Best of both worlds</td>
+        <td>Used by all modern LLMs (GPT, BERT, etc.)</td>
+      </tr>
+    </table>
+
+    <h3>Bag of Words and TF-IDF</h3>
+
+    <p><strong>Bag of Words (BoW)</strong> represents a document as a vector where each dimension corresponds to a word in the vocabulary, and the value is the word's count. It's simple but ignores word order.</p>
+
+    <p><strong>TF-IDF</strong> (Term Frequency–Inverse Document Frequency) improves on BoW by weighting words that are important to a specific document but rare across all documents.</p>
+
+    <h3>Word Embeddings — The Revolution</h3>
+
+    <p>The breakthrough in NLP came with <strong>Word2Vec</strong> (Mikolov et al., 2013), which demonstrated that words could be mapped to dense vectors where semantic relationships are preserved as geometric relationships:</p>
+
+    <div class="math-block">
+      king - man + woman ≈ queen
+    </div>
+
+    <div class="key-insight">
+      <p>Word embeddings encode meaning as geometry. Similar words cluster together, analogies become vector arithmetic, and even grammar patterns emerge from the data. This was the first time machines "understood" language in any meaningful way.</p>
+    </div>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — Text to Numbers Pipeline</div>
+<pre><code><span class="keyword">from</span> collections <span class="keyword">import</span> Counter
+<span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="comment"># Simple Bag of Words implementation</span>
+<span class="keyword">def</span> <span class="function">bag_of_words</span>(documents):
+    <span class="comment"># Build vocabulary</span>
+    vocab = <span class="builtin">set</span>()
+    <span class="keyword">for</span> doc <span class="keyword">in</span> documents:
+        vocab.update(doc.lower().split())
+    vocab = <span class="builtin">sorted</span>(vocab)
+    word_to_idx = {w: i <span class="keyword">for</span> i, w <span class="keyword">in</span> <span class="builtin">enumerate</span>(vocab)}
+    
+    <span class="comment"># Convert documents to vectors</span>
+    vectors = []
+    <span class="keyword">for</span> doc <span class="keyword">in</span> documents:
+        vec = np.zeros(<span class="builtin">len</span>(vocab))
+        <span class="keyword">for</span> word <span class="keyword">in</span> doc.lower().split():
+            <span class="keyword">if</span> word <span class="keyword">in</span> word_to_idx:
+                vec[word_to_idx[word]] += <span class="number">1</span>
+        vectors.append(vec)
+    
+    <span class="keyword">return</span> np.array(vectors), vocab
+
+<span class="comment"># Example</span>
+docs = [
+    <span class="string">"I love machine learning"</span>,
+    <span class="string">"Deep learning is a subset of machine learning"</span>,
+    <span class="string">"I love deep neural networks"</span>
+]
+
+bow_matrix, vocabulary = bag_of_words(docs)
+<span class="builtin">print</span>(<span class="string">f"Vocabulary ({len(vocabulary)} words): {vocabulary}"</span>)
+<span class="builtin">print</span>(<span class="string">f"BoW matrix shape: {bow_matrix.shape}"</span>)
+<span class="builtin">print</span>(bow_matrix)</code></pre>
+    </div>
+
+    <div class="practice-set">
+      <h3>Practice Set — Chapter 5.1</h3>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-google">Google</span>
+          <span class="company-tag company-openai">OpenAI</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Implement TF-IDF from scratch (no sklearn). Given 3 documents, compute the TF-IDF matrix. Show that common words like "the" get low TF-IDF scores while distinctive words get high scores.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Solution</div>
+<pre><code><span class="keyword">import</span> numpy <span class="keyword">as</span> np
+<span class="keyword">from</span> collections <span class="keyword">import</span> Counter
+
+<span class="keyword">def</span> <span class="function">compute_tfidf</span>(documents):
+    <span class="comment"># Tokenize</span>
+    tokenized = [doc.lower().split() <span class="keyword">for</span> doc <span class="keyword">in</span> documents]
+    
+    <span class="comment"># Build vocabulary</span>
+    vocab = <span class="builtin">sorted</span>(<span class="builtin">set</span>(w <span class="keyword">for</span> doc <span class="keyword">in</span> tokenized <span class="keyword">for</span> w <span class="keyword">in</span> doc))
+    n_docs = <span class="builtin">len</span>(documents)
+    
+    <span class="comment"># TF: term frequency per document</span>
+    tf_matrix = np.zeros((n_docs, <span class="builtin">len</span>(vocab)))
+    <span class="keyword">for</span> i, doc <span class="keyword">in</span> <span class="builtin">enumerate</span>(tokenized):
+        counts = Counter(doc)
+        <span class="keyword">for</span> j, word <span class="keyword">in</span> <span class="builtin">enumerate</span>(vocab):
+            tf_matrix[i, j] = counts.get(word, <span class="number">0</span>) / <span class="builtin">len</span>(doc)
+    
+    <span class="comment"># IDF: log(N / df) where df = docs containing the term</span>
+    idf = np.zeros(<span class="builtin">len</span>(vocab))
+    <span class="keyword">for</span> j, word <span class="keyword">in</span> <span class="builtin">enumerate</span>(vocab):
+        df = <span class="builtin">sum</span>(<span class="number">1</span> <span class="keyword">for</span> doc <span class="keyword">in</span> tokenized <span class="keyword">if</span> word <span class="keyword">in</span> doc)
+        idf[j] = np.log(n_docs / df)
+    
+    <span class="comment"># TF-IDF = TF * IDF</span>
+    <span class="keyword">return</span> tf_matrix * idf, vocab
+
+docs = [
+    <span class="string">"the cat sat on the mat"</span>,
+    <span class="string">"the dog sat on the log"</span>,
+    <span class="string">"cats and dogs are friends"</span>
+]
+tfidf, vocab = compute_tfidf(docs)
+<span class="builtin">print</span>(<span class="string">"Words with highest TF-IDF in doc 1:"</span>)
+top_indices = np.argsort(tfidf[<span class="number">0</span>])[::-<span class="number">1</span>][:<span class="number">3</span>]
+<span class="keyword">for</span> idx <span class="keyword">in</span> top_indices:
+    <span class="builtin">print</span>(<span class="string">f"  {vocab[idx]}: {tfidf[0, idx]:.4f}"</span>)</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="github-link"><strong>GitHub:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/ch5-nlp</code></div>
+  </div>
+</div>
+
+<div class="project-section">
+  <div class="project-header"><span class="project-icon">🔨</span><h3 class="project-title">Project: Sentiment Analysis Engine</h3></div>
+  <p class="project-subtitle">Build a complete text classification system that determines if movie reviews are positive or negative</p>
+  <div class="what-you-build"><h4>What You'll Build</h4><ul><li>Text preprocessing pipeline (tokenization, stopword removal, lowercasing)</li><li>Three approaches: BoW + Logistic Regression, TF-IDF + SVM, Word Embeddings + Neural Network</li><li>Comparison of all three approaches on the same dataset</li><li>Web API (FastAPI) that takes a review and returns sentiment</li></ul></div>
+  <div class="github-link"><strong>Full solution:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/projects/p5-sentiment</code></div>
+</div>
+
+<!-- Scaffolded 5.2–5.6 -->
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 5.2</span><h2 class="chapter-title">The LLM Revolution</h2><span class="chapter-subtitle">From Transformer to GPT</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div><div class="scaffold-outline"><h4>Planned</h4><ul><li>Pre-training: next token prediction at massive scale</li><li>Tokenizers for LLMs: BPE, SentencePiece, tiktoken</li><li>Scaling laws: more data + more params = better performance</li><li>BERT vs GPT: encoder vs decoder</li></ul></div></div></div>
+
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 5.3</span><h2 class="chapter-title">Prompt Engineering</h2><span class="chapter-subtitle">The Art of Talking to AI</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div></div></div>
+
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 5.4</span><h2 class="chapter-title">Fine-Tuning LLMs</h2><span class="chapter-subtitle">Teaching Models New Tricks</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div></div></div>
+
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 5.5</span><h2 class="chapter-title">RAG — Retrieval-Augmented Generation</h2><span class="chapter-subtitle">Grounding AI in Facts</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div></div></div>
+
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 5.6</span><h2 class="chapter-title">AI Agents</h2><span class="chapter-subtitle">Autonomous Problem Solvers</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div></div></div>
+
+
+<!-- ████████████████████████████████████████████████████████████████████████
+     PARTS 6, 7, 8 — (Full chapters + scaffolds)
+     ████████████████████████████████████████████████████████████████████████ -->
+
+<div class="part-page"><div class="part-number">Part 6</div><div class="part-title">MLOps &amp; Production AI</div><div class="part-subtitle">Getting AI out of the notebook and into the real world</div><div class="part-ornament">✦ ✦ ✦</div></div>
+
+<div class="chapter">
+  <div class="chapter-header"><span class="chapter-number">Chapter 6.1</span><h2 class="chapter-title">Experiment Tracking &amp; Versioning</h2><span class="chapter-subtitle">The Science of ML</span><span class="chapter-ornament">✦</span></div>
+  <div class="epigraph"><p>"If you can't measure it, you can't improve it."</p><p class="attribution">— Peter Drucker</p></div>
+  <div class="chapter-body">
+    <span class="level-badge level-intermediate">Intermediate</span>
+    <p>You've trained a model. It works. You change the learning rate, add dropout, try a different architecture. One of these changes makes the accuracy drop from 94% to 91%, but you can't remember which one. You've lost track. This is the #1 pain point in real-world ML — and it's why experiment tracking exists.</p>
+    <h3>Why Experiment Tracking Matters</h3>
+    <p>In software engineering, you have Git for version control. In ML, you need version control for <em>everything</em>: code, data, hyperparameters, model weights, metrics, and artifacts. Tools like MLflow, Weights & Biases (W&B), and Neptune solve this.</p>
+    <div class="key-insight"><p>The difference between a data scientist and an ML engineer is reproducibility. A data scientist finds a good model in a notebook. An ML engineer ensures that model can be reliably retrained, deployed, monitored, and rolled back.</p></div>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab — MLflow Experiment Tracking</div>
+<pre><code><span class="keyword">import</span> mlflow
+<span class="keyword">import</span> mlflow.sklearn
+<span class="keyword">from</span> sklearn.linear_model <span class="keyword">import</span> LogisticRegression
+<span class="keyword">from</span> sklearn.datasets <span class="keyword">import</span> load_iris
+<span class="keyword">from</span> sklearn.model_selection <span class="keyword">import</span> train_test_split
+<span class="keyword">from</span> sklearn.metrics <span class="keyword">import</span> accuracy_score
+
+<span class="comment"># Load data</span>
+X, y = load_iris(return_X_y=<span class="keyword">True</span>)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=<span class="number">0.2</span>)
+
+<span class="comment"># Start an MLflow experiment</span>
+mlflow.set_experiment(<span class="string">"iris-classification"</span>)
+
+<span class="keyword">with</span> mlflow.start_run():
+    <span class="comment"># Log hyperparameters</span>
+    C = <span class="number">1.0</span>
+    mlflow.log_param(<span class="string">"C"</span>, C)
+    mlflow.log_param(<span class="string">"solver"</span>, <span class="string">"lbfgs"</span>)
+    
+    <span class="comment"># Train model</span>
+    model = LogisticRegression(C=C, max_iter=<span class="number">200</span>)
+    model.fit(X_train, y_train)
+    
+    <span class="comment"># Log metrics</span>
+    accuracy = accuracy_score(y_test, model.predict(X_test))
+    mlflow.log_metric(<span class="string">"accuracy"</span>, accuracy)
+    
+    <span class="comment"># Log the model itself</span>
+    mlflow.sklearn.log_model(model, <span class="string">"model"</span>)
+    
+    <span class="builtin">print</span>(<span class="string">f"Accuracy: {accuracy:.4f}"</span>)</code></pre>
+    </div>
+
+    <div class="github-link"><strong>GitHub:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/ch6-mlops</code></div>
+  </div>
+</div>
+
+<div class="project-section">
+  <div class="project-header"><span class="project-icon">🔨</span><h3 class="project-title">Project: End-to-End ML Pipeline</h3></div>
+  <p class="project-subtitle">Build a complete MLOps pipeline: data → train → track → serve → monitor</p>
+  <div class="what-you-build"><h4>What You'll Build</h4><ul><li>Data versioning with DVC</li><li>Experiment tracking with MLflow</li><li>Model serving with FastAPI</li><li>Docker containerization</li><li>Automated retraining trigger</li></ul></div>
+  <div class="github-link"><strong>Full solution:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/projects/p6-ml-pipeline</code></div>
+</div>
+
+<!-- Scaffolded 6.2–6.5 -->
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 6.2</span><h2 class="chapter-title">Model Serving &amp; Deployment</h2><span class="chapter-subtitle">From Notebook to Production</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div></div></div>
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 6.3</span><h2 class="chapter-title">Monitoring &amp; Drift Detection</h2><span class="chapter-subtitle">Keeping Models Honest</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div></div></div>
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 6.4</span><h2 class="chapter-title">Data Pipelines &amp; Feature Stores</h2><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div></div></div>
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 6.5</span><h2 class="chapter-title">Cloud ML Platforms</h2><span class="chapter-subtitle">AWS, GCP, and Azure</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div></div></div>
+
+
+<!-- Part 7 -->
+<div class="part-page"><div class="part-number">Part 7</div><div class="part-title">System Design for AI Engineers</div><div class="part-subtitle">Designing real-world AI systems that are reliable, scalable, and maintainable</div><div class="part-ornament">✦ ✦ ✦</div></div>
+
+<div class="chapter">
+  <div class="chapter-header"><span class="chapter-number">Chapter 7.1</span><h2 class="chapter-title">AI System Design Framework</h2><span class="chapter-ornament">✦</span></div>
+  <div class="epigraph"><p>"Simplicity is the ultimate sophistication."</p><p class="attribution">— Leonardo da Vinci</p></div>
+  <div class="chapter-body">
+    <span class="level-badge level-advanced">Advanced</span>
+    <p>In ML interviews at top companies, the system design round is often the differentiator. You'll be asked: "Design a recommendation system for YouTube" or "Design a spam detection system at Gmail scale." This chapter gives you the framework.</p>
+    <h3>The Four Pillars of AI System Design</h3>
+    <table>
+      <tr><th>Pillar</th><th>Questions to Answer</th></tr>
+      <tr><td><strong>1. Data</strong></td><td>Where does the data come from? How much? How is it labeled? How do we handle data quality?</td></tr>
+      <tr><td><strong>2. Model</strong></td><td>What architecture? What features? How to train? How to evaluate?</td></tr>
+      <tr><td><strong>3. Serving</strong></td><td>How to serve predictions? Batch vs real-time? Latency requirements?</td></tr>
+      <tr><td><strong>4. Monitoring</strong></td><td>How to detect model degradation? How to retrain? Alerting?</td></tr>
+    </table>
+    <div class="key-insight"><p>A great system design answer follows this structure: (1) Clarify requirements, (2) Design data pipeline, (3) Choose model architecture with justification, (4) Design serving infrastructure, (5) Plan monitoring and iteration. Most candidates fail because they jump straight to the model without addressing data and serving.</p></div>
+    <div class="github-link"><strong>GitHub:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/ch7-system-design</code></div>
+  </div>
+</div>
+
+<div class="project-section">
+  <div class="project-header"><span class="project-icon">🔨</span><h3 class="project-title">Project: Design a Recommendation System</h3></div>
+  <p class="project-subtitle">Full system design document + working prototype for a movie recommendation engine</p>
+  <div class="what-you-build"><h4>What You'll Build</h4><ul><li>System design document (data pipeline, model selection, serving strategy)</li><li>Collaborative filtering (user-item matrix factorization)</li><li>Content-based filtering (movie features)</li><li>Hybrid approach combining both</li><li>REST API for real-time recommendations</li></ul></div>
+  <div class="github-link"><strong>Full solution:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/projects/p7-recsys</code></div>
+</div>
+
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 7.2</span><h2 class="chapter-title">Real-World System Designs</h2><span class="chapter-subtitle">YouTube, Google, Spam Detection</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div></div></div>
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 7.3</span><h2 class="chapter-title">Ethics, Fairness &amp; Explainability</h2><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div></div></div>
+
+
+<!-- Part 8 -->
+<div class="part-page"><div class="part-number">Part 8</div><div class="part-title">Advanced Topics &amp; The Frontier</div><div class="part-subtitle">The cutting edge — where the field is going and how to stay ahead</div><div class="part-ornament">✦ ✦ ✦</div></div>
+
+<div class="chapter">
+  <div class="chapter-header"><span class="chapter-number">Chapter 8.1</span><h2 class="chapter-title">Multimodal AI</h2><span class="chapter-subtitle">Vision Meets Language</span><span class="chapter-ornament">✦</span></div>
+  <div class="epigraph"><p>"A picture is worth a thousand words — but a model that understands both is worth a billion."</p><p class="attribution">— Anonymous ML Engineer</p></div>
+  <div class="chapter-body">
+    <span class="level-badge level-advanced">Advanced</span>
+    <p>For most of AI history, vision and language were separate worlds. CNNs understood images. Transformers understood text. But humans experience the world through multiple senses simultaneously — we see an image and describe it in words, or read instructions and visualize the result. Multimodal AI bridges these worlds.</p>
+    <h3>How Multimodal Models Work</h3>
+    <p>The key insight is simple: <strong>project different modalities into the same vector space</strong>. If you can encode both images and text as vectors in the same space, then similar images and texts will be close together, and you can compute similarity across modalities.</p>
+    <h3>CLIP — Connecting Text and Images</h3>
+    <p>CLIP (Contrastive Language-Image Pre-training, OpenAI 2021) trains an image encoder and a text encoder jointly. Given a batch of (image, text) pairs, CLIP learns to maximize the similarity between matching pairs and minimize it for non-matching pairs.</p>
+    <div class="key-insight"><p>CLIP doesn't need labeled datasets in the traditional sense. It learns from 400 million image-text pairs scraped from the internet. This is the "pre-training on internet-scale data" approach that made modern AI possible.</p></div>
+    <div class="github-link"><strong>GitHub:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/ch8-multimodal</code></div>
+  </div>
+</div>
+
+<div class="project-section">
+  <div class="project-header"><span class="project-icon">🔨</span><h3 class="project-title">Project: Image Caption Generator</h3></div>
+  <p class="project-subtitle">Build a system that generates natural language descriptions of images</p>
+  <div class="what-you-build"><h4>What You'll Build</h4><ul><li>Use a pre-trained CLIP model to encode images</li><li>Fine-tune a small GPT-2 model to generate captions conditioned on image embeddings</li><li>Evaluate with BLEU and CIDEr metrics</li><li>Interactive demo with Gradio</li></ul></div>
+  <div class="github-link"><strong>Full solution:</strong> <code>github.com/ramawasthi/the-complete-ai-engineer/projects/p8-captioning</code></div>
+</div>
+
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 8.2</span><h2 class="chapter-title">Reinforcement Learning</h2><span class="chapter-subtitle">Learning by Doing</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div></div></div>
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 8.3</span><h2 class="chapter-title">Model Optimization</h2><span class="chapter-subtitle">Quantization, Pruning, Distillation</span><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div></div></div>
+<div class="chapter chapter-scaffold"><div class="chapter-header"><span class="chapter-number">Chapter 8.4</span><h2 class="chapter-title">Your Career as an AI Engineer</h2><span class="chapter-ornament">✦</span></div><div class="chapter-body"><div class="scaffold-notice">📋 Scaffolded — will be written in a future session.</div></div></div>
+
+
+<!-- ████████████████████████████████████████████████████████████████████████
+     GLOSSARY
+     ████████████████████████████████████████████████████████████████████████ -->
+<div class="glossary">
+  <h2>Glossary</h2>
+  <dl>
+    <dt>Activation Function</dt>
+    <dd>A non-linear function applied to the output of a neuron. Common examples: ReLU, sigmoid, tanh. Without activation functions, neural networks could only learn linear relationships.</dd>
+
+    <dt>Attention</dt>
+    <dd>A mechanism that allows a model to focus on different parts of the input when producing each part of the output. The foundation of the Transformer architecture.</dd>
+
+    <dt>Backpropagation</dt>
+    <dd>The algorithm used to compute gradients in neural networks. It applies the chain rule of calculus layer by layer, from output to input, to determine how each weight contributed to the error.</dd>
+
+    <dt>Batch Size</dt>
+    <dd>The number of training examples processed together in one forward/backward pass. Common values: 32, 64, 128, 256.</dd>
+
+    <dt>CNN (Convolutional Neural Network)</dt>
+    <dd>A neural network architecture designed for spatial data (images, video). Uses convolution operations with shared filters that slide across the input.</dd>
+
+    <dt>Cross-Entropy</dt>
+    <dd>A loss function used for classification tasks. Measures the difference between the predicted probability distribution and the true distribution. Lower is better.</dd>
+
+    <dt>Dropout</dt>
+    <dd>A regularization technique where random neurons are temporarily disabled during training. Prevents overfitting by forcing the network to not rely on any single neuron.</dd>
+
+    <dt>Embedding</dt>
+    <dd>A dense vector representation of a discrete object (word, token, user, item). Learned during training to capture semantic meaning and relationships.</dd>
+
+    <dt>Epoch</dt>
+    <dd>One complete pass through the entire training dataset. Models typically train for tens to hundreds of epochs.</dd>
+
+    <dt>Fine-Tuning</dt>
+    <dd>Taking a pre-trained model and training it further on a specific dataset or task. Much cheaper than training from scratch.</dd>
+
+    <dt>Gradient Descent</dt>
+    <dd>An optimization algorithm that iteratively adjusts parameters in the direction that reduces the loss function. The fundamental learning algorithm of ML.</dd>
+
+    <dt>Hyperparameter</dt>
+    <dd>A configuration value set before training begins (learning rate, batch size, number of layers). Unlike parameters (weights), these are not learned from data.</dd>
+
+    <dt>LLM (Large Language Model)</dt>
+    <dd>A language model with billions of parameters, pre-trained on massive text datasets. Examples: GPT-4, Claude, Gemini, LLaMA.</dd>
+
+    <dt>Loss Function</dt>
+    <dd>A function that measures how wrong a model's predictions are. The model's goal is to minimize this function. Examples: MSE, cross-entropy, hinge loss.</dd>
+
+    <dt>Overfitting</dt>
+    <dd>When a model performs well on training data but poorly on unseen data. The model has memorized noise rather than learning generalizable patterns.</dd>
+
+    <dt>RAG (Retrieval-Augmented Generation)</dt>
+    <dd>A technique that enhances LLM responses by first retrieving relevant documents from a knowledge base, then using them as context for generation.</dd>
+
+    <dt>ReLU (Rectified Linear Unit)</dt>
+    <dd>The most common activation function: f(x) = max(0, x). Simple, fast, and effective. Default choice for hidden layers.</dd>
+
+    <dt>Softmax</dt>
+    <dd>A function that converts a vector of numbers into a probability distribution. Used as the output layer for multi-class classification.</dd>
+
+    <dt>Tensor</dt>
+    <dd>A multi-dimensional array of numbers. Generalization of scalars (0D), vectors (1D), and matrices (2D) to any number of dimensions.</dd>
+
+    <dt>Transformer</dt>
+    <dd>A neural network architecture based entirely on attention mechanisms, without recurrence or convolution. The foundation of all modern LLMs.</dd>
+
+    <dt>Transfer Learning</dt>
+    <dd>Using a model trained on one task as the starting point for a different task. Dramatically reduces the data and compute needed for the new task.</dd>
+  </dl>
+</div>
+
+
+<!-- ████████████████████████████████████████████████████████████████████████
+     ABOUT THE AUTHOR
+     ████████████████████████████████████████████████████████████████████████ -->
+<div class="about-author">
+  <h2>About the Author</h2>
+  <p><strong>Ram Awasthi</strong> is an AI engineer and author who believes that the most complex ideas can be taught through patience, intuition, and great examples. His mission is to make world-class AI education accessible to anyone with the curiosity to learn — no PhD required.</p>
+  <p>Ram has previously authored <em>Beyond the Big Bang: A New Theory of Everything</em>, exploring the intersection of physics, philosophy, and cosmology. He combines his passion for foundational understanding with hands-on engineering to create books that bridge the gap between theory and practice.</p>
+  <p>Connect with Ram:</p>
+  <p>GitHub: github.com/ramawasthi</p>
+</div>
+
+
+<!-- ████████████████████████████████████████████████████████████████████████
+     BACK COVER
+     ████████████████████████████████████████████████████████████████████████ -->
+<div class="back-cover-page">
+  <div class="back-cover-overlay">
+    <div class="back-tagline">
+      Can you build an AI system from scratch?<br>
+      Can you explain how a neural network learns?<br>
+      Can you design a recommendation system at scale?<br>
+      Can you deploy a model that serves millions of users?
+    </div>
+    <div class="back-synopsis">
+      <p><strong>The Complete AI Engineer</strong> is the definitive guide to becoming a production-ready AI engineer. Starting from absolute fundamentals — no prerequisites beyond school-level math — this book methodically builds your understanding through 8 parts, 43+ chapters, 500+ practice problems, and 200+ code labs.</p>
+      <p>Every concept is taught the way the best teachers explain things: intuition first, then math, then code. Every practice problem is tagged with real companies that ask similar questions — Google, Meta, Amazon, OpenAI, and more. Every chapter ends with a hands-on project that applies what you've learned.</p>
+      <p>This is not a book about using AI tools. This is a book about understanding how AI systems are designed, built, trained, evaluated, and deployed in the real world.</p>
+    </div>
+    <div class="back-stats">
+      <span class="back-stat">8 Parts</span>
+      <span class="back-stat">43+ Chapters</span>
+      <span class="back-stat">500+ Problems</span>
+      <span class="back-stat">200+ Code Labs</span>
+      <span class="back-stat">9 Projects</span>
+    </div>
+    <div class="back-quote">"The engineers who will define the next decade of AI are not the ones who used the most tools — they are the ones who understood the most fundamentals."</div>
+    <div class="back-author">Ram Awasthi</div>
+  </div>
+</div>
+
+</body>
+</html>

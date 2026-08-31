@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Generated output files
+*.pdf
+*.docx
+*.epub
+*_KDP.zip
+*_Full_Cover.jpg
+*_Full_Cover.pdf
+
+# Temporary files
+*.tmp
+*.bak
+blueprint_text.txt
+extract_docx.ps1
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env

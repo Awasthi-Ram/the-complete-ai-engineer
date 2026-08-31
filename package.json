@@ -1,0 +1,21 @@
+{
+  "name": "the-complete-ai-engineer",
+  "version": "1.0.0",
+  "description": "The Complete AI Engineer — Book Generation Pipeline",
+  "author": "Ram Awasthi",
+  "license": "MIT",
+  "scripts": {
+    "pdf": "node generate_pdf.js",
+    "docx": "node generate_docx.js",
+    "epub": "node generate_epub.js",
+    "kdp": "node generate_kdp_zip.js",
+    "all": "npm run pdf && npm run docx && npm run epub && npm run kdp"
+  },
+  "dependencies": {
+    "puppeteer-core": "^21.0.0",
+    "cheerio": "^1.0.0",
+    "html-to-docx": "^1.8.0",
+    "epub-gen-memory": "^1.0.10",
+    "archiver": "^7.0.0"
+  }
+}
