@@ -1,0 +1,160 @@
+<!-- ======================================================================
+     CHAPTER 6.1 — EXPERIMENT TRACKING & ARTIFACT REGISTRIES
+     ====================================================================== -->
+<div class="chapter" id="chapter-6-1">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 6.1</span>
+    <h2 class="chapter-title">Experiment Tracking &amp; Artifact Registries</h2>
+    <span class="chapter-subtitle">Reproducibility Architecture, Hyperparameter Metaspaces, Lineage Graphs &amp; MLflow</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"If an experiment cannot be reproduced from scratch using exact code, data, and environment hashes, it is not science; it is folklore."</p>
+    <p class="attribution">— MLOps Maxim</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE REPRODUCIBILITY CRISIS -->
+    <h3>1. The Chaos of Unmanaged Machine Learning</h3>
+    <p>In classical software engineering, Git tracks every line of deterministic code. In machine learning, code is only one third of the equation: model behavior is dictated by the trinity of <strong>Code, Training Data, and Hyperparameters</strong>. An unmanaged ML team rapidly descends into chaos:</p>
+    <ul>
+      <li>Engineers run training scripts in interactive Jupyter notebooks with hidden state and out-of-order cell execution.</li>
+      <li>Weights are saved as <code>model_v2_final_really_final.pt</code> on personal workstations with zero record of which training dataset or learning rate produced them.</li>
+      <li>When a production model fails 6 months later, nobody can reproduce its exact weights.</li>
+    </ul>
+
+    <!-- SECTION 2: THE 4 PILLARS OF TRACKING -->
+    <h3>2. The Architecture of an Experiment Tracking Engine</h3>
+    <p>Modern production tracking frameworks (such as <strong>MLflow</strong> and <strong>Weights &amp; Biases</strong>) structure model development into four decoupled primitives:</p>
+
+    <div class="real-world-box">
+      <h4>📐 The 4 Fundamental Tracking Primitives</h4>
+      <ol>
+        <li><strong>Parameters (Immutable Metadata):</strong> Key-value configurations set prior to execution (e.g. <code>learning_rate=3e-4</code>, <code>batch_size=128</code>, <code>optimizer="AdamW"</code>, <code>git_commit_sha="a7f29b"</code>).</li>
+        <li><strong>Metrics (Temporal Scalar Sequences):</strong> Floating-point values logged at sequential training steps (e.g. <code>loss</code>, <code>val_accuracy</code>, <code>perplexity</code>, <code>gpu_vram_allocated</code>) allowing visualization of convergence dynamics and early anomaly detection.</li>
+        <li><strong>Artifacts (Heavy Binary Storage):</strong> Heavy binary files stored in distributed object storage (AWS S3, Google Cloud Storage, MinIO): compiled ONNX models, PyTorch <code>state_dict</code> checkpoints, confusion matrix plots, and serialized tokenizer files.</li>
+        <li><strong>The Model Registry (Governance &amp; Lifecycle):</strong> A centralized repository managing model stages: <code>Staging</code>, <code>Production</code>, <code>Archived</code>. Enforces cryptographic hash verification, automated unit tests, and sign-off approvals before promotion to production.</li>
+      </ol>
+    </div>
+
+    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Experiment Tracking</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.1.1</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are architecting an enterprise experiment tracking system for a team of 500 AI researchers running 10,000 concurrent distributed GPU training runs per day. Why does writing metric updates synchronously to a centralized relational database (PostgreSQL) cause the entire cluster to grind to a halt? How do you architect an asynchronous, non-blocking telemetry collector?</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+
+        <p class="step"><strong>Step 1: The Synchronous Database Bottleneck:</strong><br>
+        If every GPU worker issues a synchronous HTTP POST or SQL INSERT on every training step (e.g. 10 steps per second across 10,000 workers = $100,000 \text{ writes/sec}$), the centralized PostgreSQL database experiences connection pool exhaustion, row-lock contention, and write-ahead log (WAL) bottlenecks. A slow 200ms database latency pauses the PyTorch training loop, forcing multi-million dollar GPU clusters into idle waits!</p>
+
+        <p class="step"><strong>Step 2: The Production Asynchronous Telemetry Architecture:</strong>
+        <ol>
+          <li><strong>Local In-Memory Ring Buffer:</strong> The training script logs metrics to a local, lock-free circular ring buffer in host RAM via a background thread. The main GPU training loop never waits for network I/O ($0\text{ ms}$ overhead).</li>
+          <li><strong>Batched Streaming:</strong> The background thread batches metrics into compressed binary chunks (e.g. Protocol Buffers) and streams them periodically (every 10 seconds) to a distributed streaming broker (Apache Kafka or AWS Kinesis).</li>
+          <li><strong>Time-Series Storage Engine:</strong> A consumer pool ingests Kafka streams and bulk-writes metrics into an append-only time-series database (ClickHouse or TimescaleDB) optimized for millions of analytical writes per second, completely decoupling training execution from tracking storage!</li>
+        </ol></p>
+      </div>
+    </div>
+
+    <!-- SECTION 4: CODE LAB -->
+    <h3>3. Production Code Lab 6.1: Asynchronous Metric Logger &amp; Model Registry from Scratch</h3>
+    <p>Below is a clean, production-grade Python implementation of an asynchronous, non-blocking experiment tracking client with artifact hash verification.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 6.1 — Non-Blocking Experiment Tracker &amp; Registry</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch61_experiment_tracking/tracker_scratch.py" target="_blank">🔗 View in GitHub: part6_mlops/ch61_experiment_tracking/tracker_scratch.py</a></p>
+<pre><code>import hashlib
+import json
+import os
+import queue
+import threading
+import time
+
+class AsyncExperimentTracker:
+    def __init__(self, experiment_name, log_dir="./experiment_logs"):
+        self.experiment_name = experiment_name
+        self.log_dir = log_dir
+        os.makedirs(log_dir, exist_ok=True)
+        self.params = {}
+        self.metric_queue = queue.Queue()
+        self.running = True
+
+        # Launch background collector thread
+        self.worker = threading.Thread(target=self._flush_worker, daemon=True)
+        self.worker.start()
+
+    def log_params(self, params_dict):
+        self.params.update(params_dict)
+
+    def log_metric(self, step, key, value):
+        # Non-blocking enqueue: Training loop never waits!
+        self.metric_queue.put({"step": step, "key": key, "value": value, "timestamp": time.time()})
+
+    def _flush_worker(self):
+        log_file = os.path.join(self.log_dir, f"{self.experiment_name}_metrics.jsonl")
+        with open(log_file, "a", encoding="utf-8") as f:
+            while self.running or not self.metric_queue.empty():
+                try:
+                    item = self.metric_queue.get(timeout=0.5)
+                    f.write(json.dumps(item) + "\n")
+                    f.flush()
+                    self.metric_queue.task_done()
+                except queue.Empty:
+                    continue
+
+    def register_model_artifact(self, model_bytes, model_name, version="1.0.0"):
+        # Cryptographic SHA-256 hash for provenance and reproducibility
+        sha256 = hashlib.sha256(model_bytes).hexdigest()
+        meta = {
+            "model_name": model_name,
+            "version": version,
+            "sha256": sha256,
+            "params": self.params,
+            "registered_at": time.time()
+        }
+        meta_file = os.path.join(self.log_dir, f"{model_name}_v{version}_metadata.json")
+        with open(meta_file, "w", encoding="utf-8") as f:
+            json.dump(meta, f, indent=2)
+        print(f"Registered Model '{model_name}:v{version}' with SHA256: {sha256[:12]}...")
+
+    def close(self):
+        self.metric_queue.join()
+        self.running = False
+
+if __name__ == "__main__":
+    tracker = AsyncExperimentTracker("resnet50_cifar10")
+    tracker.log_params({"lr": 1e-3, "optimizer": "AdamW", "batch_size": 64})
+
+    for step in range(5):
+        tracker.log_metric(step=step, key="train_loss", value=1.0 / (step + 1))
+
+    tracker.register_model_artifact(b"DUMMY_MODEL_WEIGHT_BUFFER", "ResNet50_Classifier", "1.0.0")
+    tracker.close()</code></pre>
+    </div>
+
+    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 6.1 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 6.1: Enterprise Experiment Tracking &amp; Artifact Store</h3>
+        <p class="project-desc">Architect and deploy a centralized, self-hosted experiment tracking and model registry service using MLflow, MinIO S3 object storage, and PostgreSQL, enforcing strict cryptographic artifact checksums and automated staging-to-production promotion gates.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch61_experiment_tracking/tracker_scratch.py" target="_blank">🔗 Full Project Code: part6_mlops/ch61_experiment_tracking/tracker_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In regulated financial modeling (JPMorgan, Goldman Sachs), regulatory compliance requires proving exactly which training dataset, source code commit, and hyperparameters generated any risk model deployed to production. In this project, you construct an auditable MLflow registry integrated with automated pull-request validation that blocks model deployments lacking reproducible lineage proofs.</p>
+      </div>
+    </div>
+  </div>
+</div>

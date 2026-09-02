@@ -1,0 +1,193 @@
+<!-- ======================================================================
+     CHAPTER 6.5 — DRIFT OBSERVABILITY & AUTOMATED RETRAINING
+     ====================================================================== -->
+<div class="chapter" id="chapter-6-5">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 6.5</span>
+    <h2 class="chapter-title">Drift Observability &amp; Automated Retraining</h2>
+    <span class="chapter-subtitle">Covariate Shift, The Population Stability Index (PSI), KS-Tests &amp; Closed-Loop Pipelines</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Traditional software rots when code changes. Machine learning software rots when the world changes."</p>
+    <p class="attribution">— MLOps Observability Maxim</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: SILENT FAILURE -->
+    <h3>1. The Silent Degradation of Production AI</h3>
+    <p>In standard software engineering, systems fail loudly: a null pointer exception raises a stack trace, returning an HTTP 500 error that triggers PagerDuty alerts. Machine learning systems <strong>fail silently</strong>: the API returns an HTTP 200 OK with a 99% confidence score, yet the business is hemorrhaging money because the predictions are completely wrong!</p>
+
+    <h4>The Three Pillars of Distribution Shift</h4>
+    <ul>
+      <li><strong>Covariate Shift (Data Drift):</strong> The input feature distribution changes: $P_{\text{prod}}(\mathbf{x}) \neq P_{\text{train}}(\mathbf{x})$, while the true mapping $P(y \mid \mathbf{x})$ remains static (e.g. camera sensors upgrade to higher resolution).</li>
+      <li><strong>Concept Shift:</strong> The underlying physical relationship between features and labels changes: $P_{\text{prod}}(y \mid \mathbf{x}) \neq P_{\text{train}}(y \mid \mathbf{x})$ (e.g. consumer spending patterns shifting abruptly during a macroeconomic recession).</li>
+      <li><strong>Prior Probability Shift (Label Drift):</strong> The distribution of target labels $P(y)$ changes (e.g. an epidemic causing infection rates to surge from 0.1% to 15%).</li>
+    </ul>
+
+    <!-- SECTION 2: PSI DERIVATION -->
+    <h3>2. The Population Stability Index (PSI)</h3>
+    <p>How do we quantify whether a feature's distribution has drifted far enough to warrant retraining? In enterprise risk and banking, the gold standard is the <strong>Population Stability Index (PSI)</strong>.</p>
+
+    <div class="real-world-box">
+      <h4>🏆 Mathematical Formulation of PSI</h4>
+      <p>Divide the baseline (training) distribution into $B$ discrete quantile bins (typically deciles, $B = 10$). For each bin $i$:</p>
+      <ul>
+        <li>$E_i$: Expected percentage of observations in bin $i$ from the baseline training set.</li>
+        <li>$A_i$: Actual percentage of observations in bin $i$ from the live production stream.</li>
+      </ul>
+      $$\text{PSI} = \sum_{i=1}^B (A_i - E_i) \cdot \ln\left( \frac{A_i}{E_i} \right)$$
+      <p>Notice the mathematical elegance: $(A_i - E_i)$ and $\ln(A_i / E_i)$ always share the same sign! Their product is <strong>strictly non-negative</strong>, summing to zero if and only if $A_i = E_i$ across all bins.</p>
+
+      <h4>Industrial Decision Thresholds</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>PSI Range</th>
+            <th>Statistical Interpretation</th>
+            <th>Production Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>$\text{PSI} &lt; 0.10$</td>
+            <td><strong>Stable:</strong> Insignificant distribution shift.</td>
+            <td>No action required. Continue standard serving.</td>
+          </tr>
+          <tr>
+            <td>$0.10 \le \text{PSI} \le 0.25$</td>
+            <td><strong>Moderate Drift:</strong> Measurable population shift.</td>
+            <td>Log warning to Datadog/Prometheus; increase audit frequency.</td>
+          </tr>
+          <tr>
+            <td>$\mathbf{\text{PSI} &gt; 0.25}$</td>
+            <td><strong>Critical Drift:</strong> Significant distribution divergence!</td>
+            <td><strong>Trigger automated model retraining pipeline immediately!</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SECTION 3: AUTOMATED CLOSED-LOOP RETRAINING -->
+    <h3>3. Closed-Loop Continuous Retraining (CT) Pipelines</h3>
+    <p>Modern production platforms (orchestrated via <strong>Kubeflow Pipelines, Apache Airflow, or Prefect</strong>) eliminate manual human intervention through automated continuous training loops:</p>
+    <ol>
+      <li><strong>Streaming Drift Sentinel:</strong> A lightweight background worker computes rolling PSI and Kolmogorov-Smirnov statistics over 24-hour sliding production windows.</li>
+      <li><strong>Automated Trigger:</strong> When $\text{PSI} &gt; 0.25$, an automated webhook dispatches a retraining DAG.</li>
+      <li><strong>Point-in-Time Historical Materialization:</strong> The pipeline queries the Feature Store, pulling the freshest historical training window with zero target leakage.</li>
+      <li><strong>Automated Shadow Evaluation:</strong> The newly trained "Candidate" model runs concurrently with the active "Champion" model in shadow mode for 48 hours.</li>
+      <li><strong>Canary Promotion:</strong> If the Candidate model outperforms the Champion on holdout ROC-AUC without increasing p99 latency, the model registry automatically promotes it to production traffic!</li>
+    </ol>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Observability</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.5.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove that the Population Stability Index (PSI) is mathematically equivalent to the <strong>Symmetric Kullback-Leibler (KL) Divergence (Jeffreys Divergence)</strong> between the actual distribution $A$ and the expected distribution $E$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Write Forward and Reverse KL Divergences:</strong><br>
+        Let $A$ and $E$ be discrete probability distributions across $B$ bins:
+        $$D_{\text{KL}}(A \parallel E) = \sum_{i=1}^B A_i \ln\left( \frac{A_i}{E_i} \right)$$
+        $$D_{\text{KL}}(E \parallel A) = \sum_{i=1}^B E_i \ln\left( \frac{E_i}{A_i} \right)$$</p>
+
+        <p class="step"><strong>Step 2: Add the Two Divergences (Jeffreys Divergence):</strong><br>
+        Because standard KL divergence is asymmetric ($D_{\text{KL}}(A \parallel E) \neq D_{\text{KL}}(E \parallel A)$), the <strong>Symmetric KL Divergence</strong> is defined as their sum:
+        $$D_{\text{Sym}}(A, E) = D_{\text{KL}}(A \parallel E) + D_{\text{KL}}(E \parallel A) = \sum_{i=1}^B A_i \ln\left( \frac{A_i}{E_i} \right) + \sum_{i=1}^B E_i \ln\left( \frac{E_i}{A_i} \right)$$</p>
+
+        <p class="step"><strong>Step 3: Factorize the Logarithm:</strong><br>
+        Recall that $\ln(E_i / A_i) = -\ln(A_i / E_i)$. Substitute this into the second term:
+        $$D_{\text{Sym}}(A, E) = \sum_{i=1}^B A_i \ln\left( \frac{A_i}{E_i} \right) - \sum_{i=1}^B E_i \ln\left( \frac{A_i}{E_i} \right)$$
+        Factor out the shared logarithmic quotient $\ln(A_i / E_i)$:
+        $$D_{\text{Sym}}(A, E) = \sum_{i=1}^B (A_i - E_i) \cdot \ln\left( \frac{A_i}{E_i} \right) = \mathbf{\text{PSI}}$$
+        <strong>Q.E.D. The Population Stability Index is rigorously identical to the Symmetric Kullback-Leibler Divergence!</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 6.5: Population Stability Index &amp; Drift Sentinel from Scratch</h3>
+    <p>Below is an industrial Python implementation of the Population Stability Index and automated retraining trigger sentinel.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 6.5 — Population Stability Index (PSI) Drift Sentinel</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch65_drift_observability/psi_sentinel.py" target="_blank">🔗 View in GitHub: part6_mlops/ch65_drift_observability/psi_sentinel.py</a></p>
+<pre><code>import numpy as np
+
+class PSIDriftSentinel:
+    def __init__(self, num_bins=10, critical_threshold=0.25):
+        self.num_bins = num_bins
+        self.critical_threshold = critical_threshold
+        self.bin_edges = None
+        self.expected_pct = None
+
+    def fit_baseline(self, baseline_data):
+        """Establish baseline quantile bins from training data"""
+        # Determine quantile bin edges: equal observations per bin
+        quantiles = np.linspace(0, 100, self.num_bins + 1)
+        self.bin_edges = np.percentile(baseline_data, quantiles)
+        self.bin_edges[0] -= 1e-5
+        self.bin_edges[-1] += 1e-5
+
+        # Compute expected percentages E_i
+        counts, _ = np.histogram(baseline_data, bins=self.bin_edges)
+        self.expected_pct = (counts + 1e-4) / np.sum(counts + 1e-4)
+
+    def calculate_psi(self, production_data):
+        """Compute PSI against baseline: sum((A - E) * ln(A / E))"""
+        counts, _ = np.histogram(production_data, bins=self.bin_edges)
+        actual_pct = (counts + 1e-4) / np.sum(counts + 1e-4)
+
+        # PSI formula
+        psi_value = np.sum((actual_pct - self.expected_pct) * np.log(actual_pct / self.expected_pct))
+        
+        status = "STABLE"
+        if psi_value >= self.critical_threshold:
+            status = "CRITICAL_DRIFT_TRIGGER_RETRAIN"
+        elif psi_value >= 0.10:
+            status = "MODERATE_DRIFT_WARNING"
+
+        return psi_value, status
+
+if __name__ == "__main__":
+    np.random.seed(42)
+    baseline = np.random.normal(loc=0.0, scale=1.0, size=10000)
+    sentinel = PSIDriftSentinel(num_bins=10)
+    sentinel.fit_baseline(baseline)
+
+    # 1. Test Stable Production Stream (Same distribution)
+    prod_stable = np.random.normal(loc=0.0, scale=1.0, size=2000)
+    psi_1, status_1 = sentinel.calculate_psi(prod_stable)
+    print(f"Test 1 (Stable)  : PSI = {psi_1:.4f} -> Status: {status_1}")
+
+    # 2. Test Drifting Production Stream (Mean shifted by +0.8)
+    prod_drifted = np.random.normal(loc=0.8, scale=1.2, size=2000)
+    psi_2, status_2 = sentinel.calculate_psi(prod_drifted)
+    print(f"Test 2 (Drifted) : PSI = {psi_2:.4f} -> Status: {status_2}")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 6.5 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 6.5: Enterprise Drift Sentinel &amp; Automated Retraining Pipeline</h3>
+        <p class="project-desc">Architect, build, and deploy an automated continuous retraining platform combining real-time Kafka telemetry drift sentinels (PSI, KS-test), Prometheus metrics alerting, and Airflow DAGs triggering point-in-time training and canary model rollout.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch65_drift_observability/psi_sentinel.py" target="_blank">🔗 Full Project Code: part6_mlops/ch65_drift_observability/psi_sentinel.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In automated digital advertising bidding (Google Ads, Meta Ads), consumer click-through behaviors shift dynamically every weekend. In this project, you construct a continuous observability pipeline that detects covariate drift in real-time click event streams, automatically triggers Apache Spark retraining jobs, and validates candidate weights against current production champions before safe traffic re-routing.</p>
+      </div>
+    </div>
+  </div>
+</div>

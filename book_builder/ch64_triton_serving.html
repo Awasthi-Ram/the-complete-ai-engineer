@@ -1,0 +1,190 @@
+<!-- ======================================================================
+     CHAPTER 6.4 — HIGH-THROUGHPUT INFERENCE: TRITON & TENSORRT
+     ====================================================================== -->
+<div class="chapter" id="chapter-6-4">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 6.4</span>
+    <h2 class="chapter-title">High-Throughput Serving: Triton &amp; TensorRT</h2>
+    <span class="chapter-subtitle">Operator Fusion, INT8 Calibration, Dynamic Batching &amp; Microsecond gRPC Gateways</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Training happens once a month. Inference happens fifty thousand times every second. If your inference engine wastes 5 milliseconds per request, you are burning millions of dollars in idle cloud compute."</p>
+    <p class="attribution">— Production Infrastructure Maxim</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE SERVING LATENCY WALL -->
+    <h3>1. The Serving Latency Wall: Why Flask &amp; FastAPI Fail</h3>
+    <p>In research, deploying a model often means wrapping a PyTorch checkpoint in a Python Flask or FastAPI endpoint. In enterprise production, this architecture collapses under real-world load:</p>
+    <ul>
+      <li><strong>The Python GIL Bottleneck:</strong> Python's Global Interpreter Lock prevents true multi-core concurrency, forcing requests to serialize through a single thread.</li>
+      <li><strong>Sequential Micro-Batches ($B=1$):</strong> When HTTP requests arrive individually, naive Python servers pass them to the GPU one by one. Processing batch size 1 leaves <strong>95% of GPU Tensor Cores completely unutilized</strong>! The GPU is memory-bandwidth starved.</li>
+      <li><strong>JSON Serialization Overhead:</strong> Serializing multidimensional float arrays to and from JSON strings consumes $15\text{ ms}$ of CPU time—often taking <em>longer than the neural forward pass itself</em>!</li>
+    </ul>
+
+    <!-- SECTION 2: TENSORRT ENGINE OPTIMIZATION -->
+    <h3>2. NVIDIA TensorRT: Silicon-Level Kernel Optimization</h3>
+    <p>Before deploying to production, trained neural networks are compiled through <strong>NVIDIA TensorRT</strong>, which optimizes the computational graph for a specific GPU microarchitecture (e.g. Hopper H100, Ada Lovelace L4):</p>
+
+    <div class="real-world-box">
+      <h4>⚙️ The 3 Core TensorRT Compiler Optimizations</h4>
+      <ol>
+        <li><strong>Layer &amp; Tensor Fusion:</strong> In standard PyTorch, a Convolution followed by a Bias Addition, Batch Normalization, and ReLU requires three separate CUDA kernel launches and multiple round-trips to GPU VRAM. <strong>TensorRT fuses all four operations into a single static CUDA kernel</strong>, executing entirely within high-speed GPU registers!</li>
+        <li><strong>INT8 Post-Training Quantization (PTQ):</strong> Compresses 32-bit floating point weights into 8-bit signed integers. TensorRT performs <strong>KL-Divergence Calibration</strong>, analyzing activation histograms across a representative dataset to choose optimal scaling thresholds that minimize information loss. Reduces memory footprint by <strong>$4\times$</strong> and triples Tensor Core throughput!</li>
+        <li><strong>Kernel Auto-Tuning:</strong> Benchmarks hundreds of specialized matrix multiplication algorithms (cuBLAS, CUTLASS) directly on the target physical silicon to select the fastest possible kernel for each layer.</li>
+      </ol>
+    </div>
+
+    <!-- SECTION 3: TRITON ARCHITECTURE & DYNAMIC BATCHING -->
+    <h3>3. NVIDIA Triton Inference Server &amp; Dynamic Batching</h3>
+    <p><strong>NVIDIA Triton</strong> is an industrial C++ inference server designed to maximize hardware saturation across multiple GPUs and concurrent models.</p>
+
+    <div class="key-insight">
+      <p><strong>The Magic of Dynamic Batching:</strong><br>
+      In production, client requests arrive asynchronously at random milliseconds. Triton features an integrated <strong>Dynamic Batcher</strong>:</p>
+      <ul>
+        <li>When a request arrives, Triton places it in an in-memory priority queue.</li>
+        <li>Triton waits up to a user-configured maximum delay (e.g. <code>max_queue_delay_microseconds: 5000</code> = $5\text{ ms}$).</li>
+        <li>As additional client requests arrive during that 5ms window, Triton automatically bundles them together into an optimal batch (e.g. $B = 32$ or $64$).</li>
+        <li>The batched tensor executes across GPU Tensor Cores in a single high-efficiency pass!</li>
+      </ul>
+      <p><em>Result: Instead of processing 32 requests sequentially ($32 \times 3\text{ms} = 96\text{ms}$ total compute), Triton executes the batch in $8\text{ms}$, <strong>multiplying serving throughput by $10\times$</strong> while comfortably beating client latency SLAs!</em></p>
+    </div>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — High-Throughput Serving</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.4.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-amazon">Amazon</span>
+        <span class="company-tag company-netflix">Netflix</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are architecting an inference cluster for an e-commerce recommendation model handling a peak load of <strong>$50,000 \text{ Queries Per Second (QPS)}$</strong> with a strict p99 latency SLA of <strong>$<20\text{ ms}$</strong>. Your TensorRT model has the following execution characteristics on an NVIDIA L4 GPU:</p>
+        <ul>
+          <li>Batch size $B = 1$: Execution time $T_1 = 3.0 \text{ ms}$</li>
+          <li>Batch size $B = 32$: Execution time $T_{32} = 8.0 \text{ ms}$</li>
+        </ul>
+        <p>Calculate the minimum number of NVIDIA L4 GPUs required under <strong>(a) Sequential Serving ($B=1$)</strong> vs. <strong>(b) Triton Dynamic Batching ($B=32$)</strong> with a 5ms max queue delay. Compute the annual cloud infrastructure cost savings assuming each L4 GPU costs $\$0.70$ per hour.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Hardware Sizing Audit</div>
+
+        <p class="step"><strong>Step 1: Scenario A — Sequential Serving ($B=1$):</strong><br>
+        Throughput per GPU at $B = 1$:
+        $$\text{Throughput}_{\text{GPU}} = \frac{1 \text{ query}}{0.003 \text{ seconds}} \approx 333.3 \text{ QPS per GPU}$$
+        Total GPUs required to serve $50,000$ QPS:
+        $$\text{GPUs Required} = \frac{50,000}{333.33} = \mathbf{150 \text{ NVIDIA L4 GPUs}}!$$</p>
+
+        <p class="step"><strong>Step 2: Scenario B — Triton Dynamic Batching ($B=32$):</strong><br>
+        With a $5.0 \text{ ms}$ max queue delay, total latency is $5.0 \text{ ms (queue)} + 8.0 \text{ ms (compute)} = \mathbf{13.0 \text{ ms}}$, well within the $20\text{ ms}$ SLA!<br>
+        Throughput per GPU at $B = 32$:
+        $$\text{Throughput}_{\text{GPU}} = \frac{32 \text{ queries}}{0.008 \text{ seconds}} = 4,000 \text{ QPS per GPU}$$
+        Total GPUs required to serve $50,000$ QPS:
+        $$\text{GPUs Required} = \left\lceil \frac{50,000}{4,000} \right\rceil = \mathbf{13 \text{ NVIDIA L4 GPUs}}!$$</p>
+
+        <p class="step"><strong>Step 3: Financial ROI Analysis:</strong>
+        <ul>
+          <li>Sequential Serving (150 GPUs): $150 \times \$0.70/\text{hr} \times 8,760 \text{ hrs/yr} = \mathbf{\$919,800 / \text{year}}$</li>
+          <li>Triton Dynamic Batching (13 GPUs): $13 \times \$0.70/\text{hr} \times 8,760 \text{ hrs/yr} = \mathbf{\$79,716 / \text{year}}$</li>
+        </ul>
+        $$\mathbf{\text{Annual Cloud Cost Savings: } \$919,800 - \$79,716 = \$840,084 / \text{year (91.3\% Savings!)!}}$$
+        <em>This physical calculation demonstrates why high-throughput inference engineering is one of the highest-leverage skills in modern AI engineering.</em></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 6.4: Dynamic Batching Engine Simulation in Python</h3>
+    <p>Below is a clean, production-grade implementation of a multi-threaded Dynamic Batching engine simulating Triton's internal priority queues and queue delay timers.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 6.4 — Dynamic Batching Engine from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch64_triton_serving/dynamic_batcher.py" target="_blank">🔗 View in GitHub: part6_mlops/ch64_triton_serving/dynamic_batcher.py</a></p>
+<pre><code>import concurrent.futures
+import queue
+import threading
+import time
+
+class DynamicBatcher:
+    def __init__(self, max_batch_size=32, max_queue_delay_ms=5.0):
+        self.max_batch_size = max_batch_size
+        self.max_queue_delay_sec = max_queue_delay_ms / 1000.0
+        self.request_queue = queue.Queue()
+        self.running = True
+
+        # Launch background batching scheduler
+        self.worker = threading.Thread(target=self._batching_loop, daemon=True)
+        self.worker.start()
+
+    def predict(self, input_vector):
+        """Client interface: synchronous call backed by async dynamic batching"""
+        future = concurrent.futures.Future()
+        self.request_queue.put((input_vector, future))
+        return future.result() # Blocks until batch completes
+
+    def _batching_loop(self):
+        while self.running:
+            batch = []
+            start_wait = time.time()
+
+            # Accumulate requests until max_batch_size or max_queue_delay_sec
+            while len(batch) < self.max_batch_size:
+                time_remaining = self.max_queue_delay_sec - (time.time() - start_wait)
+                if time_remaining <= 0 and len(batch) > 0:
+                    break
+                try:
+                    item = self.request_queue.get(timeout=max(0.0001, time_remaining))
+                    batch.append(item)
+                except queue.Empty:
+                    break
+
+            if not batch:
+                continue
+
+            # Execute batch prediction
+            inputs = [item[0] for item in batch]
+            futures = [item[1] for item in batch]
+
+            # Simulated GPU Forward Pass (Batch execution)
+            time.sleep(0.008) # 8ms GPU compute
+            results = [f"Result({inp})" for inp in inputs]
+
+            # Resolve all client futures
+            for f, res in zip(futures, results):
+                f.set_result(res)
+
+if __name__ == "__main__":
+    batcher = DynamicBatcher(max_batch_size=4, max_queue_delay_ms=10.0)
+
+    def client_call(req_id):
+        res = batcher.predict(f"req_{req_id}")
+        print(f"Client {req_id} received: {res}")
+
+    # Launch 4 concurrent clients
+    threads = [threading.Thread(target=client_call, args=(i,)) for i in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 6.4 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 6.4: Industrial Triton Multi-Model Serving Gateway</h3>
+        <p class="project-desc">Architect and deploy a high-throughput multi-model inference gateway using NVIDIA Triton Inference Server, compiling PyTorch vision and speech backbones into TensorRT FP16 engines, configuring dynamic batching profiles, and benchmarking gRPC vs HTTP/REST throughput.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch64_triton_serving/dynamic_batcher.py" target="_blank">🔗 Full Project Code: part6_mlops/ch64_triton_serving/dynamic_batcher.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In autonomous vehicle fleet teleoperation (Cruise, Waymo), central edge servers must ingest simultaneous video, LiDAR, and audio sensor streams from 5,000 connected vehicles at 60 FPS. In this project, you construct a production Triton inference cluster with model ensembles and dynamic batching that processes multi-sensor payloads with sub-10ms latency and zero dropped frames.</p>
+      </div>
+    </div>
+  </div>
+</div>

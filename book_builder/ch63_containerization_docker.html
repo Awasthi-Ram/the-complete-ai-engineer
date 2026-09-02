@@ -1,0 +1,166 @@
+<!-- ======================================================================
+     CHAPTER 6.3 — CONTAINERIZATION & DETERMINISTIC PACKAGING
+     ====================================================================== -->
+<div class="chapter" id="chapter-6-3">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 6.3</span>
+    <h2 class="chapter-title">Containerization &amp; Deterministic Packaging</h2>
+    <span class="chapter-subtitle">Linux Namespaces, The NVIDIA Container Toolkit, Multi-Stage Builds &amp; Rootless Security</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"A machine learning model that cannot be deterministically packaged into a reproducible container is not a product; it is a prototype that will fail on its first deployment."</p>
+    <p class="attribution">— DevOps for AI Maxim</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE DEPENDENCY MATRIX OF DOOM -->
+    <h3>1. The GPU Dependency Matrix of Doom</h3>
+    <p>In standard web engineering, deploying code requires little more than matching the Python runtime version. In deep learning, execution depends on a fragile, multi-layered hardware and driver stack:</p>
+    <ul>
+      <li><strong>Host Linux Kernel:</strong> Base OS kernel drivers (e.g. <code>nvidia.ko</code>).</li>
+      <li><strong>NVIDIA Driver:</strong> Host user-space driver (e.g. Driver version <code>550.54.14</code>).</li>
+      <li><strong>CUDA Driver API:</strong> <code>libcuda.so.1</code> exposing GPU hardware access.</li>
+      <li><strong>CUDA Runtime Toolkit:</strong> <code>libcudart.so</code>, cuDNN, and cuBLAS (e.g. CUDA 12.1 vs 12.4).</li>
+      <li><strong>Python Wheels:</strong> Pre-compiled PyTorch C++ binaries linked against exact shared library versions.</li>
+    </ul>
+    <p>A mismatch between any two layers causes cryptic, catastrophic runtime crashes: <code>CUDA driver version is insufficient for CUDA runtime version</code>. To achieve deterministic reliability, the entire environment must be frozen into an <strong>Open Container Initiative (OCI) image</strong>.</p>
+
+    <!-- SECTION 2: NVIDIA CONTAINER TOOLKIT -->
+    <h3>2. How Containers Access Physical GPUs: NVIDIA Container Toolkit</h3>
+    <p>Containers are isolated Linux processes governed by Namespaces and Control Groups (cgroups). By default, a container cannot see physical hardware devices like PCIe GPUs.</p>
+
+    <div class="real-world-box">
+      <h4>⚙️ The OCI Runtime Hook Architecture</h4>
+      <p>How does a container talk to an NVIDIA GPU without installing the full 800MB proprietary display driver inside every Docker image?</p>
+      <ol>
+        <li>The host machine installs the base NVIDIA kernel driver once.</li>
+        <li>When Docker launches a container with <code>--gpus all</code>, the <strong>NVIDIA Container Runtime (<code>nvidia-ctk</code>)</strong> intercepts the container lifecycle via an OCI pre-start hook.</li>
+        <li>The hook dynamically bind-mounts the physical device character files from the host into the container filesystem:</p>
+        <ul>
+          <li><code>/dev/nvidia0</code> (Physical GPU 0)</li>
+          <li><code>/dev/nvidiactl</code> (GPU Control device)</li>
+          <li><code>/dev/nvidia-uvm</code> (Unified Virtual Memory manager)</li>
+        </ul>
+        <li>The hook bind-mounts the host's user-space driver libraries (<code>libcuda.so</code>, <code>libnvidia-ml.so</code>) into the container's <code>/usr/lib64</code>.</li>
+      </ol>
+      <p><em>Result: Your Docker image remains clean, containing only application code and CUDA runtime libraries, running seamlessly across any cloud provider (AWS, Azure, GCP, CoreWeave) equipped with compatible host drivers!</em></p>
+    </div>
+
+    <!-- SECTION 3: MULTI-STAGE DOCKERFILE -->
+    <h3>3. Multi-Stage Dockerfile Engineering: From 15GB to 1GB</h3>
+    <p>A naive Dockerfile begins with <code>FROM nvidia/cuda:12.1.0-devel-ubuntu22.04</code>, installs GCC, pip, and builds custom wheels. The resulting image is a bloated <strong>15 Gigabytes</strong>, takes 12 minutes to download over Kubernetes cluster networks, and contains C++ compilers that represent a severe security vulnerability!</p>
+
+    <p><strong>Multi-Stage Builds</strong> solve this by decoupling the build environment from the deployment runtime:</p>
+    <ul>
+      <li><strong>Stage 1 (Builder):</strong> Uses a heavy CUDA development image with compilers (GCC, Clang, CMake) to compile custom C++ and Triton extensions into wheel packages.</li>
+      <li><strong>Stage 2 (Runtime):</strong> Uses a minimal, stripped-down base image. Copies *only* the compiled wheels from Stage 1, deletes all cache directories, and runs as an unprivileged, non-root user (UID 10001).</li>
+    </ul>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Containerization</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.3.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-aws">AWS</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You deploy a PyTorch container to a production Kubernetes cluster. The container crashes on startup with: <code>RuntimeError: Found no NVIDIA driver on your system</code>. Walk through the exact diagnostic hierarchy from the host kernel level up to the Kubernetes manifest.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Diagnostic Hierarchy</div>
+
+        <p class="step"><strong>Step 1: Host Kernel Module Verification:</strong><br>
+        SSH into the physical Kubernetes worker node. Verify that the NVIDIA kernel module is loaded:
+        $$\text{Run: } \texttt{lsmod | grep nvidia}$$
+        If empty, the host driver crashed or failed to recompile after a Linux kernel update (e.g. DKMS failure). Verify with <code>nvidia-smi</code>.</p>
+
+        <p class="step"><strong>Step 2: NVIDIA Container Toolkit &amp; Daemon Configuration:</strong><br>
+        Verify that <code>containerd</code> or <code>dockerd</code> is configured with the NVIDIA runtime as default:
+        $$\text{Check: } \texttt{/etc/docker/daemon.json} \implies \text{"default-runtime": "nvidia"}$$
+        If missing, containers launch with the standard runc runtime, which does not execute the OCI GPU bind-mount hook!</p>
+
+        <p class="step"><strong>Step 3: Kubernetes Resource Limits &amp; Device Plugin:</strong><br>
+        Check the Kubernetes Pod manifest:
+        <pre><code>resources:
+  limits:
+    nvidia.com/gpu: 1 # MANDATORY!</code></pre>
+        If the manifest requests CPU and RAM but forgets <code>nvidia.com/gpu: 1</code>, the NVIDIA Kubernetes Device Plugin will intentionally hide all GPU character devices from the container namespace!</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 6.3: Multi-Stage Rootless GPU Dockerfile</h3>
+    <p>Below is a production-hardened, multi-stage Dockerfile for PyTorch inference, implementing non-root user security and minimal image size.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 6.3 — Hardened Multi-Stage Production Dockerfile</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch63_containerization/Dockerfile" target="_blank">🔗 View in GitHub: part6_mlops/ch63_containerization/Dockerfile</a></p>
+<pre><code># ==============================================================================
+# STAGE 1: Builder (Compiles dependencies and wheels)
+# ==============================================================================
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip \
+    python3-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir --user -r requirements.txt
+
+# ==============================================================================
+# STAGE 2: Minimal Secure Runtime (Rootless)
+# ==============================================================================
+FROM nvidia/cuda:12.1.1-base-ubuntu22.04 AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PATH=/home/appuser/.local/bin:$PATH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Security: Create unprivileged non-root user (UID 10001)
+RUN useradd -u 10001 -m -s /bin/bash appuser
+
+WORKDIR /app
+# Copy only compiled Python site-packages from builder
+COPY --from=builder /root/.local /home/appuser/.local
+COPY --chown=appuser:appuser . /app
+
+USER appuser
+EXPOSE 8000
+
+# Health check to ensure microservice is responding
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+ENTRYPOINT ["python3", "serve.py"]</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 6.3 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 6.3: Hardened Production Microservice Container with CUDA Runtime</h3>
+        <p class="project-desc">Architect, build, and benchmark an automated CI/CD containerization pipeline that compiles custom PyTorch and Triton microservices into hardened, rootless OCI container images with automated vulnerability scanning (Trivy) and sub-second Kubernetes pod cold starts.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch63_containerization/Dockerfile" target="_blank">🔗 Full Project Code: part6_mlops/ch63_containerization/Dockerfile</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In high-compliance cloud deployments (defense, healthcare), container images cannot exceed 2GB and must pass strict container security audits with zero root privileges and zero CVE vulnerabilities. In this project, you build an automated GitHub Actions container pipeline that builds multi-stage GPU images, validates CUDA driver compatibility, and deploys to AWS EKS clusters.</p>
+      </div>
+    </div>
+  </div>
+</div>
