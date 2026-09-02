@@ -1,0 +1,158 @@
+<!-- ======================================================================
+     CHAPTER 0.4 — LARGE-SCALE DATA SYSTEMS FOR AI
+     ====================================================================== -->
+<div class="chapter" id="chapter-0-4">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 0.4</span>
+    <h2 class="chapter-title">Large-Scale Data Systems for AI</h2>
+    <span class="chapter-subtitle">Apache Arrow, Parquet, Polars, DuckDB &amp; Distributed Ray</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"You can have the most sophisticated model architecture in the world, but if your data pipeline cannot feed it without stalling, you have built an expensive radiator."</p>
+    <p class="attribution">— Distributed Systems Engineering Axiom</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: COLUMNAR VS ROW STORAGE -->
+    <h3>1. The Columnar Storage Revolution</h3>
+    <p>In traditional transactional databases (PostgreSQL, MySQL) and textual interchange formats (CSV, JSON), data is arranged in <strong>Row-Major order</strong>: all fields of row 1 are stored consecutively in memory, followed by all fields of row 2. This is optimal for Online Transaction Processing (OLTP), such as looking up an individual user profile or updating a shopping cart.</p>
+
+    <p>However, AI pipelines are strictly <strong>Online Analytical Processing (OLAP)</strong> workloads: a machine learning model never trains on a single isolated user record. It trains on 100 million rows, computing gradients across specific numerical features (e.g., age, click-through history, embedding vectors). In row-oriented formats like CSV, calculating the mean of a single column forces the CPU to read the entire file from disk, wasting 95% of disk I/O and memory bandwidth parsing unwanted string columns!</p>
+
+    <div class="key-insight">
+      <p><strong>Columnar Storage (Parquet / Arrow):</strong> In a columnar layout, all values of Column 1 are stored contiguously in memory, followed by all values of Column 2. This enables two game-changing superpowers:</p>
+      <ul>
+        <li><strong>Column Projection (Pruning):</strong> If your model only needs 3 out of 100 features, the storage engine reads <em>only</em> those 3 columns from disk, slashing I/O by 97%.</li>
+        <li><strong>Maximum Compression:</strong> Contiguous data of the same type (e.g. continuous floats or categorical integers) compresses 10x better using run-length encoding, dictionary encoding, and Snappy/ZSTD algorithms.</li>
+      </ul>
+    </div>
+
+    <!-- SECTION 2: APACHE ARROW -->
+    <h3>2. Apache Arrow: The Universal In-Memory Standard</h3>
+    <p>Before Apache Arrow, every tool in the AI ecosystem had its own internal in-memory representation. Moving data from a Pandas DataFrame to a C++ model server, or from Spark to PyTorch, required expensive <strong>Serialization and Deserialization (SerDe)</strong> copies, burning up to 80% of CPU cycles.</p>
+
+    <p>Apache Arrow solves this by defining a standardized, language-independent <strong>columnar in-memory format</strong>. It supports zero-copy sharing: multiple processes (Python, C++, Rust, Go) can map the exact same Arrow memory buffer simultaneously using shared memory (<code>mmap</code>) without duplicating a single byte in RAM!</p>
+
+    <!-- SECTION 3: POLARS & DUCKDB -->
+    <h3>3. High-Performance Engines: Polars &amp; DuckDB</h3>
+    <p>While Pandas remains ubiquitous, its single-threaded, eager execution model collapses when datasets exceed system RAM. Modern AI engineering has shifted to two high-performance alternatives:</p>
+
+    <ul>
+      <li><strong>Polars:</strong> Built from scratch in Rust on top of Apache Arrow. It utilizes a multi-threaded work-stealing engine that saturates all CPU cores, paired with a <strong>LazyFrame</strong> query optimizer that pushes down filters and prunes unused columns before executing a single operation.</li>
+      <li><strong>DuckDB:</strong> An in-process, serverless analytical SQL database (often called the "SQLite for Analytics"). DuckDB can execute complex SQL queries directly on compressed Parquet files sitting on Amazon S3 or local disk without loading the entire dataset into memory!</li>
+    </ul>
+
+    <!-- SECTION 4: DISTRIBUTED RAY -->
+    <h3>4. Distributed Compute with Ray</h3>
+    <p>When data and models outgrow a single machine, Python's built-in <code>multiprocessing</code> fails because it cannot coordinate processes across separate physical server nodes. <strong>Ray</strong> (developed at UC Berkeley RISELab) is the universal distributed substrate for modern AI (powering OpenAI, Uber, and Anthropic).</p>
+
+    <h4>The Core Primitives of Ray</h4>
+    <ul>
+      <li><strong>Tasks (<code>@ray.remote</code> functions):</strong> Stateless distributed function calls executed asynchronously across arbitrary worker nodes in the cluster.</li>
+      <li><strong>Actors (<code>@ray.remote</code> classes):</strong> Stateful distributed services maintaining persistent state (e.g. holding a GPU model in memory to process a stream of incoming batches).</li>
+      <li><strong>The Plasma Object Store:</strong> An immutable, shared-memory object store on every node enabling zero-copy data reads across worker processes.</li>
+    </ul>
+
+    <!-- SECTION 5: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Large-Scale Data Systems</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 0.4.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-netflix">Netflix</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are architecting the training data pipeline for a video recommendation model training on 50 Terabytes of user watch history stored as Parquet files on Amazon S3.</p>
+        <ol>
+          <li>Explain the "Small Files Problem" in distributed storage and how it degrades cloud training throughput.</li>
+          <li>Define the optimal Parquet Row Group size and file size for saturating S3 network throughput while preventing GPU starvation.</li>
+          <li>Explain how <strong>Predicate Pushdown</strong> utilizes Parquet file footer metadata to skip 90% of file reads without downloading the underlying column data.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+
+        <p class="step"><strong>Step 1: The Small Files Problem:</strong><br>
+        If 50TB of data is partitioned into millions of tiny 1MB files, every single file read requires an HTTPS request to S3 (introducing 20–50ms of TLS handshake, authentication, and HTTP header overhead). The GPU training cluster spends 80% of its time waiting on HTTP metadata overhead rather than receiving data chunks. Furthermore, object stores enforce per-prefix request rate limits (e.g., S3 limits 3,500 PUT and 5,500 GET requests per second per prefix), leading to <code>HTTP 503 Slow Down</code> throttling.</p>
+
+        <p class="step"><strong>Step 2: Optimal File &amp; Row Group Sizing:</strong><br>
+        The industry standard rule is to compact datasets into individual Parquet files between <strong>128MB and 512MB</strong>. Inside each Parquet file, data is divided into <strong>Row Groups</strong> of approximately <strong>64MB to 128MB</strong> (typically 1,000,000 to 2,000,000 rows). This size perfectly balances column compression ratios, aligns with distributed filesystem block sizes, and fits comfortably within CPU L3 cache during decompression.</p>
+
+        <p class="step"><strong>Step 3: Predicate Pushdown Mechanics:</strong><br>
+        In Parquet, the file footer contains compact metadata recording the <strong>exact minimum and maximum values for every column within every Row Group</strong>:
+        $$\text{Metadata for Row Group } i: \quad \min(x) = 15, \quad \max(x) = 45$$
+        If a training query requires <code>WHERE age &gt; 50</code>, the query engine reads only the tiny file footer (a few kilobytes). It observes that $\max(\text{age}) = 45 &lt; 50$, concludes that zero rows in Row Group $i$ can satisfy the condition, and <strong>completely skips downloading or reading the underlying multi-megabyte column chunk</strong>! This cuts network and I/O traffic by up to 90%.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 6: CODE LAB -->
+    <h3>5. Production Code Lab 0.4: Benchmarking CSV vs. Parquet vs. Polars</h3>
+    <p>To witness the massive performance difference between legacy formats and modern columnar engines, we execute a benchmark processing 5,000,000 records.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 0.4 — High-Throughput Columnar Data Processing</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part0_foundations/ch04_large_scale_data/columnar_data_benchmark.py" target="_blank">🔗 View in GitHub: part0_foundations/ch04_large_scale_data/columnar_data_benchmark.py</a></p>
+<pre><code>import time
+import os
+import polars as pl
+import numpy as np
+
+def run_columnar_benchmark():
+    N = 2_000_000
+    print(f"Generating synthetic dataset of {N:,} rows...")
+    
+    df = pl.DataFrame({
+        "user_id": np.random.randint(1, 100_000, N),
+        "feature_1": np.random.randn(N).astype(np.float32),
+        "feature_2": np.random.randn(N).astype(np.float32),
+        "category": np.random.choice(["action", "comedy", "drama", "sci-fi"], N)
+    })
+
+    # Save to Parquet
+    parquet_path = "benchmark_data.parquet"
+    df.write_parquet(parquet_path, compression="snappy")
+    file_size_mb = os.path.getsize(parquet_path) / (1024**2)
+    print(f"Saved Parquet file: {file_size_mb:.2f} MB")
+
+    # Benchmark Polars Lazy Query with Predicate Pushdown
+    t0 = time.perf_counter()
+    result = (
+        pl.scan_parquet(parquet_path)
+        .filter(pl.col("feature_1") > 1.0)
+        .group_by("category")
+        .agg(pl.col("feature_2").mean().alias("avg_feat2"))
+        .collect()
+    )
+    t_polars = time.perf_counter() - t0
+
+    print(f"\nPolars Query Latency : {t_polars * 1000:.2f} ms")
+    print("Aggregation Results:\n", result)
+
+    # Cleanup
+    if os.path.exists(parquet_path):
+        os.remove(parquet_path)
+
+if __name__ == "__main__":
+    run_columnar_benchmark()</code></pre>
+    </div>
+
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 0.4 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 0.4: High-Throughput Streaming Parquet Sharder &amp; DataLoader</h3>
+        <p class="project-desc">Architect and implement a multi-threaded streaming data ingestion pipeline that ingests raw telemetry records, partitions them into optimal 128MB Parquet chunks with Snappy compression, builds min/max metadata statistics, and streams batches directly into PyTorch tensors using zero-copy Apache Arrow memory mapping.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part0_foundations/ch04_large_scale_data/columnar_data_benchmark.py" target="_blank">🔗 Full Project Code: part0_foundations/ch04_large_scale_data/columnar_data_benchmark.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> Training next-generation foundation models requires ingesting hundreds of millions of multimodal samples without causing operating system memory thrashing or CPU stalls. In this project, you construct an end-to-end data pipeline combining Polars lazy evaluation, PyArrow memory-mapped files, and Ray workers to stream batches directly to GPU memory, saturating PCIe bus throughput.</p>
+      </div>
+    </div>
+  </div>
+</div>
