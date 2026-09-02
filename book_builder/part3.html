@@ -12,6 +12,10 @@
 <!-- ======================================================================
      CHAPTER 3.1 — THE NEURON, PERCEPTRON & THE XOR BARRIER
      ====================================================================== -->
+
+<!-- ======================================================================
+     CHAPTER 3.1 — THE NEURON, PERCEPTRON & THE XOR BARRIER
+     ====================================================================== -->
 <div class="chapter" id="chapter-3-1">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 3.1</span>
@@ -472,7 +476,7 @@ if __name__ == "__main__":
 
         <p class="step"><strong>Step 2: Relative Error Metric:</strong><br>
         Never use absolute difference $|g_{\text{num}} - g_{\text{ana}}|$, because gradients can scale from $10^3$ to $10^{-6}$. We compute the <strong>Relative Frobenius Difference</strong>:
-        $$\text{Relative Error} = \frac{\|G_{\text{numerical}} - G_{\text{analytical}}\|_2}{\|G_{\text{numerical}}\|_2 + \|G_{\text{analytical}}\|_2}$$
+        $$\text{Relative Error} = \frac{\|G_{\text{numerical}} - G_{\text{analytical}}\|_2}{\|G_{\text{numerical}}\|_2 + \|G_{\text{analytical}}\|_2}$$</p>
         <p>Interpretation thresholds:</p>
         <ul>
           <li>$\text{Relative Error} &lt; 10^{-7}$: <strong>Flawless mathematical implementation.</strong></li>
@@ -911,7 +915,7 @@ if __name__ == "__main__":
 
     <!-- SECTION 1: THE DATA BOTTLENECK -->
     <h3>1. Eradicating the Host-to-Device Data Bottleneck</h3>
-    <p>In production training, the most expensive mistake an engineer can make is <strong>GPU Starvation</strong>: a $\$30,000$ NVIDIA H100 GPU sitting 80% idle because the single-threaded CPU cannot decode images or tokenize text fast enough to feed the PCIe bus.</p>
+    <p>In production training, the most expensive mistake an engineer can make is <strong>GPU Starvation</strong>: a &dollar;30,000 NVIDIA H100 GPU sitting 80% idle because the single-threaded CPU cannot decode images or tokenize text fast enough to feed the PCIe bus.</p>
 
     <h4>The Three Pillars of High-Throughput PyTorch Data Loading</h4>
     <ol>
@@ -1225,9 +1229,6 @@ if __name__ == "__main__":
   </div>
 </div>
 
-<!-- ======================================================================
-     HANDS-ON CAPSTONE PROJECT 3 — PRODUCTION MULTIMODAL SENSOR CLASSIFIER
-     ====================================================================== -->
 <div class="project-section">
   <div class="project-header">
     <span class="project-tag">Hands-On Capstone Project 3</span>

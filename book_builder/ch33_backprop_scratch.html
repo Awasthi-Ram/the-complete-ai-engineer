@@ -86,7 +86,7 @@
 
         <p class="step"><strong>Step 2: Relative Error Metric:</strong><br>
         Never use absolute difference $|g_{\text{num}} - g_{\text{ana}}|$, because gradients can scale from $10^3$ to $10^{-6}$. We compute the <strong>Relative Frobenius Difference</strong>:
-        $$\text{Relative Error} = \frac{\|G_{\text{numerical}} - G_{\text{analytical}}\|_2}{\|G_{\text{numerical}}\|_2 + \|G_{\text{analytical}}\|_2}$$
+        $$\text{Relative Error} = \frac{\|G_{\text{numerical}} - G_{\text{analytical}}\|_2}{\|G_{\text{numerical}}\|_2 + \|G_{\text{analytical}}\|_2}$$</p>
         <p>Interpretation thresholds:</p>
         <ul>
           <li>$\text{Relative Error} &lt; 10^{-7}$: <strong>Flawless mathematical implementation.</strong></li>

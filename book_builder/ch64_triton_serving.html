@@ -71,7 +71,7 @@
           <li>Batch size $B = 1$: Execution time $T_1 = 3.0 \text{ ms}$</li>
           <li>Batch size $B = 32$: Execution time $T_{32} = 8.0 \text{ ms}$</li>
         </ul>
-        <p>Calculate the minimum number of NVIDIA L4 GPUs required under <strong>(a) Sequential Serving ($B=1$)</strong> vs. <strong>(b) Triton Dynamic Batching ($B=32$)</strong> with a 5ms max queue delay. Compute the annual cloud infrastructure cost savings assuming each L4 GPU costs $\$0.70$ per hour.</p>
+        <p>Calculate the minimum number of NVIDIA L4 GPUs required under <strong>(a) Sequential Serving ($B=1$)</strong> vs. <strong>(b) Triton Dynamic Batching ($B=32$)</strong> with a 5ms max queue delay. Compute the annual cloud infrastructure cost savings assuming each L4 GPU costs &dollar;0.70 per hour.</p>
       </div>
       <div class="solution">
         <div class="solution-label">✓ Complete Step-by-Step Hardware Sizing Audit</div>
@@ -91,10 +91,10 @@
 
         <p class="step"><strong>Step 3: Financial ROI Analysis:</strong>
         <ul>
-          <li>Sequential Serving (150 GPUs): $150 \times \$0.70/\text{hr} \times 8,760 \text{ hrs/yr} = \mathbf{\$919,800 / \text{year}}$</li>
-          <li>Triton Dynamic Batching (13 GPUs): $13 \times \$0.70/\text{hr} \times 8,760 \text{ hrs/yr} = \mathbf{\$79,716 / \text{year}}$</li>
+          <li>Sequential Serving (150 GPUs): $150 \times \text{USD } 0.70/\text{hr} \times 8,760 \text{ hrs/yr} = \mathbf{\text{USD } 919,800 / \text{year}}$</li>
+          <li>Triton Dynamic Batching (13 GPUs): $13 \times \text{USD } 0.70/\text{hr} \times 8,760 \text{ hrs/yr} = \mathbf{\text{USD } 79,716 / \text{year}}$</li>
         </ul>
-        $$\mathbf{\text{Annual Cloud Cost Savings: } \$919,800 - \$79,716 = \$840,084 / \text{year (91.3\% Savings!)!}}$$
+        $$\mathbf{\text{Annual Cloud Cost Savings: USD } 919,800 - \text{USD } 79,716 = \text{USD } 840,084 / \text{year (91.3\% Savings!)!}}$$
         <em>This physical calculation demonstrates why high-throughput inference engineering is one of the highest-leverage skills in modern AI engineering.</em></p>
       </div>
     </div>

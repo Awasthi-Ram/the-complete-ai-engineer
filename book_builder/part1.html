@@ -12,6 +12,10 @@
 <!-- ======================================================================
      CHAPTER 1.1 — LINEAR ALGEBRA & MATRIX DECOMPOSITIONS
      ====================================================================== -->
+
+<!-- ======================================================================
+     CHAPTER 1.1 — LINEAR ALGEBRA & MATRIX DECOMPOSITIONS
+     ====================================================================== -->
 <div class="chapter" id="chapter-1-1">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 1.1</span>
@@ -935,7 +939,7 @@ if __name__ == "__main__":
           <li>$\frac{1}{2} \|\mathbf{w}^*\|_2^2 = \frac{1}{2} \sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i^T \mathbf{x}_j)$.</li>
           <li>$-\sum_{i=1}^N \alpha_i y_i (\mathbf{w}^{*T} \mathbf{x}_i) = -\sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i^T \mathbf{x}_j)$.</li>
         </ul>
-        Combining these terms yields the famous <strong>SVM Dual Optimization Problem</strong>:
+        <p>Combining these terms yields the famous <strong>SVM Dual Optimization Problem</strong>:
         $$\max_{\boldsymbol{\alpha}} \left[ \sum_{i=1}^N \alpha_i - \frac{1}{2} \sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i \cdot \mathbf{x}_j) \right]$$
         $$\text{subject to } \alpha_i \ge 0, \quad \sum_{i=1}^N \alpha_i y_i = 0$$
         <em>The Kernel Trick Revealed:</em> Notice that features appear <strong>only as inner products $\mathbf{x}_i \cdot \mathbf{x}_j$</strong>! This allows us to replace $\mathbf{x}_i \cdot \mathbf{x}_j$ with a non-linear Kernel function $K(\mathbf{x}_i, \mathbf{x}_j)$, lifting data into infinite-dimensional Hilbert spaces without ever computing the high-dimensional coordinates!</p>
@@ -1009,9 +1013,6 @@ if __name__ == "__main__":
   </div>
 </div>
 
-<!-- ======================================================================
-     HANDS-ON PROJECT 1 — DIMENSIONALITY REDUCTION & SVD ENGINE
-     ====================================================================== -->
 <div class="project-section">
   <div class="project-header">
     <span class="project-tag">Hands-On Capstone Project 1</span>

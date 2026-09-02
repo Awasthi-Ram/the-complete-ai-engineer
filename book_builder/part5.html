@@ -434,7 +434,7 @@ class BPETokenizerScratch:
         for text in texts:
             words = text.strip().split()
             for w in words:
-                corpus[" ".join(list(w)) + " </w>"] += 1
+                corpus[" ".join(list(w)) + " &lt;/w&gt;"] += 1
 
         # 2. Iteratively merge most frequent pairs
         for i in range(self.num_merges):
@@ -453,7 +453,7 @@ class BPETokenizerScratch:
     def encode(self, text):
         tokens = []
         for word in text.strip().split():
-            symbols = list(word) + ["</w>"]
+            symbols = list(word) + ["&lt;/w&gt;"]
             for pair, merged in self.merges.items():
                 i = 0
                 while i < len(symbols) - 1:
@@ -1332,7 +1332,7 @@ retrieval_chain = RunnableParallel({
 
     <!-- SECTION 3: STRUCTURED OUTPUTS -->
     <h3>3. Deterministic Structured Outputs with Pydantic</h3>
-    <p>In enterprise software, an LLM must never output freeform markdown strings if downstream microservices expect to consume the data. If an agent emits <code>"Sure! Here is the order: ID: 1042, Amount: $49.99"</code>, parsing this with regular expressions is an invitation to production outages.</p>
+    <p>In enterprise software, an LLM must never output freeform markdown strings if downstream microservices expect to consume the data. If an agent emits <code>"Sure! Here is the order: ID: 1042, Amount: &dollar;49.99"</code>, parsing this with regular expressions is an invitation to production outages.</p>
 
     <p>Modern LLMs expose native <strong>JSON Schema Function Calling</strong>. In LangChain, we bind a strict <strong>Pydantic Model</strong> using <code>.with_structured_output()</code>:</p>
 <pre><code>from pydantic import BaseModel, Field
@@ -1432,12 +1432,12 @@ if __name__ == "__main__":
     # Declarative LCEL Composition: Prompt | Model | Parser
     pipeline = prompt_runnable | llm_runnable | parser_runnable
 
-    raw_input = {"text": "Acme Corp agrees to pay Apex Cloud Ltd $250,000 under Delaware law."}
+    raw_input = {"text": "Acme Corp agrees to pay Apex Cloud Ltd USD 250,000 under Delaware law."}
     result = pipeline.invoke(raw_input)
 
     print("Parsed Pydantic Object:")
     print(" Title :", result.contract_title)
-    print(" Value : $", f"{result.total_value_usd:,.2f}")
+    print(" Value : USD", f"{result.total_value_usd:,.2f}")
     print(" Law   :", result.governing_law)</code></pre>
     </div>
 

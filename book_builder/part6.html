@@ -12,6 +12,10 @@
 <!-- ======================================================================
      CHAPTER 6.1 — EXPERIMENT TRACKING & ARTIFACT REGISTRIES
      ====================================================================== -->
+
+<!-- ======================================================================
+     CHAPTER 6.1 — EXPERIMENT TRACKING & ARTIFACT REGISTRIES
+     ====================================================================== -->
 <div class="chapter" id="chapter-6-1">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 6.1</span>
@@ -405,12 +409,13 @@ if __name__ == "__main__":
       <ol>
         <li>The host machine installs the base NVIDIA kernel driver once.</li>
         <li>When Docker launches a container with <code>--gpus all</code>, the <strong>NVIDIA Container Runtime (<code>nvidia-ctk</code>)</strong> intercepts the container lifecycle via an OCI pre-start hook.</li>
-        <li>The hook dynamically bind-mounts the physical device character files from the host into the container filesystem:</p>
+        <li>The hook dynamically bind-mounts the physical device character files from the host into the container filesystem:
         <ul>
           <li><code>/dev/nvidia0</code> (Physical GPU 0)</li>
           <li><code>/dev/nvidiactl</code> (GPU Control device)</li>
           <li><code>/dev/nvidia-uvm</code> (Unified Virtual Memory manager)</li>
         </ul>
+        </li>
         <li>The hook bind-mounts the host's user-space driver libraries (<code>libcuda.so</code>, <code>libnvidia-ml.so</code>) into the container's <code>/usr/lib64</code>.</li>
       </ol>
       <p><em>Result: Your Docker image remains clean, containing only application code and CUDA runtime libraries, running seamlessly across any cloud provider (AWS, Azure, GCP, CoreWeave) equipped with compatible host drivers!</em></p>
@@ -604,7 +609,7 @@ ENTRYPOINT ["python3", "serve.py"]</code></pre>
           <li>Batch size $B = 1$: Execution time $T_1 = 3.0 \text{ ms}$</li>
           <li>Batch size $B = 32$: Execution time $T_{32} = 8.0 \text{ ms}$</li>
         </ul>
-        <p>Calculate the minimum number of NVIDIA L4 GPUs required under <strong>(a) Sequential Serving ($B=1$)</strong> vs. <strong>(b) Triton Dynamic Batching ($B=32$)</strong> with a 5ms max queue delay. Compute the annual cloud infrastructure cost savings assuming each L4 GPU costs $\$0.70$ per hour.</p>
+        <p>Calculate the minimum number of NVIDIA L4 GPUs required under <strong>(a) Sequential Serving ($B=1$)</strong> vs. <strong>(b) Triton Dynamic Batching ($B=32$)</strong> with a 5ms max queue delay. Compute the annual cloud infrastructure cost savings assuming each L4 GPU costs &dollar;0.70 per hour.</p>
       </div>
       <div class="solution">
         <div class="solution-label">✓ Complete Step-by-Step Hardware Sizing Audit</div>
@@ -624,10 +629,10 @@ ENTRYPOINT ["python3", "serve.py"]</code></pre>
 
         <p class="step"><strong>Step 3: Financial ROI Analysis:</strong>
         <ul>
-          <li>Sequential Serving (150 GPUs): $150 \times \$0.70/\text{hr} \times 8,760 \text{ hrs/yr} = \mathbf{\$919,800 / \text{year}}$</li>
-          <li>Triton Dynamic Batching (13 GPUs): $13 \times \$0.70/\text{hr} \times 8,760 \text{ hrs/yr} = \mathbf{\$79,716 / \text{year}}$</li>
+          <li>Sequential Serving (150 GPUs): $150 \times \text{USD } 0.70/\text{hr} \times 8,760 \text{ hrs/yr} = \mathbf{\text{USD } 919,800 / \text{year}}$</li>
+          <li>Triton Dynamic Batching (13 GPUs): $13 \times \text{USD } 0.70/\text{hr} \times 8,760 \text{ hrs/yr} = \mathbf{\text{USD } 79,716 / \text{year}}$</li>
         </ul>
-        $$\mathbf{\text{Annual Cloud Cost Savings: } \$919,800 - \$79,716 = \$840,084 / \text{year (91.3\% Savings!)!}}$$
+        $$\mathbf{\text{Annual Cloud Cost Savings: USD } 919,800 - \text{USD } 79,716 = \text{USD } 840,084 / \text{year (91.3\% Savings!)!}}$$
         <em>This physical calculation demonstrates why high-throughput inference engineering is one of the highest-leverage skills in modern AI engineering.</em></p>
       </div>
     </div>
@@ -916,9 +921,6 @@ if __name__ == "__main__":
   </div>
 </div>
 
-<!-- ======================================================================
-     HANDS-ON CAPSTONE PROJECT 6 — PRODUCTION ENTERPRISE MLOPS PLATFORM
-     ====================================================================== -->
 <div class="project-section">
   <div class="project-header">
     <span class="project-tag">Hands-On Capstone Project 6</span>

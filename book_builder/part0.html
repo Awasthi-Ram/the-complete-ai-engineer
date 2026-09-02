@@ -145,7 +145,7 @@
             Total for AdamW states: $12 \text{ bytes} \times N = 12 \times 70 \text{ GB} = 840 \text{ GB}$.
           </li>
         </ul>
-        $$\text{Total Static Memory} = \text{Weights} (140\text{GB}) + \text{Gradients} (140\text{GB}) + \text{Optimizer} (840\text{GB}) = 1,120 \text{ GB} \approx 1.12 \text{ TB}$$
+        <p>$$\text{Total Static Memory} = \text{Weights} (140\text{GB}) + \text{Gradients} (140\text{GB}) + \text{Optimizer} (840\text{GB}) = 1,120 \text{ GB} \approx 1.12 \text{ TB}$$
         <em>Crucial Insight:</em> Notice that the weights themselves represent only 12.5% of total memory; the optimizer states dominate 75% of memory consumption! This explains why techniques like ZeRO-1/2/3, 8-bit Adam, and LoRA are mandatory for training large models.</p>
 
         <p class="step"><strong>Step 3: Calculate Training Duration on 512 H100 GPUs:</strong><br>

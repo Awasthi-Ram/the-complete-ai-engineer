@@ -169,7 +169,7 @@ class BPETokenizerScratch:
         for text in texts:
             words = text.strip().split()
             for w in words:
-                corpus[" ".join(list(w)) + " </w>"] += 1
+                corpus[" ".join(list(w)) + " &lt;/w&gt;"] += 1
 
         # 2. Iteratively merge most frequent pairs
         for i in range(self.num_merges):
@@ -188,7 +188,7 @@ class BPETokenizerScratch:
     def encode(self, text):
         tokens = []
         for word in text.strip().split():
-            symbols = list(word) + ["</w>"]
+            symbols = list(word) + ["&lt;/w&gt;"]
             for pair, merged in self.merges.items():
                 i = 0
                 while i < len(symbols) - 1:

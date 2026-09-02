@@ -32,7 +32,7 @@
 
     <!-- SECTION 2: NUMERICAL SCALING -->
     <h3>2. Numerical Normalization &amp; Outlier Geometry</h3>
-    <p>When features have drastically different numerical scales (e.g. Annual Income in $\$10,000$s vs. Age in years $[18, 80]$), the gradient descent loss surface becomes a severely elongated, ill-conditioned ravine. Optimization oscillates violently across the income dimension while making zero progress along the age dimension.</p>
+    <p>When features have drastically different numerical scales (e.g. Annual Income in &dollar;10,000s vs. Age in years $[18, 80]$), the gradient descent loss surface becomes a severely elongated, ill-conditioned ravine. Optimization oscillates violently across the income dimension while making zero progress along the age dimension.</p>
 
     <table>
       <thead>
@@ -108,7 +108,7 @@
           $$\hat{x}_i = \frac{n_{c,-k} \bar{y}_{c,-k} + m \bar{y}_{\text{global},-k}}{n_{c,-k} + m}, \quad \forall i \in D_k$$</li>
           <li>Repeat this for all $K$ folds. Every training sample's feature is computed without its own label having any mathematical influence on the calculation!</li>
         </ol>
-        <strong>Result: OOF encoding completely eradicates label leakage, ensuring training metrics match test generalization.</strong></p>
+        <p><strong>Result: OOF encoding completely eradicates label leakage, ensuring training metrics match test generalization.</strong></p>
       </div>
     </div>
 

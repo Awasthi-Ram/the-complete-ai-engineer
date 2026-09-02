@@ -39,12 +39,13 @@
       <ol>
         <li>The host machine installs the base NVIDIA kernel driver once.</li>
         <li>When Docker launches a container with <code>--gpus all</code>, the <strong>NVIDIA Container Runtime (<code>nvidia-ctk</code>)</strong> intercepts the container lifecycle via an OCI pre-start hook.</li>
-        <li>The hook dynamically bind-mounts the physical device character files from the host into the container filesystem:</p>
+        <li>The hook dynamically bind-mounts the physical device character files from the host into the container filesystem:
         <ul>
           <li><code>/dev/nvidia0</code> (Physical GPU 0)</li>
           <li><code>/dev/nvidiactl</code> (GPU Control device)</li>
           <li><code>/dev/nvidia-uvm</code> (Unified Virtual Memory manager)</li>
         </ul>
+        </li>
         <li>The hook bind-mounts the host's user-space driver libraries (<code>libcuda.so</code>, <code>libnvidia-ml.so</code>) into the container's <code>/usr/lib64</code>.</li>
       </ol>
       <p><em>Result: Your Docker image remains clean, containing only application code and CUDA runtime libraries, running seamlessly across any cloud provider (AWS, Azure, GCP, CoreWeave) equipped with compatible host drivers!</em></p>
