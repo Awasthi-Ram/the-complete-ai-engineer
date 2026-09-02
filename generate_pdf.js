@@ -98,7 +98,7 @@ else:
 if interior.page_count > 1:
     final.insert_pdf(interior, from_page=interior.page_count-1)
 final.save("${bookTitle}_by_${author}.pdf")
-print(f"✅ Final PDF: {final.page_count} pages")
+print(f"Final PDF: {final.page_count} pages")
 `;
   fs.writeFileSync('merge.py', mergeScript);
 

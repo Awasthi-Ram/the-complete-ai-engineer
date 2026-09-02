@@ -4,176 +4,134 @@
 
 > *Every concept taught the way a great teacher would explain it. No prerequisites beyond school-level math. No PhD required.*
 
+**Author**: Ram Awasthi  
+**Companion Code Repository**: [Awasthi-Ram/the-complete-ai-engineer-solutions](https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions)
+
 ---
 
 ## 📖 About This Book
 
-**The Complete AI Engineer** is a comprehensive, publish-ready book that takes you from absolute zero to production-ready AI engineer. Inspired by the teaching philosophy of R.D. Sharma's mathematics series — where every concept is built through intuition, math, worked examples, and practice — this book covers the entire AI engineering stack.
+**The Complete AI Engineer** is a comprehensive, publish-ready masterwork that takes you from absolute zero to production-ready AI engineer. Inspired by the legendary teaching philosophy of R.D. Sharma's mathematics series — where every single concept is built from intuition, rigorous mathematics, step-by-step worked examples, and relentless practice — this book covers the entire modern AI engineering stack.
 
-### What's Inside
-
-| Metric | Value | Notes |
-|--------|-------|-------|
-| **Total Parts** | 9 (Part 0–8) | Logically ordered learning path |
-| **Total Chapters** | 43+ | Each chapter = one complete concept |
-| **Practice Problems** | 500+ | Each with company tag + full solution |
-| **Code Labs** | 200+ | Python, fully runnable |
-| **Real-World Projects** | 9 | One per Part |
-| **Primary Language** | Python 3.10+ | With PyTorch and TensorFlow |
-
-### The Learning Path
-
-```
-Part 0: Setup & Python → Part 1: Math Foundations → Part 2: Classical ML
-    ↓
-Part 3: Neural Networks → Part 4: Deep Learning → Part 5: LLMs & Agents
-    ↓
-Part 6: MLOps & Production → Part 7: System Design → Part 8: Frontier & Career
-```
+### 🎯 The Core Philosophy: You Don't Even Need a Computer
+Every single mathematical derivation, matrix algebra step, and algorithm trace is written in full directly on the page. You can read and master this book anywhere without opening a laptop. For those who want to run, benchmark, and deploy the code, every problem and lab links directly to the official open-source GitHub companion repository.
 
 ---
 
-## 🏗️ Book Structure
+## 🏗️ Complete Book Structure (All 8 Parts Written in Full Depth)
 
 ### Part 0 — Foundations Before Foundations
-- ✅ Ch 0.1 — How to Learn AI
-- ✅ Ch 0.2 — Python Foundations
-- 🔨 Project: AI Development Dashboard
+- ✅ **Ch 0.1** — How to Learn AI: Setting Up Your Mind & Machine
+- ✅ **Ch 0.2** — Python Foundations: Object-Oriented AI Programming & Memory Management
+- ✅ **Ch 0.3** — The AI Toolchain: NumPy Vectorization, Pandas & PyTorch GPU Tensors *(Prerequisite Chapter)*
+- 🔨 **Project 0**: AI Development Dashboard & Training Monitor
 
 ### Part 1 — The Mathematics of AI
-- ✅ Ch 1.1 — Linear Algebra
-- 📋 Ch 1.2 — Calculus
-- 📋 Ch 1.3 — Probability & Statistics
-- 📋 Ch 1.4 — Information Theory
-- 🔨 Project: Image Transformation Engine
+- ✅ **Ch 1.1** — Linear Algebra: Vectors, SVD Low-Rank Compression & Cosine Similarity
+- ✅ **Ch 1.2** — Calculus: The Engine of Learning & Micro-Autograd Engine from Scratch
+- ✅ **Ch 1.3** — Probability & Statistics: Bayes' Rule & Maximum Likelihood Estimation (MLE)
+- ✅ **Ch 1.4** — Information Theory: Shannon Entropy, Cross-Entropy & KL Divergence
+- 🔨 **Project 1**: Image Transformation Engine & SVD Compression
 
 ### Part 2 — Classical Machine Learning
-- ✅ Ch 2.1 — What Is Machine Learning?
-- ✅ Ch 2.2 — Linear Regression
-- 📋 Ch 2.3 — Logistic Regression
-- 📋 Ch 2.4 — Decision Trees
-- 📋 Ch 2.5 — KNN & SVMs
-- 📋 Ch 2.6 — Unsupervised Learning
-- 📋 Ch 2.7 — Feature Engineering
-- 📋 Ch 2.8 — Model Evaluation
-- 🔨 Project: House Price Predictor from Scratch
+- ✅ **Ch 2.1** — What Is Machine Learning? The Paradigm Shift & Stratified Splitting
+- ✅ **Ch 2.2** — Linear Regression: OLS Normal Equation & Mini-Batch Gradient Descent
+- ✅ **Ch 2.3** — Logistic Regression: Sigmoid Derivatives, Odds Ratios & Cross-Entropy
+- ✅ **Ch 2.4** — Decision Trees & Ensembles: CART, Gini Impurity & Random Forests
+- ✅ **Ch 2.5** — KNN & Support Vector Machines: Geometric Margins & Slack Variables
+- ✅ **Ch 2.6** — Unsupervised Learning: K-Means++, Hierarchical & SVD-Based PCA
+- ✅ **Ch 2.7** — Feature Engineering: Outlier Handling, RobustScaler & Leakage Prevention
+- ✅ **Ch 2.8** — Model Evaluation: Precision, Recall, F1, ROC-AUC & Calibration
+- 🔨 **Project 2**: House Price Predictor from Scratch
 
 ### Part 3 — Neural Networks from Scratch
-- ✅ Ch 3.1 — The Neuron & Perceptron
-- 📋 Ch 3.2 — Feedforward Networks
-- 📋 Ch 3.3 — Backpropagation
-- 📋 Ch 3.4 — Optimization
-- 📋 Ch 3.5 — Regularization
-- 📋 Ch 3.6 — Training in Practice
-- 🔨 Project: Handwritten Digit Classifier
+- ✅ **Ch 3.1** — The Neuron & Perceptron: Biological Inspiration & XOR Limitation Proof
+- ✅ **Ch 3.2** — Feedforward Networks: Multi-Layer Perceptrons & Universal Approximation
+- ✅ **Ch 3.3** — Backpropagation: Computational Graphs & Vector-Jacobian Products
+- ✅ **Ch 3.4** — Optimization: SGD, Momentum, RMSprop, Adam & AdamW Decoupled Decay
+- ✅ **Ch 3.5** — Regularization: Inverted Dropout, Batch Normalization & LayerNorm
+- ✅ **Ch 3.6** — Training in Practice: Production PyTorch Loops, Mixed Precision (AMP) & Checkpointing
+- 🔨 **Project 3**: Handwritten Digit Classifier from Scratch (MNIST)
 
 ### Part 4 — Deep Learning Architectures
-- ✅ Ch 4.1 — CNNs
-- 📋 Ch 4.2 — RNNs & LSTMs
-- 📋 Ch 4.3 — Attention & Seq2Seq
-- 📋 Ch 4.4 — Transformers
-- 📋 Ch 4.5 — Generative Models
-- 📋 Ch 4.6 — Audio & Speech
-- 🔨 Project: Real-Time Image Classifier
+- ✅ **Ch 4.1** — CNNs: Convolutions, Strides, Receptive Fields & Residual Connections
+- ✅ **Ch 4.2** — RNNs & LSTMs: Sequential Modeling, Vanishing Gradients & Constant Error Carousel
+- ✅ **Ch 4.3** — Attention & Seq2Seq: Eliminating the Fixed-Length Bottleneck Vector
+- ✅ **Ch 4.4** — Transformers: Multi-Head Self-Attention & Modern Decoder Architectures
+- ✅ **Ch 4.5** — Generative Models: VAEs, GANs & Denoising Diffusion (DDPM)
+- ✅ **Ch 4.6** — Audio & Speech: STFT Spectrograms, Mel-Filterbanks & Whisper ASR
+- 🔨 **Project 4**: Real-Time CIFAR-10 Residual Network Classifier
 
-### Part 5 — Large Language Models
-- ✅ Ch 5.1 — NLP Foundations
-- 📋 Ch 5.2 — The LLM Revolution
-- 📋 Ch 5.3 — Prompt Engineering
-- 📋 Ch 5.4 — Fine-Tuning LLMs
-- 📋 Ch 5.5 — RAG
-- 📋 Ch 5.6 — AI Agents
-- 🔨 Project: Sentiment Analysis Engine
+### Part 5 — Large Language Models (LLMs) & Agents
+- ✅ **Ch 5.1** — NLP Foundations: N-Grams, TF-IDF & Distributed Word2Vec Embeddings
+- ✅ **Ch 5.2** — The LLM Revolution: BPE Tokenization, Scaling Laws & KV Cache
+- ✅ **Ch 5.3** — Prompt Engineering: In-Context Reasoning, CoT & Structured Outputs
+- ✅ **Ch 5.4** — Fine-Tuning LLMs: LoRA Low-Rank Adaptation, QLoRA 4-bit, SFT & DPO
+- ✅ **Ch 5.5** — RAG: Semantic Chunking, Dense Vector Databases, HNSW & Hybrid Search
+- ✅ **Ch 5.6** — Autonomous AI Agents: The ReAct Framework, Tool Use & Dynamic Memory
+- 🔨 **Project 5**: Production RAG Knowledge Base & Sentiment Engine
 
 ### Part 6 — MLOps & Production AI
-- ✅ Ch 6.1 — Experiment Tracking
-- 📋 Ch 6.2 — Model Serving
-- 📋 Ch 6.3 — Monitoring & Drift
-- 📋 Ch 6.4 — Data Pipelines
-- 📋 Ch 6.5 — Cloud ML Platforms
-- 🔨 Project: End-to-End ML Pipeline
+- ✅ **Ch 6.1** — Experiment Tracking & Versioning: Reproducibility & Artifact Logging
+- ✅ **Ch 6.2** — Model Serving: Low-Latency FastAPI, ONNX Runtime & Dynamic Batching
+- ✅ **Ch 6.3** — Monitoring & Drift: Covariate Shift & Population Stability Index (PSI)
+- ✅ **Ch 6.4** — Data Pipelines & Feature Stores: Online/Offline Sync & Point-in-Time Joins
+- ✅ **Ch 6.5** — Cloud ML Platforms: AWS SageMaker, GCP Vertex AI & Spot Clusters
+- 🔨 **Project 6**: End-to-End Production MLOps Pipeline with Docker & Monitoring
 
 ### Part 7 — System Design for AI Engineers
-- ✅ Ch 7.1 — AI System Design Framework
-- 📋 Ch 7.2 — Real-World System Designs
-- 📋 Ch 7.3 — Ethics & Fairness
-- 🔨 Project: Recommendation System
+- ✅ **Ch 7.1** — AI System Design Framework: The 7-Step Blueprint & Capacity Sizing
+- ✅ **Ch 7.2** — Real-World System Designs: YouTube Recs, Search & Fraud Scoring
+- ✅ **Ch 7.3** — Ethics, Fairness & Explainability: SHAP Values, LIME & Bias Auditing
+- 🔨 **Project 7**: Industrial Two-Stage Recommendation Engine Architecture
 
 ### Part 8 — Advanced Topics & The Frontier
-- ✅ Ch 8.1 — Multimodal AI
-- 📋 Ch 8.2 — Reinforcement Learning
-- 📋 Ch 8.3 — Model Optimization
-- 📋 Ch 8.4 — Your Career as an AI Engineer
-- 🔨 Project: Image Caption Generator
+- ✅ **Ch 8.1** — Multimodal AI: Vision Meets Language with Contrastive CLIP
+- ✅ **Ch 8.2** — Reinforcement Learning: Bellman Optimality, Q-Learning & RLHF
+- ✅ **Ch 8.3** — Model Optimization: INT8 Post-Training Quantization & Distillation
+- ✅ **Ch 8.4** — Your Career as an AI Engineer: Paper Reading & FAANG Interview Rubric
+- 🔨 **Project 8**: Multimodal Zero-Shot Search & Caption Generator
 
-**Legend:** ✅ Written | 📋 Scaffolded (outline ready) | 🔨 Project
+### Appendices
+- **Appendix A**: Mathematical Notation & Glossary
+- **Appendix B**: About the Author (Ram Awasthi)
+- **Appendix C**: Official GitHub Solutions Repository & Scannable QR Code Guide
 
 ---
 
-## 🛠️ Generate the Book
+## 🛠️ Build & Generate the Book
 
 ### Prerequisites
 - Node.js (v18+)
-- Python 3 with `pymupdf` and `Pillow`
-- Chrome or Edge browser
+- Python 3.10+ with `pymupdf`, `Pillow`, `qrcode`
+- Chrome or Edge browser (for Puppeteer PDF rendering)
 
-### Setup
+### Build All Formats
 ```bash
-npm install
-pip install pymupdf Pillow
-```
+# Reassemble master manuscript from modular parts
+python assemble_book.py
 
-### Generate All Formats
-```bash
-# PDF (print-ready, 6×9 inch)
+# Print-ready PDF (6×9 inch interior + full bleed covers)
 node generate_pdf.js
 
-# Word Document
+# Word Document (DOCX)
 node generate_docx.js
 
-# EPUB (e-reader)
+# Reflowable EPUB for e-readers
 node generate_epub.js
 
-# Kindle Direct Publishing
+# Amazon Kindle Direct Publishing ZIP package
 node generate_kdp_zip.js
 ```
 
 ---
 
-## 📁 File Structure
-
-```
-├── book.html              # Master HTML manuscript (source of truth)
-├── styles.css             # Print-ready CSS design system
-├── front_cover.png        # AI-generated front cover
-├── package.json           # Node.js dependencies
-├── generate_pdf.js        # PDF generator
-├── generate_docx.js       # DOCX generator
-├── generate_epub.js       # EPUB generator
-├── generate_kdp_zip.js    # KDP ZIP generator
-├── CHAT_HISTORY.md        # Continuity file for future AI sessions
-├── README.md              # This file
-└── .gitignore
-```
-
----
-
-## 🤝 Contributing
-
-This book is a living document. Contributions are welcome! To add a new chapter:
-
-1. Open `book.html`
-2. Find the scaffolded chapter (search for `scaffold-notice`)
-3. Replace the scaffold content with full chapter content following the existing pattern
-4. Submit a PR
+## 🔗 Official Code Solutions Repository
+All runnable code, Jupyter notebooks, FAANG interview implementations, and unit tests are hosted at:  
+👉 **[https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions](https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions)**
 
 ---
 
 ## 📝 License
-
-Content © 2026 Ram Awasthi. All rights reserved.
-Code examples are released under the MIT License.
-
----
-
-*"The engineers who will define the next decade of AI are not the ones who used the most tools — they are the ones who understood the most fundamentals."*
+Manuscript Content © 2026 Ram Awasthi. All rights reserved.  
+Companion Code Examples are released under the MIT License.

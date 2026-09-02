@@ -1,0 +1,488 @@
+# book_builder/part2_classical_ml.py
+
+PART2_HTML = """
+<!-- ████████████████████████████████████████████████████████████████████████
+     PART 2 — CLASSICAL MACHINE LEARNING
+     ████████████████████████████████████████████████████████████████████████ -->
+
+<div class="part-page">
+  <div class="part-number">Part 2</div>
+  <div class="part-title">Classical Machine Learning</div>
+  <div class="part-subtitle">From Linear Foundations to Non-Linear Ensembles & Unsupervised Discovery</div>
+  <div class="part-ornament">✦ ✦ ✦</div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 2.1 — WHAT IS MACHINE LEARNING?
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.1</span>
+    <h2 class="chapter-title">What Is Machine Learning?</h2>
+    <span class="chapter-subtitle">The Paradigm Shift from Explicit Rules to Data-Driven Optimization</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"A computer program is said to learn from experience E with respect to some class of tasks T and performance measure P, if its performance at tasks in T, as measured by P, improves with experience E."</p>
+    <p class="attribution">— Tom M. Mitchell (1997)</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>For sixty years of computing, programming followed a single paradigm: <strong>Rules + Data = Answers</strong>. A human software engineer conceived the logic, wrote nested `if-else` branches in code, compiled the binary, and fed inputs to receive outputs. This paradigm broke when computing collided with real-world perception. You cannot write enough `if-else` statements to detect a pedestrian in a foggy dashcam video or recognize a credit card fraud attempt among 100 million transactions.</p>
+    <p>Machine learning flips the arrow of causality: <strong>Data + Answers = Rules</strong>. We define a parameterized hypothesis class $f_\theta(\mathbf{x})$, specify an objective function $\mathcal{L}$, and let statistical optimization discover the parameters $\theta^*$ that best map inputs to targets.</p>
+
+    <div class="real-world-box">
+      <h4>🏢 Real-World Problem Mapping: Inductive Bias & The No Free Lunch Theorem</h4>
+      <p>The Wolpert No Free Lunch Theorem proves that no single machine learning algorithm outperforms all others when averaged across all possible data-generating distributions. In production, choosing between Linear Models, Decision Trees (XGBoost), or Deep Neural Networks depends entirely on your problem's <strong>inductive bias</strong>. Tabular business metrics with heterogeneous features dominate with Gradient Boosted Trees; spatial perception demands translation-invariant Convolutional Networks; sequence and reasoning tasks require Transformer attention.</p>
+    </div>
+
+    <h3>Deterministic Stratified Train-Validation-Test Splitting</h3>
+    <p>To evaluate whether a model has genuinely learned generalizable representations rather than memorized noise, we partition data into three strictly isolated sets:
+    <ul>
+      <li><strong>Training Set (70%):</strong> Observed by the optimization algorithm to update parameters $\theta$.</li>
+      <li><strong>Validation Set (15%):</strong> Used during development to tune hyperparameters (learning rate, tree depth, regularization strength) and detect early overfitting.</li>
+      <li><strong>Test Set (15%):</strong> Sealed in a black box until final deployment readiness audit. Touching the test set during model selection causes statistical data leakage.</li>
+    </ul></p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.1 — Stratified Split from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch21_what_is_ml/train_test_split_from_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch21_what_is_ml/train_test_split_from_scratch.py</a></p>
+<pre><code>import random
+
+def train_val_test_split(data, train=0.7, val=0.15, test=0.15, seed=42):
+    rng = random.Random(seed)
+    shuffled = list(data)
+    rng.shuffle(shuffled)
+    n = len(shuffled)
+    n_tr, n_va = int(n * train), int(n * val)
+    return shuffled[:n_tr], shuffled[n_tr : n_tr + n_va], shuffled[n_tr + n_va :]</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 2.2 — LINEAR REGRESSION
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.2</span>
+    <h2 class="chapter-title">Linear Regression</h2>
+    <span class="chapter-subtitle">Ordinary Least Squares &amp; Gradient Descent</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"All models are wrong, but some are useful."</p>
+    <p class="attribution">— George E. P. Box</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Linear regression models the relationship between continuous scalar target $y$ and feature vector $\mathbf{x} \in \mathbb{R}^d$ via a linear combination of inputs plus an intercept bias:
+    $$\hat{y} = \mathbf{w}^T \mathbf{x} + b = \sum_{j=1}^d w_j x_j + b$$</p>
+
+    <h3>1. Ordinary Least Squares (OLS) Closed-Form Normal Equation</h3>
+    <p>Augmenting feature matrix $X \in \mathbb{R}^{N \times (d+1)}$ with a leading column of 1s to absorb bias $b$, the Residual Sum of Squares (RSS) loss is:
+    $$\mathcal{L}(\mathbf{w}) = \frac{1}{2N} \|X\mathbf{w} - \mathbf{y}\|_2^2 = \frac{1}{2N} (X\mathbf{w} - \mathbf{y})^T (X\mathbf{w} - \mathbf{y})$$
+    Expanding the quadratic product:
+    $$\mathcal{L}(\mathbf{w}) = \frac{1}{2N} \left( \mathbf{w}^T X^T X \mathbf{w} - 2 \mathbf{y}^T X \mathbf{w} + \mathbf{y}^T \mathbf{y} \right)$$
+    Taking the matrix derivative with respect to $\mathbf{w}$ and setting to zero:
+    $$\nabla_\mathbf{w} \mathcal{L} = \frac{1}{N} \left( X^T X \mathbf{w} - X^T \mathbf{y} \right) = \mathbf{0} \implies X^T X \mathbf{w} = X^T \mathbf{y}$$
+    Assuming $X^T X$ is non-singular (full column rank):
+    $$\mathbf{w}^* = (X^T X)^{-1} X^T \mathbf{y} \quad \text{(The Normal Equation)}$$</p>
+
+    <div class="real-world-box">
+      <h4>🏢 Real-World Problem Mapping: Normal Equation vs Gradient Descent at Scale</h4>
+      <p>Why don't we always use the Normal Equation? Inverting an $(d \times d)$ matrix requires $O(d^3)$ compute time. When $d = 100,000$ (e.g. ad feature embeddings), computing $(X^T X)^{-1}$ would require petabytes of RAM and days of compute. Thus, production AI turns to <strong>Stochastic Gradient Descent (SGD)</strong>, which scales at $O(N \cdot d)$ with constant memory overhead.</p>
+    </div>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.2 — OLS vs Mini-Batch SGD with Ridge Regularization</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch22_linear_regression/ols_and_sgd_regression.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch22_linear_regression/ols_and_sgd_regression.py</a></p>
+<pre><code>import numpy as np
+
+class LinearRegressionOLS:
+    def fit(self, X, y):
+        X_b = np.c_[np.ones((X.shape[0], 1)), X]
+        self.theta = np.linalg.pinv(X_b.T @ X_b) @ X_b.T @ y
+
+    def predict(self, X):
+        X_b = np.c_[np.ones((X.shape[0], 1)), X]
+        return X_b @ self.theta</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 2.3 — LOGISTIC REGRESSION
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.3</span>
+    <h2 class="chapter-title">Logistic Regression</h2>
+    <span class="chapter-subtitle">From Continuous Lines to Probabilistic Decisions</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Doubt is not a pleasant condition, but certainty is an absurd one."</p>
+    <p class="attribution">— Voltaire</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Linear regression fails for classification because linear outputs are unbounded ($-\infty$ to $+\infty$), predicting nonsensical probabilities like $-1.4$ or $+3.2$. Logistic regression solves this by passing linear logits through the <strong>Sigmoid (Logistic) Function</strong>, squashing real values onto the valid probability interval $(0, 1)$.</p>
+
+    <h3>1. The Odds Ratio & The Sigmoid Function</h3>
+    <p>Let $p = P(y=1|\mathbf{x})$. The odds of the event occurring is the ratio of success to failure: $\frac{p}{1-p}$. Taking the natural logarithm yields the <strong>Logit (Log-Odds)</strong>, which we model as linear:
+    $$\log\left(\frac{p}{1-p}\right) = \mathbf{w}^T \mathbf{x} + b = z$$
+    Inverting this equation for $p$:
+    $$\frac{p}{1-p} = e^z \implies p = e^z(1 - p) \implies p(1 + e^z) = e^z \implies p = \frac{e^z}{1 + e^z} = \frac{1}{1 + e^{-z}} = \sigma(z)$$</p>
+
+    <div class="key-insight">
+      <p><strong>The Remarkable Derivative of the Sigmoid:</strong>
+      $$\sigma'(z) = \frac{d}{dz}\left(\frac{1}{1 + e^{-z}}\right) = \frac{e^{-z}}{(1 + e^{-z})^2} = \frac{1}{1 + e^{-z}} \cdot \frac{e^{-z}}{1 + e^{-z}} = \sigma(z)(1 - \sigma(z))$$
+      The derivative depends exclusively on the function's own output!</p>
+    </div>
+
+    <h3>2. Binary Cross-Entropy Loss Derivation</h3>
+    <p>Given binary labels $y \in \{0, 1\}$, the probability under a Bernoulli distribution is:
+    $$P(y|\mathbf{x}) = \hat{y}^y (1 - \hat{y})^{1 - y}$$
+    Taking the negative log-likelihood for $N$ samples gives the canonical <strong>Binary Cross-Entropy (BCE) Loss</strong>:
+    $$\mathcal{L}(\mathbf{w}) = -\frac{1}{N}\sum_{i=1}^N \left[ y_i \log(\hat{y}_i) + (1 - y_i)\log(1 - \hat{y}_i) \right]$$</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.3 — Logistic Regression from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch23_logistic_regression/logistic_regression_from_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch23_logistic_regression/logistic_regression_from_scratch.py</a></p>
+<pre><code>import numpy as np
+
+class LogisticRegressionScratch:
+    def __init__(self, lr=0.1, n_iter=1000):
+        self.lr, self.n_iter = lr, n_iter
+
+    def _sigmoid(self, z):
+        return np.where(z >= 0, 1 / (1 + np.exp(-z)), np.exp(z) / (1 + np.exp(z)))
+
+    def fit(self, X, y):
+        m, n = X.shape
+        self.w, self.b = np.zeros(n), 0.0
+        for _ in range(self.n_iter):
+            y_hat = self._sigmoid(np.dot(X, self.w) + self.b)
+            # Gradient of BCE with Sigmoid: dL/dw = (1/m) X^T (y_hat - y)
+            dw = (1 / m) * np.dot(X.T, (y_hat - y))
+            db = (1 / m) * np.sum(y_hat - y)
+            self.w -= self.lr * dw
+            self.b -= self.lr * db</code></pre>
+    </div>
+
+    <h3>FAANG Interview Problems — Logistic Regression</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.3.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Provide the rigorous mathematical derivation for the gradient of Binary Cross-Entropy Loss with respect to weight vector $\mathbf{w}$ in Logistic Regression. Prove that $\nabla_\mathbf{w} \mathcal{L} = \frac{1}{N} X^T (\hat{\mathbf{y}} - \mathbf{y})$, identical in form to Linear Regression despite the non-linear sigmoid.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Solution</div>
+        <p class="step"><strong>Step 1: Single Sample Loss Decomposition:</strong>
+        $$\mathcal{L}_i = -y_i \log(\hat{y}_i) - (1 - y_i)\log(1 - \hat{y}_i) \quad \text{where } \hat{y}_i = \sigma(z_i), \quad z_i = \mathbf{w}^T \mathbf{x}_i + b$$</p>
+
+        <p class="step"><strong>Step 2: Apply the Chain Rule:</strong>
+        $$\frac{\partial \mathcal{L}_i}{\partial w_j} = \frac{\partial \mathcal{L}_i}{\partial \hat{y}_i} \cdot \frac{\partial \hat{y}_i}{\partial z_i} \cdot \frac{\partial z_i}{\partial w_j}$$</p>
+
+        <p class="step"><strong>Step 3: Evaluate Each Factor:</strong>
+        Factor 1: $\frac{\partial \mathcal{L}_i}{\partial \hat{y}_i} = -\frac{y_i}{\hat{y}_i} + \frac{1 - y_i}{1 - \hat{y}_i} = \frac{\hat{y}_i - y_i}{\hat{y}_i(1 - \hat{y}_i)}$<br>
+        Factor 2: $\frac{\partial \hat{y}_i}{\partial z_i} = \sigma'(z_i) = \hat{y}_i(1 - \hat{y}_i)$<br>
+        Factor 3: $\frac{\partial z_i}{\partial w_j} = x_{ij}$</p>
+
+        <p class="step"><strong>Step 4: Multiply and Observe the Cancellation:</strong>
+        $$\frac{\partial \mathcal{L}_i}{\partial w_j} = \left[ \frac{\hat{y}_i - y_i}{\hat{y}_i(1 - \hat{y}_i)} \right] \cdot \left[ \hat{y}_i(1 - \hat{y}_i) \right] \cdot x_{ij} = (\hat{y}_i - y_i) x_{ij}$$
+        Summing over all $N$ samples and writing in matrix form:
+        $$\nabla_\mathbf{w} \mathcal{L} = \frac{1}{N} X^T (\hat{\mathbf{y}} - \mathbf{y}) \quad \blacksquare$$</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 2.4 — DECISION TREES & RANDOM FORESTS
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.4</span>
+    <h2 class="chapter-title">Decision Trees &amp; Ensembles</h2>
+    <span class="chapter-subtitle">CART, Gini Impurity, Bagging &amp; Random Forests</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"In any moment of decision, the best thing you can do is the right thing, the next best thing is the wrong thing, and the worst thing you can do is nothing."</p>
+    <p class="attribution">— Theodore Roosevelt</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Decision trees segment the feature space into axis-aligned rectangular regions through a sequence of binary questions. They require no feature scaling, handle mixed categorical and numeric inputs natively, and remain naturally interpretable. However, single unpruned decision trees suffer from notoriously high variance. Combining them into <strong>Random Forest</strong> and <strong>Gradient Boosted Trees (XGBoost/LightGBM)</strong> creates the undisputed champions of tabular production ML.</p>
+
+    <h3>1. The Mathematics of Splitting: Gini Impurity</h3>
+    <p>The CART (Classification and Regression Trees) algorithm chooses the feature $j$ and split threshold $t$ that maximizes the reduction in impurity. For a node $S$ with $K$ classes:
+    $$\text{Gini}(S) = 1 - \sum_{k=1}^K p_k^2$$
+    Where $p_k$ is the proportion of samples belonging to class $k$. The split quality is measured by weighted Gini Impurity:
+    $$\mathcal{G}(S, j, t) = \frac{|S_L|}{|S|}\text{Gini}(S_L) + \frac{|S_R|}{|S|}\text{Gini}(S_R)$$</p>
+
+    <h3>2. Random Forests: Bagging & Feature Subsampling</h3>
+    <p>Random Forests reduce variance without increasing bias through two stochastic randomization mechanisms:
+    <ol>
+      <li><strong>Bootstrap Aggregation (Bagging):</strong> Each tree trains on an independent bootstrap sample (drawn with replacement, leaving ~36.8% out-of-bag samples).</li>
+      <li><strong>Random Feature Subsampling:</strong> At every node split, the tree considers only a random subset of features (typically $\sqrt{d}$), decorrelating the individual trees so their ensemble average cancels variance.</li>
+    </ol></p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.4 — CART Decision Tree from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch24_decision_trees/cart_tree_and_random_forest.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch24_decision_trees/cart_tree_and_random_forest.py</a></p>
+<pre><code>import numpy as np
+
+def gini_impurity(y):
+    if len(y) == 0: return 0.0
+    p1 = np.mean(y == 1)
+    return 1.0 - (p1**2 + (1.0 - p1)**2)</code></pre>
+    </div>
+
+    <h3>FAANG Interview Problems — Decision Trees</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.4.1</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-amazon">Amazon</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Suppose node $S$ has 10 positive samples and 10 negative samples. Split A produces Left: $(8+, 2-)$ and Right: $(2+, 8-)$. Split B produces Left: $(10+, 5-)$ and Right: $(0+, 5-)$. Calculate the Gini impurity for both splits and determine which split CART selects.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Solution</div>
+        <p class="step"><strong>Step 1: Evaluate Parent Impurity:</strong>
+        $$\text{Gini}(S) = 1 - \left((10/20)^2 + (10/20)^2\right) = 1 - (0.25 + 0.25) = 0.500$$</p>
+
+        <p class="step"><strong>Step 2: Evaluate Split A:</strong>
+        Left node (10 samples: 8 pos, 2 neg):
+        $$\text{Gini}(S_L) = 1 - \left((8/10)^2 + (2/10)^2\right) = 1 - (0.64 + 0.04) = 0.320$$
+        Right node (10 samples: 2 pos, 8 neg): $\text{Gini}(S_R) = 0.320$ (by symmetry).<br>
+        Weighted Gini: $\mathcal{G}_A = \frac{10}{20}(0.320) + \frac{10}{20}(0.320) = 0.320$.</p>
+
+        <p class="step"><strong>Step 3: Evaluate Split B:</strong>
+        Left node (15 samples: 10 pos, 5 neg):
+        $$\text{Gini}(S_L) = 1 - \left((10/15)^2 + (5/15)^2\right) = 1 - (4/9 + 1/9) = 1 - 5/9 = 4/9 \approx 0.444$$
+        Right node (5 samples: 0 pos, 5 neg): Pure node! $\text{Gini}(S_R) = 1 - (0^2 + 1^2) = 0.000$.<br>
+        Weighted Gini: $\mathcal{G}_B = \frac{15}{20}(0.444) + \frac{5}{20}(0.000) = 0.75 \times 0.444 = 0.333$.</p>
+
+        <p class="step"><strong>Step 4: Decision:</strong> Because $\mathcal{G}_A = 0.320 < \mathcal{G}_B = 0.333$, Split A produces lower overall impurity. CART selects <strong>Split A</strong>.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 2.5 — KNN & SVMS
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.5</span>
+    <h2 class="chapter-title">KNN &amp; Support Vector Machines</h2>
+    <span class="chapter-subtitle">Geometric Margins, Slack Variables &amp; The Kernel Trick</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Simplicity is the prerequisite for reliability."</p>
+    <p class="attribution">— Edsger W. Dijkstra</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Instance-based learning (K-Nearest Neighbors) stores training points directly in memory, postponing computation until inference. Support Vector Machines (SVMs), developed by Vladimir Vapnik, identify the optimal hyperplane that maximizes the geometric margin separating two classes.</p>
+
+    <h3>1. Support Vector Machines: Margin Maximization</h3>
+    <p>For linearly separable data with labels $y_i \in \{-1, +1\}$, the geometric distance from any point to hyperplane $\mathbf{w}^T \mathbf{x} + b = 0$ is:
+    $$\gamma_i = y_i \left(\frac{\mathbf{w}^T \mathbf{x}_i + b}{\|\mathbf{w}\|_2}\right)$$
+    Maximizing the margin $\frac{1}{\|\mathbf{w}\|_2}$ subject to $y_i(\mathbf{w}^T \mathbf{x}_i + b) \ge 1$ is equivalent to minimizing $\frac{1}{2}\|\mathbf{w}\|_2^2$. For non-separable data, we introduce slack variables $\xi_i \ge 0$ and regularization penalty $C$:
+    $$\min_{\mathbf{w}, b, \boldsymbol{\xi}} \frac{1}{2}\|\mathbf{w}\|_2^2 + C \sum_{i=1}^N \xi_i \quad \text{s.t. } y_i(\mathbf{w}^T \mathbf{x}_i + b) \ge 1 - \xi_i, \quad \xi_i \ge 0$$</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.5 — Linear SVM with Hinge Loss Subgradient Descent</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch25_knn_svm/knn_and_linear_svm.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch25_knn_svm/knn_and_linear_svm.py</a></p>
+<pre><code>import numpy as np
+
+class LinearSVM:
+    def __init__(self, lr=0.001, lambda_param=0.01, epochs=500):
+        self.lr, self.lambda_param, self.epochs = lr, lambda_param, epochs
+
+    def fit(self, X, y):
+        y_mod = np.where(y <= 0, -1, 1)
+        self.w = np.zeros(X.shape[1])
+        self.b = 0.0
+        for _ in range(self.epochs):
+            for i, x_i in enumerate(X):
+                if y_mod[i] * (np.dot(x_i, self.w) - self.b) >= 1:
+                    self.w -= self.lr * (2 * self.lambda_param * self.w)
+                else:
+                    self.w -= self.lr * (2 * self.lambda_param * self.w - y_mod[i] * x_i)
+                    self.b -= self.lr * (-y_mod[i])</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 2.6 — UNSUPERVISED LEARNING
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.6</span>
+    <h2 class="chapter-title">Unsupervised Learning</h2>
+    <span class="chapter-subtitle">K-Means++, Hierarchical Clustering &amp; Principal Component Analysis</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"The greatest value of a picture is when it forces us to notice what we never expected to see."</p>
+    <p class="attribution">— John Tukey</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Over 95% of enterprise data is unlabeled. Unsupervised learning discovers latent geometric clusters, manifold structures, and low-dimensional projections without human annotation.</p>
+
+    <h3>1. K-Means++ Seeding Algorithm</h3>
+    <p>Standard random centroid initialization frequently converges to suboptimal local minima. K-Means++ seeds initial centroids with probability proportional to their squared distance from existing centroids:
+    $$P(x) = \frac{D(x)^2}{\sum_{x' \in X} D(x')^2}$$
+    This guarantees an expected approximation ratio $O(\log k)$ to the global optimal clustering cost.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.6 — K-Means++ & SVD-based PCA from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch26_unsupervised/kmeans_and_pca.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch26_unsupervised/kmeans_and_pca.py</a></p>
+<pre><code>import numpy as np
+
+class PCAScratch:
+    def __init__(self, n_components=2):
+        self.n_components = n_components
+
+    def fit_transform(self, X):
+        X_centered = X - np.mean(X, axis=0)
+        U, S, Vt = np.linalg.svd(X_centered, full_matrices=False)
+        return np.dot(X_centered, Vt[:self.n_components].T)</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 2.7 — FEATURE ENGINEERING
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.7</span>
+    <h2 class="chapter-title">Feature Engineering</h2>
+    <span class="chapter-subtitle">Handling Missing Data, Target Encoding &amp; Data Leakage</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Coming up with features is difficult, time-consuming, requires expert knowledge. 'Applied machine learning' is basically feature engineering."</p>
+    <p class="attribution">— Andrew Ng</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Feature engineering transforms raw sensor telemetry, database logs, and transaction tables into numerical signals that machine learning algorithms can separate. In tabular competitions and enterprise deployments, superior feature engineering routinely defeats superior modeling algorithms.</p>
+
+    <div class="real-world-box">
+      <h4>🏢 Real-World Problem Mapping: The $10 Million Target Leakage Catastrophe</h4>
+      <p>A fintech company built a loan default prediction model that achieved an astounding 99.8% ROC-AUC in cross-validation. In production, the model caused massive credit losses. Post-mortem analysis revealed that the feature pipeline included `collection_recovery_fee`, a field populated by the database <em>only after a borrower had already defaulted</em>. Training with future information is <strong>Data Leakage</strong>. Strict pipeline isolation (`fit` on train only) is mandatory.</p>
+    </div>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.7 — Outlier-Resilient Scaler & Target Encoder</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch27_feature_engineering/feature_pipeline.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch27_feature_engineering/feature_pipeline.py</a></p>
+<pre><code>import numpy as np
+
+class ProductionRobustScaler:
+    """Uses median and Interquartile Range (IQR) to ignore outliers."""
+    def fit_transform(self, X):
+        med = np.median(X, axis=0)
+        iqr = np.percentile(X, 75, axis=0) - np.percentile(X, 25, axis=0)
+        iqr[iqr == 0] = 1.0
+        return (X - med) / iqr</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 2.8 — MODEL EVALUATION
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.8</span>
+    <h2 class="chapter-title">Model Evaluation</h2>
+    <span class="chapter-subtitle">Measuring What Matters — Precision, Recall, ROC-AUC &amp; Calibration</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"When a measure becomes a target, it ceases to be a good measure."</p>
+    <p class="attribution">— Goodhart's Law</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Accuracy is a dangerous metric. In a dataset where 99.9% of transactions are legitimate and 0.1% are fraudulent, a model that classifies everything as legitimate achieves 99.9% accuracy while letting every single criminal transaction through.</p>
+
+    <h3>1. Precision, Recall & The Harmonic Mean F1</h3>
+    <p>$$\text{Precision} = \frac{\text{TP}}{\text{TP} + \text{FP}}, \quad \text{Recall} = \frac{\text{TP}}{\text{TP} + \text{FN}}$$
+    The $F_1$ score is the harmonic mean, penalizing extreme trade-offs:
+    $$F_1 = 2 \cdot \frac{\text{Precision} \cdot \text{Recall}}{\text{Precision} + \text{Recall}} = \frac{2\text{TP}}{2\text{TP} + \text{FP} + \text{FN}}$$</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.8 — Confusion Matrix & ROC-AUC from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch28_model_evaluation/metrics_from_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch28_model_evaluation/metrics_from_scratch.py</a></p>
+<pre><code>import numpy as np
+
+def roc_auc_scratch(y_true, y_scores):
+    pos = y_scores[y_true == 1]
+    neg = y_scores[y_true == 0]
+    concordant = np.sum(pos[:, None] > neg[None, :])
+    ties = np.sum(pos[:, None] == neg[None, :]) * 0.5
+    return float((concordant + ties) / (len(pos) * len(neg)))</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     PROJECT 2 — HOUSE PRICE PREDICTOR FROM SCRATCH
+     ====================================================================== -->
+<div class="project-section">
+  <div class="project-header">
+    <span class="project-tag">Hands-On Project 2</span>
+    <h3 class="project-title">End-to-End House Price Predictor from Scratch</h3>
+    <p class="project-desc">Build a complete regression engine implementing data cleaning, RobustScaler, Gradient Boosted regression trees, cross-validation, and production inference.</p>
+    <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch22_linear_regression/ols_and_sgd_regression.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch22_linear_regression/ols_and_sgd_regression.py</a></p>
+  </div>
+  <div class="project-body">
+    <p><strong>Architecture Overview:</strong> You will train multiple classical architectures on tabular real estate housing data, benchmark OLS vs SGD vs Decision Trees, perform feature importance analysis, and output P90 prediction intervals.</p>
+  </div>
+</div>
+"""

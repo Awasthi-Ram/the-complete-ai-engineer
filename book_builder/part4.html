@@ -1,0 +1,295 @@
+<!-- ████████████████████████████████████████████████████████████████████████
+     PART 4 — DEEP LEARNING ARCHITECTURES
+     ████████████████████████████████████████████████████████████████████████ -->
+
+<div class="part-page">
+  <div class="part-number">Part 4</div>
+  <div class="part-title">Deep Learning Architectures</div>
+  <div class="part-subtitle">Convolutional Networks, Sequence Models, Attention, Transformers & Generative Diffusion</div>
+  <div class="part-ornament">✦ ✦ ✦</div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 4.1 — CNNS: HOW MACHINES SEE
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 4.1</span>
+    <h2 class="chapter-title">Convolutional Neural Networks</h2>
+    <span class="chapter-subtitle">Convolutions, Strides, Receptive Fields &amp; Residual Connections</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"The visual system of mammals is hierarchical, translating low-level edges into high-level semantic perception."</p>
+    <p class="attribution">— David Hubel & Torsten Wiesel (Nobel Prize, 1981)</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Fully connected layers cannot scale to high-resolution computer vision. A modest $1024 \times 1024$ color image has over 3 million values; connecting this to a 1024-neuron hidden layer would require over 3 billion weight parameters for a single layer! Convolutional Neural Networks (CNNs) introduce two game-changing inductive biases: <strong>local receptive fields</strong> and <strong>translation-invariant weight sharing</strong>.</p>
+
+    <h3>1. The Mathematics of 2D Convolution</h3>
+    <p>Given an input image $I$ and a filter kernel $K$ of size $(K_h, K_w)$:
+    $$S(i, j) = (I * K)(i, j) = \sum_{m=0}^{K_h-1} \sum_{n=0}^{K_w-1} I(i + m, j + n) K(m, n)$$
+    With padding $P$ and stride $S$, the output spatial dimension is:
+    $$H_{\text{out}} = \left\lfloor \frac{H_{\text{in}} - K_h + 2P}{S} \right\rfloor + 1, \quad W_{\text{out}} = \left\lfloor \frac{W_{\text{in}} - K_w + 2P}{S} \right\rfloor + 1$$</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 4.1 — 2D Convolution Forward Pass from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part4_deep_learning/ch41_cnn_vision/conv2d_from_scratch.py" target="_blank">🔗 View in GitHub: part4_deep_learning/ch41_cnn_vision/conv2d_from_scratch.py</a></p>
+<pre><code>import numpy as np
+
+def conv2d_forward(X, W, b, stride=1, pad=0):
+    N, C_in, H, W_in = X.shape
+    C_out, _, K_h, K_w = W.shape
+    X_pad = np.pad(X, ((0,0), (0,0), (pad,pad), (pad,pad))) if pad > 0 else X
+    H_out = (H - K_h + 2*pad)//stride + 1
+    W_out = (W_in - K_w + 2*pad)//stride + 1
+    out = np.zeros((N, C_out, H_out, W_out))
+
+    for n in range(N):
+        for c in range(C_out):
+            for h in range(H_out):
+                for w in range(W_out):
+                    patch = X_pad[n, :, h*stride:h*stride+K_h, w*stride:w*stride+K_w]
+                    out[n, c, h, w] = np.sum(patch * W[c]) + b[c]
+    return out</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 4.2 — RNNS & LSTMS
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 4.2</span>
+    <h2 class="chapter-title">RNNs &amp; LSTMs</h2>
+    <span class="chapter-subtitle">Sequential Modeling, Vanishing Gradients &amp; The Constant Error Carousel</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Memory is the scribe of the soul."</p>
+    <p class="attribution">— Aristotle</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Standard feedforward networks assume all inputs are independent. Natural language, audio, speech, and stock prices are sequences where meaning depends on temporal order. Recurrent Neural Networks (RNNs) maintain an internal recurring hidden state $\mathbf{h}_t = \tanh(W_{hh}\mathbf{h}_{t-1} + W_{xh}\mathbf{x}_t + \mathbf{b})$.</p>
+
+    <h3>1. The Vanishing Gradient Problem in Backpropagation Through Time (BPTT)</h3>
+    <p>When unrolling an RNN across $T$ timesteps, the gradient of the loss $\mathcal{L}_T$ with respect to early hidden state $\mathbf{h}_1$ involves a chain of matrix multiplications:
+    $$\frac{\partial \mathcal{L}_T}{\partial \mathbf{h}_1} = \frac{\partial \mathcal{L}_T}{\partial \mathbf{h}_T} \prod_{t=2}^T \frac{\partial \mathbf{h}_t}{\partial \mathbf{h}_{t-1}} = \frac{\partial \mathcal{L}_T}{\partial \mathbf{h}_T} \prod_{t=2}^T \text{diag}(1 - \mathbf{h}_t^2) W_{hh}^T$$
+    If the largest eigenvalue of $W_{hh}$ is less than 1, gradients vanish exponentially to zero as $T$ grows; if greater than 1, gradients explode to infinity. RNNs cannot retain long-term dependencies beyond 10–20 steps.</p>
+
+    <h3>2. Long Short-Term Memory (LSTM): The Constant Error Carousel</h3>
+    <p>Hochreiter and Schmidhuber (1997) designed the LSTM to maintain an uninterrupted additive highway called the <strong>Cell State</strong> $\mathbf{C}_t$, regulated by three multiplicative gates:
+    $$\mathbf{f}_t = \sigma(W_f [\mathbf{h}_{t-1}, \mathbf{x}_t] + \mathbf{b}_f) \quad (\text{Forget Gate})$$
+    $$\mathbf{i}_t = \sigma(W_i [\mathbf{h}_{t-1}, \mathbf{x}_t] + \mathbf{b}_i) \quad (\text{Input Gate})$$
+    $$\tilde{\mathbf{C}}_t = \tanh(W_c [\mathbf{h}_{t-1}, \mathbf{x}_t] + \mathbf{b}_c) \quad (\text{Candidate State})$$
+    $$\mathbf{C}_t = \mathbf{f}_t \odot \mathbf{C}_{t-1} + \mathbf{i}_t \odot \tilde{\mathbf{C}}_t \quad (\text{Additive Cell Update})$$
+    $$\mathbf{o}_t = \sigma(W_o [\mathbf{h}_{t-1}, \mathbf{x}_t] + \mathbf{b}_o) \quad (\text{Output Gate})$$
+    $$\mathbf{h}_t = \mathbf{o}_t \odot \tanh(\mathbf{C}_t) \quad (\text{Hidden State Output})$$</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 4.2 — LSTM Cell Forward Step from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part4_deep_learning/ch42_rnn_lstm_sequences/lstm_cell_from_scratch.py" target="_blank">🔗 View in GitHub: part4_deep_learning/ch42_rnn_lstm_sequences/lstm_cell_from_scratch.py</a></p>
+<pre><code># LSTM Additive Gradient Highway
+c_t = f_t * c_prev + i_t * c_bar
+h_t = o_t * np.tanh(c_t)</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 4.3 — ATTENTION & SEQ2SEQ
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 4.3</span>
+    <h2 class="chapter-title">Attention &amp; Seq2Seq</h2>
+    <span class="chapter-subtitle">Eliminating the Fixed-Length Bottleneck Vector</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Attention is the taking possession by the mind, in clear and vivid form, of one out of what seem several simultaneously possible objects or trains of thought."</p>
+    <p class="attribution">— William James (1890)</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Early Sequence-to-Sequence (Seq2Seq) models compressed an entire 50-word input sentence into a single static context vector $\mathbf{v} \in \mathbb{R}^{512}$ before decoding. This created an information bottleneck: early words were forgotten, causing translation quality to degrade sharply on sentences longer than 15 words.</p>
+
+    <h3>1. Bahdanau & Luong Attention</h3>
+    <p>In 2014, Bahdanau et al. introduced <strong>Attention</strong>: instead of compressing everything into one vector, the decoder inspects all encoder hidden states $\mathbf{h}_1, \dots, \mathbf{h}_{T_x}$ and computes dynamic alignment scores $\alpha_{ij}$:
+    $$e_{ij} = \mathbf{s}_{i-1}^T W_a \mathbf{h}_j \quad (\text{Alignment Score})$$
+    $$\alpha_{ij} = \frac{\exp(e_{ij})}{\sum_{k=1}^{T_x} \exp(e_{ik})} \quad (\text{Softmax Attention Weights})$$
+    $$\mathbf{c}_i = \sum_{j=1}^{T_x} \alpha_{ij} \mathbf{h}_j \quad (\text{Dynamic Context Vector})$$</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 4.3 — Scaled Dot-Product Attention from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part4_deep_learning/ch43_attention_mechanisms/scaled_dot_product_attention.py" target="_blank">🔗 View in GitHub: part4_deep_learning/ch43_attention_mechanisms/scaled_dot_product_attention.py</a></p>
+<pre><code>import numpy as np
+
+def scaled_dot_product_attention(Q, K, V, mask=None):
+    d_k = Q.shape[-1]
+    scores = np.matmul(Q, np.swapaxes(K, -1, -2)) / np.sqrt(d_k)
+    if mask is not None:
+        scores = np.where(mask == 0, -1e9, scores)
+    exp_s = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    weights = exp_s / np.sum(exp_s, axis=-1, keepdims=True)
+    return np.matmul(weights, V), weights</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 4.4 — TRANSFORMERS
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 4.4</span>
+    <h2 class="chapter-title">Transformers</h2>
+    <span class="chapter-subtitle">Multi-Head Self-Attention &amp; Modern Decoder Architectures</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Attention is all you need."</p>
+    <p class="attribution">— Ashish Vaswani et al. (2017)</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>In 2017, the landmark paper <em>"Attention Is All You Need"</em> dismantled recurrent loops entirely. Recurrence enforced sequential $O(T)$ execution that prevented GPU parallelization. Transformers replaced recurrence with <strong>Self-Attention</strong>, processing all tokens simultaneously in $O(1)$ sequential operations.</p>
+
+    <h3>1. Multi-Head Attention Mathematics</h3>
+    <p>A single attention head risks averaging across multiple distinct semantic relationships. Multi-Head Attention projects Queries, Keys, and Values into $h$ independent subspaces of dimension $d_k = d_{\text{model}} / h$:
+    $$\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, \dots, \text{head}_h) W^O$$
+    $$\text{where } \text{head}_i = \text{Attention}(Q W_i^Q, K W_i^K, V W_i^V)$$</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 4.4 — Full Modern Transformer Block in PyTorch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part4_deep_learning/ch44_transformers_from_scratch/transformer_block_pytorch.py" target="_blank">🔗 View in GitHub: part4_deep_learning/ch44_transformers_from_scratch/transformer_block_pytorch.py</a></p>
+<pre><code>import torch
+import torch.nn as nn
+
+class TransformerBlock(nn.Module):
+    def __init__(self, d_model=128, n_heads=4, ffn_dim=256):
+        super().__init__()
+        self.norm1 = nn.LayerNorm(d_model)
+        self.attn = nn.MultiheadAttention(d_model, n_heads, batch_first=True)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.ffn = nn.Sequential(
+            nn.Linear(d_model, ffn_dim),
+            nn.GELU(),
+            nn.Linear(ffn_dim, d_model)
+        )
+
+    def forward(self, x):
+        # Pre-LN Residual Architecture
+        x_norm = self.norm1(x)
+        attn_out, _ = self.attn(x_norm, x_norm, x_norm)
+        x = x + attn_out
+        x = x + self.ffn(self.norm2(x))
+        return x</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 4.5 — GENERATIVE MODELS
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 4.5</span>
+    <h2 class="chapter-title">Generative Models</h2>
+    <span class="chapter-subtitle">VAEs, GANs &amp; Denoising Diffusion Probabilistic Models (DDPM)</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"What I cannot create, I do not understand."</p>
+    <p class="attribution">— Richard Feynman</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Discriminative models estimate $P(y|\mathbf{x})$; generative models capture the joint distribution $P(\mathbf{x})$, enabling machines to create novel photorealistic images, synthetic audio, and molecular structures.</p>
+
+    <h3>1. Variational Autoencoders (VAEs) & The Reparameterization Trick</h3>
+    <p>A standard autoencoder maps inputs to deterministic latent points, leaving empty gaps in the latent space that decode into gibberish. VAEs (Kingma & Welling, 2013) map inputs to probability distributions $\mathcal{N}(\boldsymbol{\mu}, \text{diag}(\boldsymbol{\sigma}^2))$, regularized by a KL divergence penalty. To permit backpropagation through stochastic sampling:
+    $$\mathbf{z} = \boldsymbol{\mu} + \boldsymbol{\sigma} \odot \boldsymbol{\epsilon}, \quad \text{where } \boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, I)$$</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 4.5 — VAE Reparameterization & DDPM Forward Sampling</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part4_deep_learning/ch45_generative_models/vae_and_ddpm_diffusion.py" target="_blank">🔗 View in GitHub: part4_deep_learning/ch45_generative_models/vae_and_ddpm_diffusion.py</a></p>
+<pre><code>import numpy as np
+
+def vae_reparameterize(mu, logvar):
+    std = np.exp(0.5 * logvar)
+    eps = np.random.randn(*mu.shape)
+    return mu + eps * std</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 4.6 — AUDIO & SPEECH
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 4.6</span>
+    <h2 class="chapter-title">Audio &amp; Speech</h2>
+    <span class="chapter-subtitle">STFT Spectrograms, Mel-Filterbanks &amp; Automatic Speech Recognition</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Music is the pleasure the human mind experiences from counting without being aware that it is counting."</p>
+    <p class="attribution">— Gottfried Wilhelm Leibniz</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Acoustic sound waves are 1D continuous pressure oscillations sampled at 16,000 or 44,100 Hz. By applying the Short-Time Fourier Transform (STFT) with overlapping window functions (Hanning), we project 1D audio into 2D time-frequency spectrograms, enabling modern Vision Transformers and CNNs to "see" sound.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 4.6 — Audio Spectrogram Computation</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part4_deep_learning/ch46_audio_speech/spectrogram_and_audio_features.py" target="_blank">🔗 View in GitHub: part4_deep_learning/ch46_audio_speech/spectrogram_and_audio_features.py</a></p>
+<pre><code>import numpy as np
+
+def compute_spectrogram(waveform, frame_size=256, hop_size=128):
+    window = np.hanning(frame_size)
+    n_frames = 1 + (len(waveform) - frame_size) // hop_size
+    return np.array([
+        np.abs(np.fft.rfft(waveform[i*hop_size : i*hop_size + frame_size] * window))
+        for i in range(n_frames)
+    ]).T</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     PROJECT 4 — REAL-TIME IMAGE CLASSIFIER
+     ====================================================================== -->
+<div class="project-section">
+  <div class="project-header">
+    <span class="project-tag">Hands-On Project 4</span>
+    <h3 class="project-title">Real-Time CIFAR-10 Residual Network Classifier</h3>
+    <p class="project-desc">Design, train, and benchmark a 18-layer Residual Network (ResNet-18) with skip connections, batch normalization, and data augmentation in PyTorch.</p>
+    <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part4_deep_learning/ch41_cnn_vision/conv2d_from_scratch.py" target="_blank">🔗 Full Project Code: part4_deep_learning/ch41_cnn_vision/conv2d_from_scratch.py</a></p>
+  </div>
+  <div class="project-body">
+    <p><strong>Architecture Overview:</strong> You will implement the foundational identity mapping skip connection $\mathbf{x}_{l+1} = \mathcal{F}(\mathbf{x}_l) + \mathbf{x}_l$, proving mathematically why residual pathways eliminate gradient degradation in networks exceeding 100 layers.</p>
+  </div>
+</div>

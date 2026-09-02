@@ -2,6 +2,7 @@
  * generate_epub.js — EPUB Generator for The Complete AI Engineer
  * 
  * Parses book.html with Cheerio and generates a navigable EPUB file.
+ * Handles images cleanly for offline e-readers.
  * 
  * Usage: node generate_epub.js
  */
@@ -9,7 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const cheerio = require('cheerio');
-const EPub = require('epub-gen-memory').default;
+const epub = require('epub-gen-memory').default;
 
 async function generateEPUB() {
   const bookTitle = 'The_Complete_AI_Engineer';
@@ -53,35 +54,34 @@ async function generateEPUB() {
       chapterTitle = 'Glossary';
     } else if (classes.includes('about-author')) {
       chapterTitle = 'About the Author';
+    } else if (classes.includes('github-repo-guide')) {
+      chapterTitle = 'Official Companion Code Repository';
     }
 
-    // Clean HTML for EPUB (remove absolute positioning, gradients, etc.)
+    // Clean HTML for EPUB
     let content = $.html(el);
     content = content.replace(/position:\s*absolute/g, 'position: static');
     content = content.replace(/background:\s*linear-gradient[^;]+;/g, '');
     content = content.replace(/width:\s*6in/g, 'width: 100%');
     content = content.replace(/height:\s*9in/g, 'height: auto');
 
+    // Replace local images with accessible text links for EPUB readers
+    content = content.replace(/<img[^>]*src="github_repo_qr\.png"[^>]*>/gi, 
+      '<p style="text-align: center; font-weight: bold; border: 1px solid #1b4965; padding: 12px;">🔗 <a href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions">Repository Link: https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions</a></p>');
+    content = content.replace(/<img[^>]*>/gi, '');
+
     chapters.push({
       title: chapterTitle,
-      data: content,
+      content: content,
     });
   });
 
-  // Load cover image
-  let cover = undefined;
-  const coverPath = path.resolve(__dirname, 'front_cover.png');
-  if (fs.existsSync(coverPath)) {
-    cover = fs.readFileSync(coverPath);
-  }
-
   console.log(`📚 Generating EPUB with ${chapters.length} chapters...`);
 
-  const epubContent = await new EPub({
+  const options = {
     title: title,
     author: author,
     publisher: 'Self-Published',
-    cover: cover,
     css: `
       body { font-family: Georgia, serif; font-size: 11pt; line-height: 1.6; color: #1a1a1a; }
       h1, h2, h3 { font-family: Georgia, serif; color: #0d1b2a; }
@@ -91,11 +91,11 @@ async function generateEPUB() {
       table { border-collapse: collapse; width: 100%; margin: 1em 0; }
       th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
       th { background: #1b4965; color: white; }
-    `,
-    content: chapters,
-  }).genEpub();
+    `
+  };
 
-  fs.writeFileSync(outputFile, Buffer.from(epubContent));
+  const epubBuffer = await epub(options, chapters);
+  fs.writeFileSync(outputFile, epubBuffer);
   console.log(`✅ EPUB generated: ${outputFile}`);
 }
 

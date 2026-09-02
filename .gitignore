@@ -27,7 +27,9 @@ desktop.ini
 
 # Python
 __pycache__/
-*.pyc
-*.pyo
 venv/
 .env
+
+# Separate Solutions Git Repository
+the-complete-ai-engineer-solutions/
+merge.py

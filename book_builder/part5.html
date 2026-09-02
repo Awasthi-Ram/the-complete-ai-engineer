@@ -1,0 +1,290 @@
+<!-- ████████████████████████████████████████████████████████████████████████
+     PART 5 — LARGE LANGUAGE MODELS (LLMS) & AGENTS
+     ████████████████████████████████████████████████████████████████████████ -->
+
+<div class="part-page">
+  <div class="part-number">Part 5</div>
+  <div class="part-title">Large Language Models &amp; Agents</div>
+  <div class="part-subtitle">Pre-training, Tokenization, Alignment, LoRA, RAG & Autonomous Agency</div>
+  <div class="part-ornament">✦ ✦ ✦</div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 5.1 — NLP FOUNDATIONS
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 5.1</span>
+    <h2 class="chapter-title">Text to Numbers</h2>
+    <span class="chapter-subtitle">NLP Foundations, N-Grams, TF-IDF &amp; Distributed Word2Vec Embeddings</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"You shall know a word by the company it keeps."</p>
+    <p class="attribution">— J.R. Firth (1957)</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Neural networks process continuous tensors, not strings of characters. Natural Language Processing (NLP) is the discipline of mapping human symbolic language into continuous geometric vector spaces where semantic similarity corresponds to geometric proximity.</p>
+
+    <h3>1. The Evolution of Word Representations</h3>
+    <ul>
+      <li><strong>One-Hot Encoding:</strong> Sparse vectors of vocabulary length $|V|$. Massive memory footprint ($|V| \ge 50,000$), completely orthogonal (no semantic relationship between "cat" and "kitten").</li>
+      <li><strong>TF-IDF:</strong> Weighs term frequency by inverse document frequency: $\text{TF-IDF}(t, d) = \text{TF}(t, d) \cdot \log\left(\frac{N}{\text{DF}(t)}\right)$. Captures keyword importance but lacks sequence context.</li>
+      <li><strong>Word2Vec (Mikolov et al., 2013):</strong> Dense embeddings in $\mathbb{R}^{300}$ trained via Skip-Gram with Negative Sampling. Learns linear semantic vector algebra: $\vec{v}_{\text{King}} - \vec{v}_{\text{Man}} + \vec{v}_{\text{Woman}} \approx \vec{v}_{\text{Queen}}$.</li>
+    </ul>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 5.1 — Byte-Pair Encoding (BPE) Tokenizer from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_llms_and_agents/ch51_nlp_foundations/bpe_tokenizer_from_scratch.py" target="_blank">🔗 View in GitHub: part5_llms_and_agents/ch51_nlp_foundations/bpe_tokenizer_from_scratch.py</a></p>
+<pre><code>import collections
+
+def get_stats(vocab):
+    pairs = collections.defaultdict(int)
+    for word, freq in vocab.items():
+        symbols = word.split()
+        for i in range(len(symbols) - 1):
+            pairs[symbols[i], symbols[i + 1]] += freq
+    return pairs</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 5.2 — THE LLM REVOLUTION
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 5.2</span>
+    <h2 class="chapter-title">The LLM Revolution</h2>
+    <span class="chapter-subtitle">Autoregressive Pre-training, Chinchilla Scaling Laws &amp; KV Cache Optimization</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Scale is all you need."</p>
+    <p class="attribution">— Empirical AI Maxim</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Autoregressive Large Language Models (LLMs) are trained on a single objective: <strong>Next-Token Prediction</strong>. By minimizing cross-entropy loss over trillions of tokens, the network is forced to build internal world models, compress human knowledge, and develop emergent in-context reasoning capabilities.</p>
+
+    <h3>1. Chinchilla Scaling Laws (Hoffmann et al., 2022)</h3>
+    <p>DeepMind demonstrated that for compute-optimal training, model parameter count $N$ and token count $D$ should scale in equal proportion: $D \approx 20 \times N$. A 7B parameter model should be trained on at least 140 billion tokens; training smaller models on massive token corpora (e.g. LLaMA-3 8B trained on 15 trillion tokens) yields extreme inference efficiency.</p>
+
+    <h3>2. The KV Cache: Eliminating $O(N^2)$ Inference Redundancy</h3>
+    <p>During generation, each new token attends to all previous tokens. Projecting Keys and Values for every prior token on every forward step wastes quadratic compute. The <strong>KV Cache</strong> stores calculated Keys and Values in GPU memory:</p>
+    $$\text{Memory}_{\text{KVCache}} = 2 \times 2 \times n_{\text{layers}} \times n_{\text{heads}} \times d_{\text{head}} \times \text{seq\_len} \times \text{batch\_size} \text{ bytes}$$
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 5.2 — KV Cache Attention Manager in PyTorch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_llms_and_agents/ch52_llm_revolution/kv_cache_attention.py" target="_blank">🔗 View in GitHub: part5_llms_and_agents/ch52_llm_revolution/kv_cache_attention.py</a></p>
+<pre><code>import torch
+
+class KVCacheManager:
+    def __init__(self, batch_size, max_seq_len, n_heads, d_head):
+        self.k_cache = torch.zeros(batch_size, n_heads, max_seq_len, d_head)
+        self.v_cache = torch.zeros(batch_size, n_heads, max_seq_len, d_head)
+        self.pos = 0
+
+    def update(self, new_k, new_v):
+        p = self.pos
+        self.k_cache[:, :, p:p+1, :] = new_k
+        self.v_cache[:, :, p:p+1, :] = new_v
+        self.pos += 1
+        return self.k_cache[:, :, :self.pos, :], self.v_cache[:, :, :self.pos, :]</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 5.3 — PROMPT ENGINEERING
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 5.3</span>
+    <h2 class="chapter-title">Prompt Engineering</h2>
+    <span class="chapter-subtitle">In-Context Learning, Chain-of-Thought &amp; Constrained Structured Outputs</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"The hottest new programming language is English."</p>
+    <p class="attribution">— Andrej Karpathy</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Prompt engineering is the systematic art and science of steering frozen autoregressive language models toward deterministic, reliable, and verified business outcomes.</p>
+
+    <h3>1. Core Prompting Strategies</h3>
+    <ul>
+      <li><strong>Zero-Shot / Few-Shot In-Context Learning:</strong> Providing 3–5 representative demonstration pairs in the prompt primes the model's conditional distribution without altering weights.</li>
+      <li><strong>Chain-of-Thought (Wei et al., 2022):</strong> Prompting the model with step-by-step intermediate reasoning paths ("Let's think step by step") unlocks multi-step mathematical and symbolic logic.</li>
+      <li><strong>Self-Consistency Majority Voting:</strong> Generating $k=5$ stochastic reasoning paths with temperature $T=0.7$ and extracting the consensus mode answer drops reasoning errors by 30%+.</li>
+    </ul>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 5.3 — Chain-of-Thought & Self-Consistency Engine</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_llms_and_agents/ch53_prompt_engineering/chain_of_thought_engine.py" target="_blank">🔗 View in GitHub: part5_llms_and_agents/ch53_prompt_engineering/chain_of_thought_engine.py</a></p>
+<pre><code>import re
+from collections import Counter
+
+def self_consistency_vote(reasoning_paths):
+    answers = [
+        re.search(r'answer is[:\\s]*([\\w\\d\\.\\-]+)', p, re.I).group(1).lower()
+        for p in reasoning_paths if 'answer is' in p
+    ]
+    return Counter(answers).most_common(1)[0][0]</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 5.4 — FINE-TUNING LLMS
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 5.4</span>
+    <h2 class="chapter-title">Fine-Tuning LLMs</h2>
+    <span class="chapter-subtitle">LoRA Low-Rank Adaptation, QLoRA 4-bit, SFT &amp; Direct Preference Optimization (DPO)</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Specialization is the key to mastery."</p>
+    <p class="attribution">— Industry Engineering Principle</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Pre-trained models are generalists. Domain-specific production tasks (medical coding, legal drafting, code generation) require specialized adaptation through Supervised Fine-Tuning (SFT) and Preference Alignment.</p>
+
+    <h3>1. Low-Rank Adaptation (LoRA) Mathematics</h3>
+    <p>Hu et al. (2021) showed that the weight change $\Delta W \in \mathbb{R}^{d \times k}$ during task adaptation has a very low intrinsic rank. Instead of updating full matrix $W_0$, LoRA freezes $W_0$ and injects two low-rank matrices $A \in \mathbb{R}^{r \times k}$ and $B \in \mathbb{R}^{d \times r}$ ($r \ll d$):
+    $$W = W_0 + \Delta W = W_0 + \frac{\alpha}{r} (B \cdot A)$$
+    $A$ is initialized from a Gaussian distribution and $B$ is initialized to zero, ensuring $\Delta W = 0$ at training initialization.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 5.4 — Low-Rank Adaptation (LoRA) Layer from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_llms_and_agents/ch54_finetuning_lora/lora_layer_from_scratch.py" target="_blank">🔗 View in GitHub: part5_llms_and_agents/ch54_finetuning_lora/lora_layer_from_scratch.py</a></p>
+<pre><code>import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class LoRALinear(nn.Module):
+    def __init__(self, in_f, out_f, r=4, alpha=8.0):
+        super().__init__()
+        self.weight = nn.Parameter(torch.randn(out_f, in_f), requires_grad=False)
+        self.scaling = alpha / r
+        self.lora_A = nn.Parameter(torch.randn(r, in_f) * (1 / r))
+        self.lora_B = nn.Parameter(torch.zeros(out_f, r))
+
+    def forward(self, x):
+        return F.linear(x, self.weight) + (x @ self.lora_A.T @ self.lora_B.T) * self.scaling</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 5.5 — RAG: RETRIEVAL-AUGMENTED GENERATION
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 5.5</span>
+    <h2 class="chapter-title">RAG (Retrieval-Augmented Generation)</h2>
+    <span class="chapter-subtitle">Chunking, Dense Vector Databases, HNSW Indexing &amp; Hybrid Search</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Knowledge is of two kinds: we know a subject ourselves, or we know where we can find information upon it."</p>
+    <p class="attribution">— Samuel Johnson</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>Parametric memory in LLMs has three fatal production limitations: static knowledge cutoffs, zero visibility into private enterprise databases, and hallucinatory confabulations. RAG connects generative models to dynamic external non-parametric vector databases.</p>
+
+    <h3>1. Production RAG Architecture</h3>
+    <ol>
+      <li><strong>Ingestion & Chunking:</strong> Documents are split into semantic chunks (typically 256–512 tokens with 50-token overlap).</li>
+      <li><strong>Embedding Generation:</strong> Chunks are encoded into dense vectors via models like `text-embedding-3-small`.</li>
+      <li><strong>Vector Indexing:</strong> Approximate Nearest Neighbor (ANN) indexing via <strong>HNSW (Hierarchical Navigable Small World)</strong> graphs yields $O(\log N)$ search latency over millions of vectors.</li>
+      <li><strong>Hybrid Search & Reranking:</strong> Combines dense vector similarity with sparse BM25 keyword search, followed by a Cross-Encoder reranker.</li>
+      <li><strong>Prompt Augmentation:</strong> Top-$k$ context passages are injected into the LLM system prompt for grounded synthesis.</li>
+    </ol>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 5.5 — Complete Minimal RAG Pipeline from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_llms_and_agents/ch55_rag_pipeline/minimal_rag_vector_search.py" target="_blank">🔗 View in GitHub: part5_llms_and_agents/ch55_rag_pipeline/minimal_rag_vector_search.py</a></p>
+<pre><code># Vector Store Cosine Similarity Search
+q_vec = embed(query)
+scores = [np.dot(q_vec, d_vec) for d_vec in self.vectors]
+top_indices = np.argsort(scores)[::-1][:top_k]
+return [self.documents[i] for i in top_indices]</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 5.6 — AUTONOMOUS AI AGENTS
+     ====================================================================== -->
+<div class="chapter">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 5.6</span>
+    <h2 class="chapter-title">Autonomous AI Agents</h2>
+    <span class="chapter-subtitle">The ReAct Framework, Tool Use, Dynamic Memory &amp; Multi-Agent Planning</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Action is the foundational key to all success."</p>
+    <p class="attribution">— Pablo Picasso</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation</span>
+
+    <p>A pure LLM is passive: it answers questions in a single forward pass. An <strong>AI Agent</strong> is an active autonomous system that perceives its environment, reasons through complex multi-step objectives, invokes external APIs (calculators, SQL databases, bash shells), observes execution outputs, and self-corrects until its goal is verified.</p>
+
+    <h3>1. The ReAct (Reason + Act) Loop</h3>
+    <p>Yao et al. (2022) established the canonical agent cycle:
+    $$\text{Thought} \to \text{Action} \to \text{Action Input} \to \text{Observation} \to \text{Next Thought} \to \dots \to \text{Final Answer}$$
+    Interleaving reasoning with environmental action grounds the agent's logic, preventing hallucinated API responses.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 5.6 — ReAct Agent Loop from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_llms_and_agents/ch56_autonomous_agents/react_agent_from_scratch.py" target="_blank">🔗 View in GitHub: part5_llms_and_agents/ch56_autonomous_agents/react_agent_from_scratch.py</a></p>
+<pre><code># Production ReAct Tool Execution Dispatcher
+action_match = re.search(r'Action:\\s*(\\w+)', response)
+input_match = re.search(r'Action Input:\\s*(.+)', response)
+if action_match and input_match:
+    tool, arg = action_match.group(1), input_match.group(1)
+    observation = TOOLS[tool](arg)</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     PROJECT 5 — PRODUCTION RAG & SENTIMENT ENGINE
+     ====================================================================== -->
+<div class="project-section">
+  <div class="project-header">
+    <span class="project-tag">Hands-On Project 5</span>
+    <h3 class="project-title">Production RAG Knowledge Base & Sentiment Engine</h3>
+    <p class="project-desc">Build an enterprise documentation Q&A engine with document chunking, HNSW vector search, hybrid lexical-dense retrieval, and an autonomous verification agent.</p>
+    <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_llms_and_agents/ch55_rag_pipeline/minimal_rag_vector_search.py" target="_blank">🔗 Full Project Code: part5_llms_and_agents/ch55_rag_pipeline/minimal_rag_vector_search.py</a></p>
+  </div>
+  <div class="project-body">
+    <p><strong>Architecture Overview:</strong> You will ingest a collection of technical PDF engineering manuals, construct a dense vector database, implement sliding-window context retrieval, and construct a ReAct evaluator that verifies every factual claim against retrieved text citations.</p>
+  </div>
+</div>
