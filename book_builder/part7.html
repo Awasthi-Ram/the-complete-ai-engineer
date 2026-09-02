@@ -1,158 +1,571 @@
 <!-- ████████████████████████████████████████████████████████████████████████
-     PART 7 — SYSTEM DESIGN FOR AI ENGINEERS
+     PART 7 — AI SYSTEM DESIGN & ARCHITECTURE AT SCALE
      ████████████████████████████████████████████████████████████████████████ -->
 
 <div class="part-page">
   <div class="part-number">Part 7</div>
-  <div class="part-title">System Design for AI Engineers</div>
-  <div class="part-subtitle">The 7-Step Framework, Large-Scale Architectures, Ethics &amp; Explainability</div>
+  <div class="part-title">AI System Design at Scale</div>
+  <div class="part-subtitle">Billion-Item Recommendation Systems, Distributed Vector Search, HNSW, IVF-PQ &amp; Edge AI Quantization</div>
   <div class="part-ornament">✦ ✦ ✦</div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 7.1 — AI SYSTEM DESIGN FRAMEWORK
+     CHAPTER 7.1 — BILLION-SCALE RECOMMENDATION SYSTEMS
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-7-1">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 7.1</span>
-    <h2 class="chapter-title">AI System Design Framework</h2>
-    <span class="chapter-subtitle">The 7-Step Blueprint &amp; Back-of-the-Envelope Capacity Estimation</span>
+    <h2 class="chapter-title">Billion-Scale Recommendation Systems</h2>
+    <span class="chapter-subtitle">The Multi-Stage Funnel, Two-Tower Dual Encoders, Meta DLRM &amp; In-Batch Sampled Softmax</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"System design is the art of making the right trade-offs under severe constraints."</p>
-    <p class="attribution">— Systems Architect Principle</p>
+    <p>"In recommendation systems, the best model does not win. The model that can retrieve the best 50 items out of one billion candidates in under 30 milliseconds wins."</p>
+    <p class="attribution">— Industrial RecSys Maxim</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>Staff and Principal AI Engineer interviews at FAANG companies pivot around AI System Design. You are asked to design YouTube Recommendations, Google Search Autocomplete, or Uber Dynamic Surge Pricing. Success requires a structured 7-step blueprint that balances algorithmic precision with distributed systems realities.</p>
+    <!-- SECTION 1: THE SCALE CHALLENGE -->
+    <h3>1. The Scale Challenge of Modern Information Filtering</h3>
+    <p>On platforms like YouTube, TikTok, Instagram, and Netflix, the catalog contains <strong>hundreds of millions or billions of items</strong>, consumed by hundreds of millions of active users. Running a complex deep neural network over 1,000,000,000 items for every user interaction is physically impossible (requiring millions of GPU hours per second).</p>
 
-    <h3>1. The 7-Step AI System Design Blueprint</h3>
+    <h4>The Industrial Multi-Stage Recommendation Funnel</h4>
     <ol>
-      <li><strong>Requirements Clarification:</strong> Functional scope, business KPIs, throughput (QPS), latency SLA (P99 < 50ms).</li>
-      <li><strong>Back-of-the-Envelope Estimation:</strong> Daily active users, storage for feature tables, GPU memory bandwidth.</li>
-      <li><strong>Data Pipeline & Feature Engineering:</strong> Ingestion, offline batch vs online streaming feature store.</li>
-      <li><strong>Model Architecture Selection:</strong> Inductive bias, candidate generation vs heavy ranking.</li>
-      <li><strong>Training & Evaluation Strategy:</strong> Loss formulation, offline AUC vs online A/B testing conversion lift.</li>
-      <li><strong>Serving & High-Availability Deployment:</strong> Dynamic batching, caching, fallback heuristics.</li>
-      <li><strong>Monitoring & Continuous Improvement:</strong> Feedback loops, position bias correction, drift alerting.</li>
+      <li><strong>Stage 1: Candidate Generation (Retrieval):</strong> Slashes the catalog from <strong>1,000,000,000 items down to 1,000 candidates in &lt;10 ms</strong> using lightweight, highly scalable retrieval mechanisms (Two-Tower vector search, Graph walks, collaborative filtering). High recall is the primary metric.</li>
+      <li><strong>Stage 2: Scoring &amp; Ranking:</strong> Applies a heavy, complex deep neural network (e.g. Meta DLRM, DeepFM) computing fine-grained Click-Through Rate (CTR) and Watch-Time predictions over the 1,000 candidates in <strong>&lt;25 ms</strong>. High precision is the primary metric.</li>
+      <li><strong>Stage 3: Re-Ranking, Business Logic &amp; Diversity:</strong> Filters out previously seen items, enforces creator diversity, applies freshness boosting, and suppresses policy violations in <strong>&lt;5 ms</strong> before delivering the top 10 items to the user interface.</li>
     </ol>
 
+    <!-- SECTION 2: TWO-TOWER DUAL ENCODERS -->
+    <h3>2. Two-Tower Neural Networks (Google YouTube 2016, 2019)</h3>
+    <p>How does Stage 1 retrieve 1,000 items from 1,000,000,000 candidates in under 10 milliseconds? The solution is the <strong>Two-Tower Neural Architecture</strong>:</p>
+
+    <div class="real-world-box">
+      <h4>📐 Mathematical Formulation of the Two-Tower Architecture</h4>
+      <ul>
+        <li><strong>User Tower:</strong> A deep neural network $f_\theta(\mathbf{x}_{\text{user}})$ mapping dynamic user context (watch history, search queries, device, time) to an embedding vector $\mathbf{u} \in \mathbb{R}^d$:
+        $$\mathbf{u} = \frac{f_\theta(\mathbf{x}_{\text{user}})}{\|f_\theta(\mathbf{x}_{\text{user}})\|_2}$$</li>
+        <li><strong>Item Tower:</strong> A deep neural network $g_\phi(\mathbf{y}_{\text{item}})$ mapping item features (video title, tags, channel, visual embeddings) to an embedding vector $\mathbf{v} \in \mathbb{R}^d$:
+        $$\mathbf{v} = \frac{g_\phi(\mathbf{y}_{\text{item}})}{\|g_\phi(\mathbf{y}_{\text{item}})\|_2}$$</li>
+        <li><strong>Relevance Scoring Function:</strong> The dot product (cosine similarity) between user and item vectors:
+        $$s(\mathbf{u}, \mathbf{v}) = \mathbf{u}^T \mathbf{v} = \sum_{i=1}^d u_i v_i$$</li>
+      </ul>
+      <p><em>The Computational Breakthrough:</em> Because the item tower $g_\phi(\mathbf{y}_{\text{item}})$ does not depend on user features, <strong>item embeddings for all 1 billion videos are pre-computed offline once and indexed into an Approximate Nearest Neighbor (ANN) vector database!</strong></p>
+      <p>At inference time, when a user opens the app:</p>
+      <ol>
+        <li>The system evaluates <em>only the User Tower</em> once ($O(1)$ forward pass, $\approx 2\text{ ms}$).</li>
+        <li>The resulting vector $\mathbf{u}$ queries the pre-computed 1-billion item ANN index via maximum inner product search (MIPS), retrieving the top 1,000 candidates in <strong>$3\text{ ms}$</strong>!</li>
+      </ol>
+    </div>
+
+    <!-- SECTION 3: IN-BATCH NEGATIVE SAMPLING -->
+    <h3>3. In-Batch Negative Sampling &amp; Sampled Softmax</h3>
+    <p>In recommendation training, we have positive interactions (videos watched), but true negative interactions (videos the user hated) are rarely explicit. If a user did not watch a video, did they dislike it, or was it simply never shown to them?</p>
+
+    <p>We treat unobserved items as negatives using <strong>In-Batch Negative Sampling</strong>. Within a mini-batch of $B$ positive pairs $\{(\mathbf{u}_i, \mathbf{v}_i)\}_{i=1}^B$, the item $\mathbf{v}_j$ ($j \neq i$) serves as a random negative for user $\mathbf{u}_i$!</p>
+
+    <p>The batch similarity matrix is computed via a single matrix multiplication:</p>
+    $$S = U \cdot V^T \in \mathbb{R}^{B \times B}, \quad \text{where } U, V \in \mathbb{R}^{B \times d}$$
+    <p>The diagonal elements $S_{i, i} = \mathbf{u}_i^T \mathbf{v}_i$ represent positive pairs, while all off-diagonal elements $S_{i, j}$ ($i \neq j$) represent negative pairs! The loss is standard multi-class cross-entropy with temperature $\tau$:</p>
+    $$\mathcal{L} = -\frac{1}{B} \sum_{i=1}^B \ln \frac{\exp(\mathbf{u}_i^T \mathbf{v}_i / \tau)}{\sum_{j=1}^B \exp(\mathbf{u}_i^T \mathbf{v}_j / \tau)}$$
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Recommendation Systems</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-netflix">Netflix</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are designing Meta's Instagram Reels recommendation retrieval engine. The platform has $100,000,000$ active videos. Each video is represented by a $d = 128$ dimensional embedding in FP16 ($2 \text{ bytes}$). Calculate the exact RAM required to store the full index, and explain why naive in-batch negative sampling introduces severe <strong>Selection Bias (Popularity Bias)</strong> and how LogQ correction resolves it.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+
+        <p class="step"><strong>Step 1: RAM Calculation for 100M Video Index:</strong><br>
+        Raw vector memory:
+        $$\text{Memory} = 100 \times 10^6 \times 128 \times 2 \text{ bytes} = 25,600,000,000 \text{ bytes} \approx \mathbf{25.6 \text{ Gigabytes}}$$
+        An index of $25.6\text{ GB}$ fits comfortably in the RAM of a single high-memory cloud instance (e.g. AWS <code>r6i.xlarge</code> with 32GB RAM)!</p>
+
+        <p class="step"><strong>Step 2: The Popularity Bias in In-Batch Negatives:</strong><br>
+        In streaming batch sampling, a viral video watched by 10% of users appears in 10% of training batches. Consequently, the viral video is sampled as a negative <strong>far more frequently</strong> than niche videos! The model penalizes popular items excessively, artificially suppressing them in recommendations.</p>
+
+        <p class="step"><strong>Step 3: The LogQ Correction (Yi et al., Google 2019):</strong><br>
+        Let $p_j$ be the marginal sampling frequency of item $j$. We subtract $\ln p_j$ from the logits prior to Softmax:</p>
+        $$S'_{i, j} = \frac{\mathbf{u}_i^T \mathbf{v}_j}{\tau} - \ln p_j$$
+        <p>By subtracting $\ln p_j$, popular items receive a corrective positive offset during probability calculation, restoring unbiased maximum likelihood estimation across both viral and long-tail niche items!</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 7.1: Two-Tower Recommendation Model in PyTorch</h3>
+    <p>Below is a clean, production-grade PyTorch implementation of a Two-Tower Dual Encoder with in-batch negative cross-entropy loss.</p>
+
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 7.1 — Capacity & Hardware Sizing Estimator</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_ai_system_design/ch71_system_design_framework/capacity_estimator.py" target="_blank">🔗 View in GitHub: part7_ai_system_design/ch71_system_design_framework/capacity_estimator.py</a></p>
-<pre><code>def estimate_capacity(dau=100_000_000, reqs_per_user=20, embed_dim=256):
-    total_reqs = dau * reqs_per_user
-    avg_qps = total_reqs / 86400
-    peak_qps = avg_qps * 3
-    ram_gb = (500_000_000 * embed_dim * 4) / (1024**3)
-    return {"avg_qps": int(avg_qps), "peak_qps": int(peak_qps), "ram_gb": round(ram_gb, 1)}</code></pre>
+      <div class="code-lab-header">Code Lab 7.1 — Two-Tower Dual Encoder Architecture</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch71_recsys/twotower_model.py" target="_blank">🔗 View in GitHub: part7_system_design/ch71_recsys/twotower_model.py</a></p>
+<pre><code>import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class TwoTowerRecSys(nn.Module):
+    def __init__(self, user_dim, item_dim, embed_dim=128, temperature=0.07):
+        super().__init__()
+        self.temperature = temperature
+
+        # User Tower MLP
+        self.user_tower = nn.Sequential(
+            nn.Linear(user_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, embed_dim)
+        )
+
+        # Item Tower MLP
+        self.item_tower = nn.Sequential(
+            nn.Linear(item_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, embed_dim)
+        )
+
+    def forward(self, user_features, item_features):
+        # 1. Project into shared embedding space & L2-normalize
+        u = F.normalize(self.user_tower(user_features), p=2, dim=-1)
+        v = F.normalize(self.item_tower(item_features), p=2, dim=-1)
+
+        # 2. Compute similarity matrix: (B, B)
+        # S[i, j] is similarity between user i and item j
+        logits = torch.matmul(u, v.T) / self.temperature
+
+        # 3. Targets: Diagonal elements are positive pairs!
+        labels = torch.arange(user_features.size(0), device=user_features.device)
+        loss = F.cross_entropy(logits, labels)
+        return loss, logits
+
+if __name__ == "__main__":
+    torch.manual_seed(42)
+    B = 4 # Batch size of 4 users and 4 items
+    user_feats = torch.randn(B, 32)
+    item_feats = torch.randn(B, 64)
+
+    model = TwoTowerRecSys(user_dim=32, item_dim=64, embed_dim=128)
+    loss, logits = model(user_feats, item_feats)
+    print(f"Two-Tower In-Batch Loss: {loss.item():.4f}")
+    print(f"Logits Matrix Shape     : {logits.shape} (4x4 User-Item Similarity)")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 7.1 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 7.1: Industrial Two-Tower Recommender with Approximate Vector Retrieval</h3>
+        <p class="project-desc">Architect, train, and deploy an end-to-end two-tower video recommendation retrieval engine, pre-computing millions of item embeddings into a FAISS/HNSW index, and serving sub-10ms candidate retrieval queries via FastAPI.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch71_recsys/twotower_model.py" target="_blank">🔗 Full Project Code: part7_system_design/ch71_recsys/twotower_model.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In high-throughput streaming video platforms (YouTube, Twitch), candidate retrieval systems must ingest continuous user interaction clicks and return personalized candidates from a 50-million video catalog in under 8 milliseconds. In this project, you build an asynchronous two-tower pipeline that streams user click events into online User Towers, queries GPU-accelerated HNSW vector indices, and benchmarks retrieval recall at scale.</p>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 7.2 — REAL-WORLD SYSTEM DESIGNS
+     CHAPTER 7.2 — DISTRIBUTED VECTOR SEARCH AT SCALE
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-7-2">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 7.2</span>
-    <h2 class="chapter-title">Real-World System Designs</h2>
-    <span class="chapter-subtitle">YouTube Recommendation Funnel, Search Autocomplete &amp; Fraud Scoring</span>
+    <h2 class="chapter-title">Distributed Vector Search at Scale</h2>
+    <span class="chapter-subtitle">The Exact Search Complexity Wall, HNSW Multi-Layer Graphs, IVF-PQ Compression &amp; Sharding</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"Complex systems that work are invariably found to have evolved from simple systems that worked."</p>
-    <p class="attribution">— John Gall (Gall's Law)</p>
+    <p>"Searching through a billion vectors is not an algorithmic problem. It is a memory hierarchy problem. The fastest search algorithm is the one that fits entirely inside CPU cache lines."</p>
+    <p class="attribution">— Systems AI Maxim</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>At scale (1 billion+ videos, 100 million active users), scoring every video for every user on every page refresh requires $10^9 \times 10^8 = 10^{17}$ predictions per second—an impossibility. Real-world systems use a <strong>Multi-Stage Funnel Architecture</strong>.</p>
+    <!-- SECTION 1: THE COMPLEXITY WALL -->
+    <h3>1. The Exact k-NN Complexity Wall</h3>
+    <p>In modern enterprise AI systems (Retrieval-Augmented Generation, visual search, and recommendation engines), data is represented as high-dimensional embedding vectors ($d \in [512, 1536]$). Finding the exact $k$-nearest neighbors via a brute-force linear scan (Flat Index) requires evaluating:</p>
+    $$\text{FLOPs per Query} = N \cdot d \cdot 2$$
+    <p>For a catalog of $N = 100,000,000$ vectors of dimension $d = 1,536$ in standard IEEE FP32 ($4 \text{ bytes}$):</p>
+    $$\text{Raw Memory Footprint} = 100 \times 10^6 \times 1,536 \times 4 \text{ bytes} \approx \mathbf{614.4 \text{ Gigabytes of RAM}}!$$
+    <p>A single query takes <strong>over 8 seconds</strong> on a multi-core CPU. To achieve interactive sub-15ms search across billions of items, we must abandon exact linear scans in favor of <strong>Approximate Nearest Neighbor (ANN) Search</strong>, which trades a negligible $1\%$ to $2\%$ drop in recall for a <strong>$1,000\times$ speedup</strong>.</p>
 
-    <h3>1. The Two-Stage Funnel: Candidate Retrieval + Heavy Ranking</h3>
+    <!-- SECTION 2: HNSW MULTI-LAYER GRAPHS -->
+    <h3>2. Hierarchical Navigable Small World (HNSW): Malkov &amp; Yashunin, 2018</h3>
+    <p><strong>HNSW</strong> is the gold standard graph-based ANN algorithm, deployed in Pinecone, Milvus, and Qdrant. Inspired by the 1D Skip List, HNSW constructs a multi-layer geometric proximity graph:</p>
+
+    <div class="real-world-box">
+      <h4>🌐 The Multi-Layer Proximity Graph Architecture</h4>
+      <ul>
+        <li><strong>Top Layers ($l_{\max}$):</strong> Contain a sparse subset of vectors connected by long-range geometric links. Queries take massive "high-speed jumps" across the global coordinate space.</li>
+        <li><strong>Bottom Layer (Layer 0):</strong> Contains all $N$ vectors connected by dense, short-range local links.</li>
+      </ul>
+      <p><strong>The Query Routing Algorithm:</strong></p>
+      <ol>
+        <li>Start at the designated entry point at top layer $l_{\max}$.</li>
+        <li>Perform greedy local routing: move to the neighbor closest to the query vector.</li>
+        <li>When a local minimum is reached on layer $l$, drop vertically to the same node on layer $l-1$.</li>
+        <li>Repeat greedy routing until reaching Layer 0, where a bounded beam search discovers the top-$k$ nearest neighbors!</li>
+      </ol>
+      <p><em>Search Complexity:</em> Reduces search time from linear $O(N)$ down to <strong>logarithmic $O(\log N)$</strong>! However, storing graph edge lists requires significant auxiliary RAM ($1.5\times$ to $2\times$ raw vector size).</p>
+    </div>
+
+    <!-- SECTION 3: IVF-PQ COMPRESSION -->
+    <h3>3. Inverted File with Product Quantization (IVF-PQ)</h3>
+    <p>When dataset scale reaches billions of vectors, even storing vectors in RAM becomes economically unfeasible. <strong>Product Quantization (PQ - Jégou et al., 2011)</strong> solves this via lossy vector compression:</p>
+
+    <div class="key-insight">
+      <p><strong>The Mechanics of Product Quantization (PQ):</strong></p>
+      <ol>
+        <li>A $d$-dimensional vector is split into $m$ distinct sub-vectors of length $d/m$ (e.g. A 768-dim vector is split into $m = 64$ sub-vectors of dimension 12).</li>
+        <li>For each sub-vector space, K-Means clusters the training data into $K = 256$ centroids.</li>
+        <li>Because $256 = 2^8$, each centroid index fits into exactly <strong>1 single byte (uint8)</strong>!</li>
+        <li>Each sub-vector is replaced by the 1-byte index of its nearest centroid.</li>
+      </ol>
+      <p><em>The Compression Miracle:</em> A 768-dimensional float32 vector ($3,072 \text{ bytes}$) is compressed into $m = 64$ bytes: <strong>a staggering $48\times$ memory reduction!</strong></p>
+    </div>
+
+    <h4>Asymmetric Distance Computation (ADC)</h4>
+    <p>During a query, does the engine decompress the quantized vectors back into floats? <strong>No!</strong> Using <strong>Asymmetric Distance Computation (ADC)</strong>:</p>
     <ul>
-      <li><strong>Stage 1: Candidate Generation (Retrieval):</strong> Narrows the candidate universe from 1 billion items down to ~500 items in <10ms using fast two-tower embedding dot-products or approximate nearest neighbor (ANN) search.</li>
-      <li><strong>Stage 2: Heavy Ranking:</strong> Takes the 500 candidates and passes them through a deep scoring network (Transformer/DLRM) evaluating hundreds of interaction features (user history, video age, device, time-of-day), sorting the final Top 10 feed.</li>
+      <li>The uncompressed query vector computes its exact Euclidean distance to all $256$ centroids in each of the $m$ sub-spaces, storing them in a small $m \times 256$ lookup table ($16\text{ KB}$, fitting entirely inside CPU L1 cache!).</li>
+      <li>Evaluating the distance to any of the 1 billion database vectors reduces to summing $m$ values from the lookup table via fast CPU table lookups:
+      $$d(\mathbf{q}, \mathbf{x}) \approx \sum_{j=1}^m \text{LookupTable}[j, \text{index}_j(\mathbf{x})]$$</li>
     </ul>
 
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Distributed Vector Search</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-pinecone">Pinecone</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are designing a distributed vector search cluster for <strong>$1,000,000,000$ (1 Billion) vectors</strong> of dimension $d = 768$. Calculate the exact RAM required for:</p>
+        <ol>
+          <li>Uncompressed raw vectors in FP32.</li>
+          <li>HNSW Index with graph edges ($M = 32$ links per node).</li>
+          <li>IVF-PQ64 compressed index.</li>
+        </ol>
+        <p>Design a horizontal sharding cluster to serve 10,000 QPS with a p99 latency SLA of $<15\text{ ms}$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Hardware Sizing Audit</div>
+
+        <p class="step"><strong>Step 1: Uncompressed Raw FP32 Vector Footprint:</strong>
+        $$\text{Memory} = 10^9 \times 768 \times 4 \text{ bytes} = 3,072,000,000,000 \text{ bytes} \approx \mathbf{3.072 \text{ Terabytes of RAM}}!$$</p>
+
+        <p class="step"><strong>Step 2: HNSW Graph Index Footprint:</strong><br>
+        HNSW stores raw vectors ($3.07\text{ TB}$) plus graph adjacency lists. Each node has on average $M = 32$ integer neighbor pointers (4 bytes each) across layers:
+        $$\text{Graph Overhead} = 10^9 \times 32 \times 4 \text{ bytes} \approx 128 \text{ GB}$$
+        Adding allocator padding and node structures brings total HNSW memory to approximately <strong>$4.5 \text{ Terabytes of RAM}$</strong>!</p>
+
+        <p class="step"><strong>Step 3: IVF-PQ64 Compressed Index Footprint:</strong><br>
+        With $m = 64$ sub-vectors, each vector is encoded into exactly $64$ bytes:
+        $$\text{Vector Memory} = 10^9 \times 64 \text{ bytes} = \mathbf{64 \text{ Gigabytes}}!$$
+        Adding inverted lists and 64-bit document ID mappings ($8 \text{ bytes} \times 10^9 = 8 \text{ GB}$):
+        $$\text{Total IVF-PQ64 Memory} = 64 + 8 = \mathbf{72 \text{ Gigabytes of RAM}}!$$
+        <strong>Result: IVF-PQ reduces the cluster RAM requirement from 4,500 GB down to 72 GB (a 98.4% memory reduction)!</strong></p>
+
+        <p class="step"><strong>Step 4: Distributed Sharding Cluster Architecture:</strong><br>
+        To serve 10,000 QPS with sub-15ms latency, we deploy <strong>16 Shards with 3 Replicas</strong> (48 total worker nodes):
+        <ul>
+          <li>Each shard holds $10^9 / 16 = 62,500,000$ vectors ($4.5\text{ GB}$ per node).</li>
+          <li>Query routers scatter queries concurrently across all 16 shards, each returning top-100 candidates.</li>
+          <li>The router executes a reciprocal rank merge and returns the top 10 results in <strong>$8\text{ ms}$</strong>!</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 7.2: Product Quantization &amp; Asymmetric Distance Computation</h3>
+    <p>Below is an educational implementation of Product Quantization (PQ) and Asymmetric Distance Computation (ADC) from scratch in pure NumPy.</p>
+
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 7.2 — Two-Stage Recommendation Architecture</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_ai_system_design/ch72_real_world_architectures/two_stage_recommender.py" target="_blank">🔗 View in GitHub: part7_ai_system_design/ch72_real_world_architectures/two_stage_recommender.py</a></p>
+      <div class="code-lab-header">Code Lab 7.2 — Product Quantization &amp; ADC Engine</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch72_vector_search/product_quantizer.py" target="_blank">🔗 View in GitHub: part7_system_design/ch72_vector_search/product_quantizer.py</a></p>
 <pre><code>import numpy as np
 
-class TwoStageRecommender:
-    def __init__(self, num_items=5000, dim=32):
-        self.item_ids = [f"item_{i}" for i in range(num_items)]
-        self.embeds = np.random.randn(num_items, dim)
-        self.embeds /= np.linalg.norm(self.embeds, axis=1, keepdims=True)
+class ProductQuantizer:
+    def __init__(self, d=64, m=8, k=256):
+        self.d = d # Total dimension
+        self.m = m # Number of sub-vectors
+        self.d_sub = d // m # Dimension per sub-vector
+        self.k = k # Number of centroids (256 fits in uint8)
+        self.centroids = None # (m, k, d_sub)
 
-    def retrieve_candidates(self, user_vec, k=50):
-        scores = np.dot(self.embeds, user_vec)
-        return [self.item_ids[i] for i in np.argsort(scores)[::-1][:k]]</code></pre>
+    def fit(self, X_train):
+        N = X_train.shape[0]
+        self.centroids = np.zeros((self.m, self.k, self.d_sub))
+        
+        # Train K-Means independently for each sub-space
+        for j in range(self.m):
+            sub_X = X_train[:, j * self.d_sub : (j + 1) * self.d_sub]
+            # Fast random initialization for demonstration
+            random_idx = np.random.choice(N, self.k, replace=False)
+            self.centroids[j] = sub_X[random_idx]
+
+    def encode(self, X):
+        """Compress float32 vectors into uint8 byte codes"""
+        N = X.shape[0]
+        codes = np.zeros((N, self.m), dtype=np.uint8)
+
+        for j in range(self.m):
+            sub_X = X[:, j * self.d_sub : (j + 1) * self.d_sub]
+            # Compute distance to all 256 centroids: (N, 256)
+            c = self.centroids[j]
+            dists = np.sum((sub_X[:, np.newaxis, :] - c[np.newaxis, :, :]) ** 2, axis=-1)
+            codes[:, j] = np.argmin(dists, axis=1)
+
+        return codes
+
+    def compute_asymmetric_distances(self, query, codes):
+        """ADC: Query is uncompressed float32, database is compressed uint8 bytes!"""
+        # 1. Pre-compute query-to-centroid distance lookup table: (m, 256)
+        lookup_table = np.zeros((self.m, self.k))
+        for j in range(self.m):
+            sub_q = query[j * self.d_sub : (j + 1) * self.d_sub]
+            lookup_table[j] = np.sum((self.centroids[j] - sub_q) ** 2, axis=-1)
+
+        # 2. Fast lookup: sum distances across sub-spaces
+        N = codes.shape[0]
+        distances = np.zeros(N)
+        for j in range(self.m):
+            distances += lookup_table[j, codes[:, j]]
+
+        return distances
+
+if __name__ == "__main__":
+    np.random.seed(42)
+    # 10,000 vectors of dimension 64
+    X = np.random.randn(10000, 64).astype(np.float32)
+    pq = ProductQuantizer(d=64, m=8, k=256)
+    pq.fit(X)
+
+    # Encode database
+    compressed_codes = pq.encode(X)
+    print(f"Original Vector Size  : {X.nbytes / 1024:.1f} KB")
+    print(f"Compressed Codes Size : {compressed_codes.nbytes / 1024:.1f} KB (8x Memory Savings!)")
+
+    # Search with uncompressed query
+    query = np.random.randn(64).astype(np.float32)
+    approx_dists = pq.compute_asymmetric_distances(query, compressed_codes)
+    top_k = np.argsort(approx_dists)[:5]
+    print("Top 5 Nearest Neighbor Indices via ADC:", top_k)</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 7.2 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 7.2: Distributed Vector Search Engine with IVF-PQ</h3>
+        <p class="project-desc">Architect and deploy a distributed vector database engine featuring multi-threaded Product Quantization, Inverted File (IVF) centroid partitioning, and consistent hash routing across a multi-node cluster.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch72_vector_search/product_quantizer.py" target="_blank">🔗 Full Project Code: part7_system_design/ch72_vector_search/product_quantizer.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In massive multimodal search engines (Pinterest, Shopify), visual image catalogs contain over 500 million product embeddings. Storing uncompressed vectors in RAM requires tens of thousands of dollars in cloud infrastructure per month. In this project, you build an industrial IVF-PQ vector search service that indexes 10 million vectors in under 2GB of RAM, serving sub-10ms queries with 94% recall parity.</p>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 7.3 — ETHICS, FAIRNESS & EXPLAINABILITY
+     CHAPTER 7.3 — EDGE AI, MODEL COMPRESSION & QUANTIZATION
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-7-3">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 7.3</span>
-    <h2 class="chapter-title">Ethics, Fairness &amp; Explainability</h2>
-    <span class="chapter-subtitle">SHAP Values, LIME &amp; The Mathematical Impossibility Theorem of Fairness</span>
+    <h2 class="chapter-title">Edge AI, Model Compression &amp; Quantization</h2>
+    <span class="chapter-subtitle">Quantization-Aware Training (QAT), Straight-Through Estimators, MobileNet &amp; ONNX</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"Ethics is knowing the difference between what you have a right to do and what is right to do."</p>
-    <p class="attribution">— Potter Stewart</p>
+    <p>"Anyone can run a 70-billion parameter model in an air-conditioned datacenter consuming 500 Watts of power. An AI engineer makes neural networks run on a 3-Watt smartphone battery without making the device hot to the touch."</p>
+    <p class="attribution">— Edge AI Maxim</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>As AI governs credit lending, hiring, medical diagnoses, and criminal sentencing, explaining <em>why</em> a model made a decision is legally and ethically mandatory (EU AI Act, GDPR Article 22).</p>
+    <!-- SECTION 1: THE EDGE REALITY -->
+    <h3>1. The Physical Constraints of Edge Hardware</h3>
+    <p>Deploying AI models to edge devices (Apple iPhones, Android smartphones, DJI drones, Raspberry Pi microcontrollers, and VR headsets) requires engineering under severe physical constraints:</p>
+    <ul>
+      <li><strong>Thermal Envelopes:</strong> Edge devices have passive cooling with zero fans. Sustained compute exceeding <strong>$3$ to $5 \text{ Watts}$</strong> causes thermal throttling, rapidly draining batteries and degrading user experience.</li>
+      <li><strong>Memory Bandwidth &amp; Capacity:</strong> While cloud servers feature 80GB HBM3 memory running at 3.35 TB/s, smartphones share 4GB to 8GB of low-power LPDDR5 RAM across the operating system and camera pipeline.</li>
+    </ul>
 
-    <h3>1. SHAP (SHapley Additive exPlanations)</h3>
-    <p>Lundberg and Lee (2017) unified feature attribution through cooperative game theory. The Shapley value $\phi_i$ assigns a unique payoff attribution to feature $i$ based on its marginal contribution across all possible feature coalitions $S \subseteq F \setminus \{i\}$:
-    $$\phi_i = \sum_{S \subseteq F \setminus \{i\}} \frac{|S|!(|F| - |S| - 1)!}{|F|!} \left[ f(S \cup \{i\}) - f(S) \right]$$
-    SHAP is the only feature attribution method guaranteed to satisfy efficiency, symmetry, dummy, and additivity axioms.</p>
+    <!-- SECTION 2: DEPTHWISE SEPARABLE CONVOLUTIONS -->
+    <h3>2. MobileNet: Depthwise Separable Convolutions (Howard et al., Google 2017)</h3>
+    <p>Standard 2D convolutions perform spatial filtering and channel combination simultaneously in a single heavy operation. <strong>MobileNet</strong> factors this into two decoupled steps:</p>
+    <ol>
+      <li><strong>Depthwise Convolution:</strong> Applies a single $K \times K$ convolutional filter per input channel independently (computes spatial features with zero inter-channel communication).</li>
+      <li><strong>Pointwise Convolution:</strong> Applies a $1 \times 1$ convolution across all channels, linearly combining features into $N$ output channels.</li>
+    </ol>
+
+    <div class="real-world-box">
+      <h4>🏆 The Mathematical FLOPs Reduction Derivation</h4>
+      <p>Let input feature map be $D_F \times D_F \times M$ and output be $D_F \times D_F \times N$ with filter size $D_K \times D_K$:</p>
+      <ul>
+        <li>Standard Convolution FLOPs:
+        $$\text{FLOPs}_{\text{std}} = D_K \cdot D_K \cdot M \cdot N \cdot D_F \cdot D_F$$</li>
+        <li>Depthwise Separable Convolution FLOPs:
+        $$\text{FLOPs}_{\text{sep}} = \underbrace{D_K \cdot D_K \cdot M \cdot D_F \cdot D_F}_{\text{Depthwise Step}} + \underbrace{M \cdot N \cdot D_F \cdot D_F}_{\text{Pointwise Step}}$$</li>
+      </ul>
+      <p>Compute the ratio of computation:</p>
+      $$\text{Ratio} = \frac{D_K^2 \cdot M \cdot D_F^2 + M \cdot N \cdot D_F^2}{D_K^2 \cdot M \cdot N \cdot D_F^2} = \frac{D_K^2 \cdot M + M \cdot N}{D_K^2 \cdot M \cdot N} = \mathbf{\frac{1}{N} + \frac{1}{D_K^2}}$$
+      <p>For standard $3 \times 3$ filters ($D_K = 3$) with $N = 512$ channels:</p>
+      $$\text{Ratio} = \frac{1}{512} + \frac{1}{9} \approx 0.0019 + 0.1111 \approx \mathbf{0.113} \implies \mathbf{88.7\% \text{ Reduction in FLOPs!}}$$
+      <p><em>Depthwise Separable Convolutions deliver a nearly $9\times$ reduction in computational operations and parameter count with virtually zero loss in visual accuracy!</em></p>
+    </div>
+
+    <!-- SECTION 3: QUANTIZATION-AWARE TRAINING -->
+    <h3>3. Quantization-Aware Training (QAT) &amp; Straight-Through Estimators</h3>
+    <p>Converting a trained 32-bit floating point model to 8-bit integers via Post-Training Quantization (PTQ) frequently causes severe accuracy degradation on compact edge models. <strong>Quantization-Aware Training (QAT)</strong> solves this by simulating 8-bit fixed-point quantization noise directly during model training.</p>
+
+    <h4>Uniform Affine Quantization Formula</h4>
+    <p>Maps continuous real float $r \in [r_{\min}, r_{\max}]$ to an 8-bit unsigned integer $q \in [0, 255]$:</p>
+    $$q = \text{clamp}\left( \left\lfloor \frac{r}{S} \right\rceil + Z, 0, 255 \right)$$
+    $$S = \frac{r_{\max} - r_{\min}}{255}, \quad Z = \text{round}\left( -\frac{r_{\min}}{S} \right)$$
+    <p>Where $S$ is the positive real Scale Factor and $Z$ is the integer Zero-Point.</p>
+
+    <div class="key-insight">
+      <p><strong>The Straight-Through Estimator (STE)</strong><br>
+      The rounding function $\lfloor \cdot \rceil$ is a step function: its derivative is zero everywhere, and undefined at half-integers ($\frac{d}{dx} \lfloor x \rceil = 0$). Standard backpropagation would result in exact zero gradients, freezing the network.</p>
+      <p>The <strong>Straight-Through Estimator (STE)</strong> bypasses this non-differentiable operator during backpropagation by treating the derivative of rounding as the identity:</p>
+      $$\frac{\partial \lfloor x \rceil}{\partial x} \approx 1, \quad \text{for } x \in [\text{clip}_{\min}, \text{clip}_{\max}]$$
+      <p><em>The forward pass experiences realistic 8-bit fixed-point rounding noise, while the backward pass propagates smooth FP32 gradients, allowing weights to adapt and preserve 99.8% of full accuracy!</em></p>
+    </div>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Edge AI</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-apple">Apple</span>
+        <span class="company-tag company-qualcomm">Qualcomm</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are deploying an image classification model to the Apple Neural Engine (ANE) on an iPhone 16. The model must have a binary weight footprint under $25 \text{ MB}$ and execute inference in $<4 \text{ ms}$. Compare <strong>Structured Channel Pruning</strong> vs. <strong>Unstructured Weight Pruning</strong> for hardware acceleration on mobile Neural Processing Units (NPUs).</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Hardware Acceleration Audit</div>
+
+        <p class="step"><strong>Step 1: Unstructured (Fine-Grained) Pruning:</strong><br>
+        Individually sets weights to zero if $|w_{i, j}| &lt; \tau$. While this achieves 80% weight sparsity, the zero entries are scattered randomly across the weight matrix.<br>
+        <strong>The Hardware Penalty:</strong> Mobile NPUs and SIMD vector engines execute matrix multiplications using dense, wide vector registers (e.g. 128-bit or 256-bit registers). Loading scattered non-zero elements requires complex indirect memory index addressing and branching logic, causing CPU/NPU pipeline stalls. On standard mobile hardware, <strong>unstructured sparsity results in ZERO speedup or even runs SLOWER than dense matrices!</strong></p>
+
+        <p class="step"><strong>Step 2: Structured (Coarse-Grained) Channel Pruning:</strong><br>
+        Removes entire convolutional filter channels or linear neuron columns based on $L_1$-norm importance.<br>
+        <strong>The Hardware Advantage:</strong> When a channel is removed, the weight matrix is physically resized into a smaller, contiguous dense matrix ($W \in \mathbb{R}^{C_{\text{new}} \times C_{\text{in}}}$). The mobile NPU executes standard contiguous dense GEMM instructions at maximum hardware clock speed, delivering a <strong>direct $2\times$ to $4\times$ real-world speedup with zero special hardware requirements!</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 7.3: Depthwise Separable Convolutions &amp; Knowledge Distillation</h3>
+    <p>Below is a production-grade PyTorch implementation of a Depthwise Separable Convolution block and Hinton's Knowledge Distillation loss function.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 7.3 — Permutation Feature Importance & Fairness Audit</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_ai_system_design/ch73_ethics_fairness_explainability/shap_values_permutation.py" target="_blank">🔗 View in GitHub: part7_ai_system_design/ch73_ethics_fairness_explainability/shap_values_permutation.py</a></p>
-<pre><code>import numpy as np
+      <div class="code-lab-header">Code Lab 7.3 — Depthwise Separable Block &amp; Distillation Loss</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch73_edge_ai/mobilenet_block.py" target="_blank">🔗 View in GitHub: part7_system_design/ch73_edge_ai/mobilenet_block.py</a></p>
+<pre><code>import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-def permutation_importance(predict_fn, X, y, metric):
-    base_score = metric(y, predict_fn(X))
-    imp = {}
-    for j in range(X.shape[1]):
-        X_p = X.copy()
-        np.random.shuffle(X_p[:, j])
-        imp[f"feat_{j}"] = base_score - metric(y, predict_fn(X_p))
-    return imp</code></pre>
+class DepthwiseSeparableConv(nn.Module):
+    """
+    MobileNet Depthwise Separable Convolution:
+    Depthwise (groups=in_ch) + Pointwise (1x1 Conv)
+    """
+    def __init__(self, in_channels, out_channels, stride=1):
+        super().__init__()
+        # 1. Depthwise Conv: groups=in_channels (1 filter per channel)
+        self.depthwise = nn.Conv2d(
+            in_channels, in_channels, kernel_size=3, stride=stride, padding=1, groups=in_channels, bias=False
+        )
+        self.bn1 = nn.BatchNorm2d(in_channels)
+        self.relu = nn.ReLU(inplace=True)
+
+        # 2. Pointwise Conv: 1x1 Conv across all channels
+        self.pointwise = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+
+    def forward(self, x):
+        x = self.relu(self.bn1(self.depthwise(x)))
+        x = self.relu(self.bn2(self.pointwise(x)))
+        return x
+
+def knowledge_distillation_loss(student_logits, teacher_logits, labels, T=4.0, alpha=0.7):
+    """
+    Hinton Knowledge Distillation Loss:
+    L_total = (1 - alpha) * CrossEntropy + alpha * T^2 * KL_Divergence
+    """
+    # 1. Hard Cross-Entropy Loss with true ground truth
+    hard_loss = F.cross_entropy(student_logits, labels)
+
+    # 2. Soft KL Divergence Loss with softened teacher predictions
+    soft_student = F.log_softmax(student_logits / T, dim=-1)
+    soft_teacher = F.softmax(teacher_logits / T, dim=-1)
+    soft_loss = F.kl_div(soft_student, soft_teacher, reduction="batchmean") * (T ** 2)
+
+    return (1.0 - alpha) * hard_loss + alpha * soft_loss
+
+if __name__ == "__main__":
+    block = DepthwiseSeparableConv(in_channels=64, out_channels=128)
+    x = torch.randn(2, 64, 32, 32)
+    out = block(x)
+    print(f"Input Shape : {x.shape}")
+    print(f"Output Shape: {out.shape} (Channels expanded from 64 to 128!)")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 7.3 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 7.3: Sub-50MB Edge Visual Perception &amp; Classification Engine</h3>
+        <p class="project-desc">Architect, compress, and deploy an ultra-lightweight edge visual classification engine, applying Depthwise Separable Convolutions, Quantization-Aware Training (QAT) to INT8, Knowledge Distillation from a heavy ResNet-101 teacher, and exporting to ONNX Runtime for sub-5ms mobile execution.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch73_edge_ai/mobilenet_block.py" target="_blank">🔗 Full Project Code: part7_system_design/ch73_edge_ai/mobilenet_block.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In autonomous aerial robotics (Skydio, military UAVs), onboard obstacle avoidance models must process 4K stereo camera streams on low-power NVIDIA Jetson Nano or Qualcomm Snapdragon chips. In this project, you construct a quantized visual perception pipeline that fits in under 25MB of RAM, consumes less than 3 Watts of power, and achieves 60 FPS real-time execution with zero cloud dependency.</p>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     PROJECT 7 — TWO-STAGE RECOMMENDATION SYSTEM
+     HANDS-ON CAPSTONE PROJECT 7 — BILLION-SCALE RECOMMENDATION PLATFORM
      ====================================================================== -->
 <div class="project-section">
   <div class="project-header">
-    <span class="project-tag">Hands-On Project 7</span>
-    <h3 class="project-title">Industrial Two-Stage Recommendation Engine Architecture</h3>
-    <p class="project-desc">Architect and implement a candidate generation tower with approximate nearest neighbors (ANN) paired with a deep ranking model with real-time feature retrieval.</p>
-    <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_ai_system_design/ch72_real_world_architectures/two_stage_recommender.py" target="_blank">🔗 Full Project Code: part7_ai_system_design/ch72_real_world_architectures/two_stage_recommender.py</a></p>
+    <span class="project-tag">Hands-On Capstone Project 7</span>
+    <h3 class="project-title">Billion-Scale Enterprise Recommendation &amp; Vector Intelligence Platform</h3>
+    <p class="project-desc">Synthesize all large-scale system design pillars—from Two-Tower dual encoder candidate retrieval and Inverted File Product Quantization (IVF-PQ) to distributed vector sharding, Quantization-Aware Training (QAT), and ONNX runtime edge deployment—into an industrial recommendation platform.</p>
+    <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/project7_recsys_scale/recsys_platform.py" target="_blank">🔗 Full Project Code: part7_system_design/project7_recsys_scale/recsys_platform.py</a></p>
   </div>
   <div class="project-body">
-    <p><strong>Architecture Overview:</strong> You will simulate a catalog of 1,000,000 items, build an HNSW index to retrieve top-100 candidates in under 3ms, evaluate contextual features through a ranker model, and output personalized Top-10 recommendations under a 15ms P99 SLA.</p>
+    <p><strong>Architecture &amp; Production Pipeline:</strong> In this capstone project, you architect an end-to-end distributed recommendation system:</p>
+    <ul>
+      <li><strong>Two-Tower Retrieval Core:</strong> Pre-computes 10 million item embeddings, indexing them into a distributed IVF-PQ vector cluster with $48	imes$ RAM compression.</li>
+      <li><strong>Sub-10ms Candidate Retrieval:</strong> Evaluates the User Tower in real time, querying the vector cluster via Asymmetric Distance Computation with sub-5ms latency.</li>
+      <li><strong>Edge Compression:</strong> Distills heavy scoring models into an 8-bit quantized MobileNet backbone exported to ONNX for instantaneous client-side ranking.</li>
+    </ul>
   </div>
 </div>

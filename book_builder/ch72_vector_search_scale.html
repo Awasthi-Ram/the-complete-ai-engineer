@@ -1,0 +1,208 @@
+<!-- ======================================================================
+     CHAPTER 7.2 — DISTRIBUTED VECTOR SEARCH AT SCALE
+     ====================================================================== -->
+<div class="chapter" id="chapter-7-2">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 7.2</span>
+    <h2 class="chapter-title">Distributed Vector Search at Scale</h2>
+    <span class="chapter-subtitle">The Exact Search Complexity Wall, HNSW Multi-Layer Graphs, IVF-PQ Compression &amp; Sharding</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Searching through a billion vectors is not an algorithmic problem. It is a memory hierarchy problem. The fastest search algorithm is the one that fits entirely inside CPU cache lines."</p>
+    <p class="attribution">— Systems AI Maxim</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE COMPLEXITY WALL -->
+    <h3>1. The Exact k-NN Complexity Wall</h3>
+    <p>In modern enterprise AI systems (Retrieval-Augmented Generation, visual search, and recommendation engines), data is represented as high-dimensional embedding vectors ($d \in [512, 1536]$). Finding the exact $k$-nearest neighbors via a brute-force linear scan (Flat Index) requires evaluating:</p>
+    $$\text{FLOPs per Query} = N \cdot d \cdot 2$$
+    <p>For a catalog of $N = 100,000,000$ vectors of dimension $d = 1,536$ in standard IEEE FP32 ($4 \text{ bytes}$):</p>
+    $$\text{Raw Memory Footprint} = 100 \times 10^6 \times 1,536 \times 4 \text{ bytes} \approx \mathbf{614.4 \text{ Gigabytes of RAM}}!$$
+    <p>A single query takes <strong>over 8 seconds</strong> on a multi-core CPU. To achieve interactive sub-15ms search across billions of items, we must abandon exact linear scans in favor of <strong>Approximate Nearest Neighbor (ANN) Search</strong>, which trades a negligible $1\%$ to $2\%$ drop in recall for a <strong>$1,000\times$ speedup</strong>.</p>
+
+    <!-- SECTION 2: HNSW MULTI-LAYER GRAPHS -->
+    <h3>2. Hierarchical Navigable Small World (HNSW): Malkov &amp; Yashunin, 2018</h3>
+    <p><strong>HNSW</strong> is the gold standard graph-based ANN algorithm, deployed in Pinecone, Milvus, and Qdrant. Inspired by the 1D Skip List, HNSW constructs a multi-layer geometric proximity graph:</p>
+
+    <div class="real-world-box">
+      <h4>🌐 The Multi-Layer Proximity Graph Architecture</h4>
+      <ul>
+        <li><strong>Top Layers ($l_{\max}$):</strong> Contain a sparse subset of vectors connected by long-range geometric links. Queries take massive "high-speed jumps" across the global coordinate space.</li>
+        <li><strong>Bottom Layer (Layer 0):</strong> Contains all $N$ vectors connected by dense, short-range local links.</li>
+      </ul>
+      <p><strong>The Query Routing Algorithm:</strong></p>
+      <ol>
+        <li>Start at the designated entry point at top layer $l_{\max}$.</li>
+        <li>Perform greedy local routing: move to the neighbor closest to the query vector.</li>
+        <li>When a local minimum is reached on layer $l$, drop vertically to the same node on layer $l-1$.</li>
+        <li>Repeat greedy routing until reaching Layer 0, where a bounded beam search discovers the top-$k$ nearest neighbors!</li>
+      </ol>
+      <p><em>Search Complexity:</em> Reduces search time from linear $O(N)$ down to <strong>logarithmic $O(\log N)$</strong>! However, storing graph edge lists requires significant auxiliary RAM ($1.5\times$ to $2\times$ raw vector size).</p>
+    </div>
+
+    <!-- SECTION 3: IVF-PQ COMPRESSION -->
+    <h3>3. Inverted File with Product Quantization (IVF-PQ)</h3>
+    <p>When dataset scale reaches billions of vectors, even storing vectors in RAM becomes economically unfeasible. <strong>Product Quantization (PQ - Jégou et al., 2011)</strong> solves this via lossy vector compression:</p>
+
+    <div class="key-insight">
+      <p><strong>The Mechanics of Product Quantization (PQ):</strong></p>
+      <ol>
+        <li>A $d$-dimensional vector is split into $m$ distinct sub-vectors of length $d/m$ (e.g. A 768-dim vector is split into $m = 64$ sub-vectors of dimension 12).</li>
+        <li>For each sub-vector space, K-Means clusters the training data into $K = 256$ centroids.</li>
+        <li>Because $256 = 2^8$, each centroid index fits into exactly <strong>1 single byte (uint8)</strong>!</li>
+        <li>Each sub-vector is replaced by the 1-byte index of its nearest centroid.</li>
+      </ol>
+      <p><em>The Compression Miracle:</em> A 768-dimensional float32 vector ($3,072 \text{ bytes}$) is compressed into $m = 64$ bytes: <strong>a staggering $48\times$ memory reduction!</strong></p>
+    </div>
+
+    <h4>Asymmetric Distance Computation (ADC)</h4>
+    <p>During a query, does the engine decompress the quantized vectors back into floats? <strong>No!</strong> Using <strong>Asymmetric Distance Computation (ADC)</strong>:</p>
+    <ul>
+      <li>The uncompressed query vector computes its exact Euclidean distance to all $256$ centroids in each of the $m$ sub-spaces, storing them in a small $m \times 256$ lookup table ($16\text{ KB}$, fitting entirely inside CPU L1 cache!).</li>
+      <li>Evaluating the distance to any of the 1 billion database vectors reduces to summing $m$ values from the lookup table via fast CPU table lookups:
+      $$d(\mathbf{q}, \mathbf{x}) \approx \sum_{j=1}^m \text{LookupTable}[j, \text{index}_j(\mathbf{x})]$$</li>
+    </ul>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Distributed Vector Search</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-pinecone">Pinecone</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are designing a distributed vector search cluster for <strong>$1,000,000,000$ (1 Billion) vectors</strong> of dimension $d = 768$. Calculate the exact RAM required for:</p>
+        <ol>
+          <li>Uncompressed raw vectors in FP32.</li>
+          <li>HNSW Index with graph edges ($M = 32$ links per node).</li>
+          <li>IVF-PQ64 compressed index.</li>
+        </ol>
+        <p>Design a horizontal sharding cluster to serve 10,000 QPS with a p99 latency SLA of $<15\text{ ms}$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Hardware Sizing Audit</div>
+
+        <p class="step"><strong>Step 1: Uncompressed Raw FP32 Vector Footprint:</strong>
+        $$\text{Memory} = 10^9 \times 768 \times 4 \text{ bytes} = 3,072,000,000,000 \text{ bytes} \approx \mathbf{3.072 \text{ Terabytes of RAM}}!$$</p>
+
+        <p class="step"><strong>Step 2: HNSW Graph Index Footprint:</strong><br>
+        HNSW stores raw vectors ($3.07\text{ TB}$) plus graph adjacency lists. Each node has on average $M = 32$ integer neighbor pointers (4 bytes each) across layers:
+        $$\text{Graph Overhead} = 10^9 \times 32 \times 4 \text{ bytes} \approx 128 \text{ GB}$$
+        Adding allocator padding and node structures brings total HNSW memory to approximately <strong>$4.5 \text{ Terabytes of RAM}$</strong>!</p>
+
+        <p class="step"><strong>Step 3: IVF-PQ64 Compressed Index Footprint:</strong><br>
+        With $m = 64$ sub-vectors, each vector is encoded into exactly $64$ bytes:
+        $$\text{Vector Memory} = 10^9 \times 64 \text{ bytes} = \mathbf{64 \text{ Gigabytes}}!$$
+        Adding inverted lists and 64-bit document ID mappings ($8 \text{ bytes} \times 10^9 = 8 \text{ GB}$):
+        $$\text{Total IVF-PQ64 Memory} = 64 + 8 = \mathbf{72 \text{ Gigabytes of RAM}}!$$
+        <strong>Result: IVF-PQ reduces the cluster RAM requirement from 4,500 GB down to 72 GB (a 98.4% memory reduction)!</strong></p>
+
+        <p class="step"><strong>Step 4: Distributed Sharding Cluster Architecture:</strong><br>
+        To serve 10,000 QPS with sub-15ms latency, we deploy <strong>16 Shards with 3 Replicas</strong> (48 total worker nodes):
+        <ul>
+          <li>Each shard holds $10^9 / 16 = 62,500,000$ vectors ($4.5\text{ GB}$ per node).</li>
+          <li>Query routers scatter queries concurrently across all 16 shards, each returning top-100 candidates.</li>
+          <li>The router executes a reciprocal rank merge and returns the top 10 results in <strong>$8\text{ ms}$</strong>!</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 7.2: Product Quantization &amp; Asymmetric Distance Computation</h3>
+    <p>Below is an educational implementation of Product Quantization (PQ) and Asymmetric Distance Computation (ADC) from scratch in pure NumPy.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 7.2 — Product Quantization &amp; ADC Engine</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch72_vector_search/product_quantizer.py" target="_blank">🔗 View in GitHub: part7_system_design/ch72_vector_search/product_quantizer.py</a></p>
+<pre><code>import numpy as np
+
+class ProductQuantizer:
+    def __init__(self, d=64, m=8, k=256):
+        self.d = d # Total dimension
+        self.m = m # Number of sub-vectors
+        self.d_sub = d // m # Dimension per sub-vector
+        self.k = k # Number of centroids (256 fits in uint8)
+        self.centroids = None # (m, k, d_sub)
+
+    def fit(self, X_train):
+        N = X_train.shape[0]
+        self.centroids = np.zeros((self.m, self.k, self.d_sub))
+        
+        # Train K-Means independently for each sub-space
+        for j in range(self.m):
+            sub_X = X_train[:, j * self.d_sub : (j + 1) * self.d_sub]
+            # Fast random initialization for demonstration
+            random_idx = np.random.choice(N, self.k, replace=False)
+            self.centroids[j] = sub_X[random_idx]
+
+    def encode(self, X):
+        """Compress float32 vectors into uint8 byte codes"""
+        N = X.shape[0]
+        codes = np.zeros((N, self.m), dtype=np.uint8)
+
+        for j in range(self.m):
+            sub_X = X[:, j * self.d_sub : (j + 1) * self.d_sub]
+            # Compute distance to all 256 centroids: (N, 256)
+            c = self.centroids[j]
+            dists = np.sum((sub_X[:, np.newaxis, :] - c[np.newaxis, :, :]) ** 2, axis=-1)
+            codes[:, j] = np.argmin(dists, axis=1)
+
+        return codes
+
+    def compute_asymmetric_distances(self, query, codes):
+        """ADC: Query is uncompressed float32, database is compressed uint8 bytes!"""
+        # 1. Pre-compute query-to-centroid distance lookup table: (m, 256)
+        lookup_table = np.zeros((self.m, self.k))
+        for j in range(self.m):
+            sub_q = query[j * self.d_sub : (j + 1) * self.d_sub]
+            lookup_table[j] = np.sum((self.centroids[j] - sub_q) ** 2, axis=-1)
+
+        # 2. Fast lookup: sum distances across sub-spaces
+        N = codes.shape[0]
+        distances = np.zeros(N)
+        for j in range(self.m):
+            distances += lookup_table[j, codes[:, j]]
+
+        return distances
+
+if __name__ == "__main__":
+    np.random.seed(42)
+    # 10,000 vectors of dimension 64
+    X = np.random.randn(10000, 64).astype(np.float32)
+    pq = ProductQuantizer(d=64, m=8, k=256)
+    pq.fit(X)
+
+    # Encode database
+    compressed_codes = pq.encode(X)
+    print(f"Original Vector Size  : {X.nbytes / 1024:.1f} KB")
+    print(f"Compressed Codes Size : {compressed_codes.nbytes / 1024:.1f} KB (8x Memory Savings!)")
+
+    # Search with uncompressed query
+    query = np.random.randn(64).astype(np.float32)
+    approx_dists = pq.compute_asymmetric_distances(query, compressed_codes)
+    top_k = np.argsort(approx_dists)[:5]
+    print("Top 5 Nearest Neighbor Indices via ADC:", top_k)</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 7.2 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 7.2: Distributed Vector Search Engine with IVF-PQ</h3>
+        <p class="project-desc">Architect and deploy a distributed vector database engine featuring multi-threaded Product Quantization, Inverted File (IVF) centroid partitioning, and consistent hash routing across a multi-node cluster.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch72_vector_search/product_quantizer.py" target="_blank">🔗 Full Project Code: part7_system_design/ch72_vector_search/product_quantizer.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In massive multimodal search engines (Pinterest, Shopify), visual image catalogs contain over 500 million product embeddings. Storing uncompressed vectors in RAM requires tens of thousands of dollars in cloud infrastructure per month. In this project, you build an industrial IVF-PQ vector search service that indexes 10 million vectors in under 2GB of RAM, serving sub-10ms queries with 94% recall parity.</p>
+      </div>
+    </div>
+  </div>
+</div>

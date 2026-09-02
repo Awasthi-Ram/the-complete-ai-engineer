@@ -1,0 +1,175 @@
+<!-- ======================================================================
+     CHAPTER 8.2 — TEST-TIME COMPUTE & REASONING MODELS
+     ====================================================================== -->
+<div class="chapter" id="chapter-8-2">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 8.2</span>
+    <h2 class="chapter-title">Test-Time Compute &amp; Reasoning Models</h2>
+    <span class="chapter-subtitle">The Second Scaling Law, Hidden Chains of Thought, Monte Carlo Tree Search &amp; PRMs</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Pre-training builds the world model. Reinforcement learning shapes the intuition. But deep, multi-step thinking happens at test time, where the model spends compute to explore, backtrack, and verify."</p>
+    <p class="attribution">— Frontier Reasoning Maxim</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE SECOND SCALING LAW -->
+    <h3>1. The Second Scaling Law: Beyond Pre-Training</h3>
+    <p>For five years, the AI scaling hypothesis was dominated by the <strong>Kaplan and Chinchilla Pre-Training Scaling Laws</strong>: to make a model smarter, you trained more parameters on more trillions of web tokens. However, around 2024, the pre-training paradigm began experiencing diminishing returns due to the impending depletion of high-quality human text data on the public internet.</p>
+
+    <p>In late 2024, OpenAI unlocked the <strong>Second Scaling Law: Test-Time (Inference) Compute Scaling (o1, o3)</strong>:</p>
+
+    <div class="real-world-box">
+      <h4>⚡ The Test-Time Compute Paradigm</h4>
+      <p>Instead of answering an impossible mathematical proof or algorithmic problem with an instantaneous, 200-millisecond reflex output, the model is given a <strong>compute budget at inference time</strong>:</p>
+      <ul>
+        <li>The model "thinks" for 15, 30, or 60 seconds before producing its final user-facing response.</li>
+        <li>It generates thousands of internal, hidden <strong>Chain-of-Thought (CoT) tokens</strong> that the user does not see.</li>
+        <li>Mathematical accuracy on competitive benchmarks (International Mathematical Olympiad, Codeforces competitive programming) <strong>scales monotonically as a power law of the number of test-time compute FLOPs expended</strong>!</li>
+      </ul>
+    </div>
+
+    <!-- SECTION 2: PROCESS REWARD MODELS -->
+    <h3>2. Process-Supervised Reward Models (PRMs) vs. ORMs</h3>
+    <p>How do we train a model to think productively without hallucinating down rabbit holes?</p>
+
+    <h4>1. Outcome-Supervised Reward Models (ORMs)</h4>
+    <p>In standard reinforcement learning, the model is scored solely on the <strong>final answer</strong> ($y \in \{0, 1\}$). On complex 50-step math proofs, ORMs suffer from sparse rewards and often reinforce "lucky errors": the model makes a mathematical blunder in step 4, makes another blunder in step 12, and accidentally lands on the correct final digit. The ORM erroneously rewards the bad reasoning!</p>
+
+    <h4>2. Process-Supervised Reward Models (PRMs: Lightman et al., OpenAI 2023)</h4>
+    <p><strong>PRMs</strong> evaluate the mathematical correctness of <strong>every individual intermediate reasoning step</strong>:</p>
+    $$r(\text{step}_t) \in [0, 1]$$
+    <p>A human or automated formal verifier scores each line of thought. The model receives immediate negative feedback the millisecond it makes a false deduction, enabling <strong>Monte Carlo Tree Search (MCTS)</strong> algorithms to prune dead-end reasoning branches and focus compute on sound mathematical trajectories!</p>
+
+    <!-- SECTION 3: MCTS IN THOUGHT SPACE -->
+    <h3>3. Search Algorithms in Thought Space</h3>
+    <p>Long-horizon reasoning models abandon greedy sequential decoding in favor of <strong>Tree Search in Thought Space</strong>:</p>
+    <ol>
+      <li><strong>Expansion:</strong> At reasoning step $t$, sample $K$ candidate next-thought paths (e.g. 5 alternative mathematical approaches).</li>
+      <li><strong>Evaluation:</strong> Score each candidate thought path using a Process Reward Model.</li>
+      <li><strong>Backtracking:</strong> If a path leads to a contradiction, the model generates an explicit reflection token: <code>"Wait, that leads to a negative discriminant. Let me reconsider step 2..."</code> and backtracks to an earlier node in the thought tree.</li>
+      <li><strong>Verification:</strong> The model writes code or executes formal logic checks to verify its intermediate conclusions before committing to a final answer.</li>
+    </ol>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Reasoning Models</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 8.2.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-deepmind">DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Explain how Test-Time Compute Scaling alters the serving economics and latency SLAs of enterprise AI applications. Contrast the serving cost of a standard 70B parameter model answering in 500 output tokens vs. a reasoning model generating 25,000 hidden reasoning tokens before outputting a 500-token answer.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Serving Economics Audit</div>
+
+        <p class="step"><strong>Step 1: Token Generation Cost Ratio:</strong>
+        <ul>
+          <li>Standard Model: Generates $500 \text{ tokens}$. At $\$0.80$ per million output tokens:
+          $$\text{Cost}_{\text{standard}} = \frac{500}{1,000,000} \times \$0.80 = \mathbf{\$0.0004 \text{ per query}}$$</li>
+          <li>Reasoning Model: Generates $25,000 \text{ hidden CoT tokens} + 500 \text{ answer tokens} = 25,500 \text{ total tokens}$.
+          $$\text{Cost}_{\text{reasoning}} = \frac{25,500}{1,000,000} \times \$0.80 = \mathbf{\$0.0204 \text{ per query}}$$</li>
+        </ul>
+        $$\text{Cost Factor} = \frac{\$0.0204}{\$0.0004} = \mathbf{51\times \text{ Higher Cost per Query}}!$$</p>
+
+        <p class="step"><strong>Step 2: Latency SLA &amp; GPU Hardware Requirements:</strong><br>
+        Generating 25,000 tokens sequentially at 50 tokens/sec takes <strong>$500 \text{ seconds (over 8 minutes!)}$</strong> on a single GPU. To make reasoning models viable for interactive workflows, inference engines deploy <strong>Speculative Decoding with multi-token draft heads and parallel tree exploration</strong>, requiring serving clusters to allocate $4\times$ to $8\times$ more GPUs per concurrent active user session.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 8.2: Tree-Search Reasoning Engine with Self-Verification</h3>
+    <p>Below is an educational Python implementation of a Tree-Search Reasoning Engine executing candidate thought expansion, verification scoring, and automated backtracking.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 8.2 — Tree-Search Reasoning Engine</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part8_frontier_ai/ch82_reasoning/tree_search_reasoning.py" target="_blank">🔗 View in GitHub: part8_frontier_ai/ch82_reasoning/tree_search_reasoning.py</a></p>
+<pre><code>import heapq
+
+class ThoughtNode:
+    def __init__(self, thought_text, score, parent=None, depth=0):
+        self.thought_text = thought_text
+        self.score = score
+        self.parent = parent
+        self.depth = depth
+
+    def __lt__(self, other):
+        # Max-heap priority by verification score
+        return self.score > other.score
+
+    def get_full_trajectory(self):
+        trajectory = []
+        curr = self
+        while curr:
+            trajectory.append(curr.thought_text)
+            curr = curr.parent
+        return list(reversed(trajectory))
+
+class TreeSearchReasoner:
+    def __init__(self, max_depth=3, beam_width=2):
+        self.max_depth = max_depth
+        self.beam_width = beam_width
+
+    def mock_expand_thoughts(self, current_thought):
+        """Simulate generating candidate reasoning continuations"""
+        return [
+            f"{current_thought} -> Hypothesize approach A (factorization)",
+            f"{current_thought} -> Hypothesize approach B (differentiation)"
+        ]
+
+    def mock_verify_thought(self, thought):
+        """Simulate Process Reward Model (PRM) scoring"""
+        # Reward factorization over differentiation
+        if "approach A" in thought:
+            return 0.92
+        return 0.45
+
+    def solve(self, initial_problem):
+        root = ThoughtNode(initial_problem, score=1.0, depth=0)
+        frontier = [root]
+
+        for depth in range(self.max_depth):
+            candidates = []
+            for node in frontier:
+                expansions = self.mock_expand_thoughts(node.thought_text)
+                for exp in expansions:
+                    score = self.mock_verify_thought(exp)
+                    candidates.append(ThoughtNode(exp, score=score, parent=node, depth=depth + 1))
+
+            # Select top-beam thoughts (Prune low-confidence paths)
+            candidates.sort(key=lambda n: n.score, reverse=True)
+            frontier = candidates[:self.beam_width]
+
+        best_solution = frontier[0]
+        return best_solution.get_full_trajectory(), best_solution.score
+
+if __name__ == "__main__":
+    reasoner = TreeSearchReasoner(max_depth=2, beam_width=2)
+    trajectory, final_score = reasoner.solve("Solve equation: x^2 - 5x + 6 = 0")
+    print(f"Optimal Reasoning Trajectory (Score: {final_score}):")
+    for step, thought in enumerate(trajectory):
+        print(f"Step {step}: {thought}")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 8.2 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 8.2: Autonomous Long-Horizon Reasoning Engine with Step Verification</h3>
+        <p class="project-desc">Architect and deploy an autonomous long-horizon reasoning engine implementing Monte Carlo Tree Search over thought spaces, process-supervised reward models, automated Python code execution verification, and self-healing backtracking on mathematical and algorithmic benchmarks.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part8_frontier_ai/ch82_reasoning/tree_search_reasoning.py" target="_blank">🔗 Full Project Code: part8_frontier_ai/ch82_reasoning/tree_search_reasoning.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In autonomous chemical synthesis and drug design (Insilico Medicine, DeepMind), determining a 20-step retrosynthetic reaction pathway requires evaluating billions of possible precursor combinations where an error in step 3 renders all downstream synthesis toxic. In this project, you construct a tree-search reasoning engine that executes multi-step retrosynthesis planning, validating each intermediate chemical step against physics simulation compilers before proposing final laboratory pathways.</p>
+      </div>
+    </div>
+  </div>
+</div>

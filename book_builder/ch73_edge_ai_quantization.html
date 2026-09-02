@@ -1,0 +1,166 @@
+<!-- ======================================================================
+     CHAPTER 7.3 — EDGE AI, MODEL COMPRESSION & QUANTIZATION
+     ====================================================================== -->
+<div class="chapter" id="chapter-7-3">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 7.3</span>
+    <h2 class="chapter-title">Edge AI, Model Compression &amp; Quantization</h2>
+    <span class="chapter-subtitle">Quantization-Aware Training (QAT), Straight-Through Estimators, MobileNet &amp; ONNX</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Anyone can run a 70-billion parameter model in an air-conditioned datacenter consuming 500 Watts of power. An AI engineer makes neural networks run on a 3-Watt smartphone battery without making the device hot to the touch."</p>
+    <p class="attribution">— Edge AI Maxim</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE EDGE REALITY -->
+    <h3>1. The Physical Constraints of Edge Hardware</h3>
+    <p>Deploying AI models to edge devices (Apple iPhones, Android smartphones, DJI drones, Raspberry Pi microcontrollers, and VR headsets) requires engineering under severe physical constraints:</p>
+    <ul>
+      <li><strong>Thermal Envelopes:</strong> Edge devices have passive cooling with zero fans. Sustained compute exceeding <strong>$3$ to $5 \text{ Watts}$</strong> causes thermal throttling, rapidly draining batteries and degrading user experience.</li>
+      <li><strong>Memory Bandwidth &amp; Capacity:</strong> While cloud servers feature 80GB HBM3 memory running at 3.35 TB/s, smartphones share 4GB to 8GB of low-power LPDDR5 RAM across the operating system and camera pipeline.</li>
+    </ul>
+
+    <!-- SECTION 2: DEPTHWISE SEPARABLE CONVOLUTIONS -->
+    <h3>2. MobileNet: Depthwise Separable Convolutions (Howard et al., Google 2017)</h3>
+    <p>Standard 2D convolutions perform spatial filtering and channel combination simultaneously in a single heavy operation. <strong>MobileNet</strong> factors this into two decoupled steps:</p>
+    <ol>
+      <li><strong>Depthwise Convolution:</strong> Applies a single $K \times K$ convolutional filter per input channel independently (computes spatial features with zero inter-channel communication).</li>
+      <li><strong>Pointwise Convolution:</strong> Applies a $1 \times 1$ convolution across all channels, linearly combining features into $N$ output channels.</li>
+    </ol>
+
+    <div class="real-world-box">
+      <h4>🏆 The Mathematical FLOPs Reduction Derivation</h4>
+      <p>Let input feature map be $D_F \times D_F \times M$ and output be $D_F \times D_F \times N$ with filter size $D_K \times D_K$:</p>
+      <ul>
+        <li>Standard Convolution FLOPs:
+        $$\text{FLOPs}_{\text{std}} = D_K \cdot D_K \cdot M \cdot N \cdot D_F \cdot D_F$$</li>
+        <li>Depthwise Separable Convolution FLOPs:
+        $$\text{FLOPs}_{\text{sep}} = \underbrace{D_K \cdot D_K \cdot M \cdot D_F \cdot D_F}_{\text{Depthwise Step}} + \underbrace{M \cdot N \cdot D_F \cdot D_F}_{\text{Pointwise Step}}$$</li>
+      </ul>
+      <p>Compute the ratio of computation:</p>
+      $$\text{Ratio} = \frac{D_K^2 \cdot M \cdot D_F^2 + M \cdot N \cdot D_F^2}{D_K^2 \cdot M \cdot N \cdot D_F^2} = \frac{D_K^2 \cdot M + M \cdot N}{D_K^2 \cdot M \cdot N} = \mathbf{\frac{1}{N} + \frac{1}{D_K^2}}$$
+      <p>For standard $3 \times 3$ filters ($D_K = 3$) with $N = 512$ channels:</p>
+      $$\text{Ratio} = \frac{1}{512} + \frac{1}{9} \approx 0.0019 + 0.1111 \approx \mathbf{0.113} \implies \mathbf{88.7\% \text{ Reduction in FLOPs!}}$$
+      <p><em>Depthwise Separable Convolutions deliver a nearly $9\times$ reduction in computational operations and parameter count with virtually zero loss in visual accuracy!</em></p>
+    </div>
+
+    <!-- SECTION 3: QUANTIZATION-AWARE TRAINING -->
+    <h3>3. Quantization-Aware Training (QAT) &amp; Straight-Through Estimators</h3>
+    <p>Converting a trained 32-bit floating point model to 8-bit integers via Post-Training Quantization (PTQ) frequently causes severe accuracy degradation on compact edge models. <strong>Quantization-Aware Training (QAT)</strong> solves this by simulating 8-bit fixed-point quantization noise directly during model training.</p>
+
+    <h4>Uniform Affine Quantization Formula</h4>
+    <p>Maps continuous real float $r \in [r_{\min}, r_{\max}]$ to an 8-bit unsigned integer $q \in [0, 255]$:</p>
+    $$q = \text{clamp}\left( \left\lfloor \frac{r}{S} \right\rceil + Z, 0, 255 \right)$$
+    $$S = \frac{r_{\max} - r_{\min}}{255}, \quad Z = \text{round}\left( -\frac{r_{\min}}{S} \right)$$
+    <p>Where $S$ is the positive real Scale Factor and $Z$ is the integer Zero-Point.</p>
+
+    <div class="key-insight">
+      <p><strong>The Straight-Through Estimator (STE)</strong><br>
+      The rounding function $\lfloor \cdot \rceil$ is a step function: its derivative is zero everywhere, and undefined at half-integers ($\frac{d}{dx} \lfloor x \rceil = 0$). Standard backpropagation would result in exact zero gradients, freezing the network.</p>
+      <p>The <strong>Straight-Through Estimator (STE)</strong> bypasses this non-differentiable operator during backpropagation by treating the derivative of rounding as the identity:</p>
+      $$\frac{\partial \lfloor x \rceil}{\partial x} \approx 1, \quad \text{for } x \in [\text{clip}_{\min}, \text{clip}_{\max}]$$
+      <p><em>The forward pass experiences realistic 8-bit fixed-point rounding noise, while the backward pass propagates smooth FP32 gradients, allowing weights to adapt and preserve 99.8% of full accuracy!</em></p>
+    </div>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Edge AI</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-apple">Apple</span>
+        <span class="company-tag company-qualcomm">Qualcomm</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are deploying an image classification model to the Apple Neural Engine (ANE) on an iPhone 16. The model must have a binary weight footprint under $25 \text{ MB}$ and execute inference in $<4 \text{ ms}$. Compare <strong>Structured Channel Pruning</strong> vs. <strong>Unstructured Weight Pruning</strong> for hardware acceleration on mobile Neural Processing Units (NPUs).</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Hardware Acceleration Audit</div>
+
+        <p class="step"><strong>Step 1: Unstructured (Fine-Grained) Pruning:</strong><br>
+        Individually sets weights to zero if $|w_{i, j}| &lt; \tau$. While this achieves 80% weight sparsity, the zero entries are scattered randomly across the weight matrix.<br>
+        <strong>The Hardware Penalty:</strong> Mobile NPUs and SIMD vector engines execute matrix multiplications using dense, wide vector registers (e.g. 128-bit or 256-bit registers). Loading scattered non-zero elements requires complex indirect memory index addressing and branching logic, causing CPU/NPU pipeline stalls. On standard mobile hardware, <strong>unstructured sparsity results in ZERO speedup or even runs SLOWER than dense matrices!</strong></p>
+
+        <p class="step"><strong>Step 2: Structured (Coarse-Grained) Channel Pruning:</strong><br>
+        Removes entire convolutional filter channels or linear neuron columns based on $L_1$-norm importance.<br>
+        <strong>The Hardware Advantage:</strong> When a channel is removed, the weight matrix is physically resized into a smaller, contiguous dense matrix ($W \in \mathbb{R}^{C_{\text{new}} \times C_{\text{in}}}$). The mobile NPU executes standard contiguous dense GEMM instructions at maximum hardware clock speed, delivering a <strong>direct $2\times$ to $4\times$ real-world speedup with zero special hardware requirements!</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 7.3: Depthwise Separable Convolutions &amp; Knowledge Distillation</h3>
+    <p>Below is a production-grade PyTorch implementation of a Depthwise Separable Convolution block and Hinton's Knowledge Distillation loss function.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 7.3 — Depthwise Separable Block &amp; Distillation Loss</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch73_edge_ai/mobilenet_block.py" target="_blank">🔗 View in GitHub: part7_system_design/ch73_edge_ai/mobilenet_block.py</a></p>
+<pre><code>import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class DepthwiseSeparableConv(nn.Module):
+    """
+    MobileNet Depthwise Separable Convolution:
+    Depthwise (groups=in_ch) + Pointwise (1x1 Conv)
+    """
+    def __init__(self, in_channels, out_channels, stride=1):
+        super().__init__()
+        # 1. Depthwise Conv: groups=in_channels (1 filter per channel)
+        self.depthwise = nn.Conv2d(
+            in_channels, in_channels, kernel_size=3, stride=stride, padding=1, groups=in_channels, bias=False
+        )
+        self.bn1 = nn.BatchNorm2d(in_channels)
+        self.relu = nn.ReLU(inplace=True)
+
+        # 2. Pointwise Conv: 1x1 Conv across all channels
+        self.pointwise = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+
+    def forward(self, x):
+        x = self.relu(self.bn1(self.depthwise(x)))
+        x = self.relu(self.bn2(self.pointwise(x)))
+        return x
+
+def knowledge_distillation_loss(student_logits, teacher_logits, labels, T=4.0, alpha=0.7):
+    """
+    Hinton Knowledge Distillation Loss:
+    L_total = (1 - alpha) * CrossEntropy + alpha * T^2 * KL_Divergence
+    """
+    # 1. Hard Cross-Entropy Loss with true ground truth
+    hard_loss = F.cross_entropy(student_logits, labels)
+
+    # 2. Soft KL Divergence Loss with softened teacher predictions
+    soft_student = F.log_softmax(student_logits / T, dim=-1)
+    soft_teacher = F.softmax(teacher_logits / T, dim=-1)
+    soft_loss = F.kl_div(soft_student, soft_teacher, reduction="batchmean") * (T ** 2)
+
+    return (1.0 - alpha) * hard_loss + alpha * soft_loss
+
+if __name__ == "__main__":
+    block = DepthwiseSeparableConv(in_channels=64, out_channels=128)
+    x = torch.randn(2, 64, 32, 32)
+    out = block(x)
+    print(f"Input Shape : {x.shape}")
+    print(f"Output Shape: {out.shape} (Channels expanded from 64 to 128!)")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 7.3 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 7.3: Sub-50MB Edge Visual Perception &amp; Classification Engine</h3>
+        <p class="project-desc">Architect, compress, and deploy an ultra-lightweight edge visual classification engine, applying Depthwise Separable Convolutions, Quantization-Aware Training (QAT) to INT8, Knowledge Distillation from a heavy ResNet-101 teacher, and exporting to ONNX Runtime for sub-5ms mobile execution.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch73_edge_ai/mobilenet_block.py" target="_blank">🔗 Full Project Code: part7_system_design/ch73_edge_ai/mobilenet_block.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In autonomous aerial robotics (Skydio, military UAVs), onboard obstacle avoidance models must process 4K stereo camera streams on low-power NVIDIA Jetson Nano or Qualcomm Snapdragon chips. In this project, you construct a quantized visual perception pipeline that fits in under 25MB of RAM, consumes less than 3 Watts of power, and achieves 60 FPS real-time execution with zero cloud dependency.</p>
+      </div>
+    </div>
+  </div>
+</div>
