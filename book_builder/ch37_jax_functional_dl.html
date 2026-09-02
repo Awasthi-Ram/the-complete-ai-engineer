@@ -1,0 +1,148 @@
+<!-- ======================================================================
+     CHAPTER 3.7 — JAX & FUNCTIONAL DEEP LEARNING
+     ====================================================================== -->
+<div class="chapter" id="chapter-3-7">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 3.7</span>
+    <h2 class="chapter-title">JAX &amp; Functional Deep Learning</h2>
+    <span class="chapter-subtitle">Pure Functions, Autodiff (grad), XLA Kernel Fusion (jit), Auto-Batching (vmap) &amp; SPMD (pmap)</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"In mathematics, a function has no state, no side-effects, and no memory. When deep learning returns to pure mathematics, compilers can optimize computation across thousands of accelerators with mathematical elegance."</p>
+    <p class="attribution">— Functional Deep Learning Maxim</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE FUNCTIONAL PARADIGM -->
+    <h3>1. The Paradigm Shift: Imperative vs. Purely Functional</h3>
+    <p>For years, deep learning has been dominated by imperative, object-oriented frameworks like PyTorch. In PyTorch, models are stateful classes inheriting from <code>nn.Module</code> that mutate internal buffers (<code>optimizer.step()</code> modifies parameter arrays in-place). While intuitive, stateful mutation makes whole-program compiler optimizations, multi-device distributed sharding, and higher-order calculus notoriously complex.</p>
+
+    <p>Developed by Google Research and adopted by Google DeepMind (for Gemini and AlphaFold 3), <strong>JAX</strong> re-imagines machine learning as <strong>Pure Functional Programming</strong> over immutable multidimensional arrays:</p>
+    <ul>
+      <li><strong>Pure Functions:</strong> A function depends <em>strictly</em> on its explicit arguments, has zero side-effects (it cannot mutate global variables or modify input buffers), and always returns the exact same outputs given the same inputs.</li>
+      <li><strong>Immutable Arrays (<code>DeviceArray</code>):</strong> Arrays cannot be modified in-place. If you modify an index, JAX creates a new array: <code>x = x.at[0].set(5.0)</code>.</li>
+      <li><strong>Explicit PRNG Keys:</strong> JAX completely abandons global random seeds. Every stochastic operation (dropout, parameter initialization) requires explicitly passing and splitting a cryptographic Pseudo-Random Number Generator (PRNG) key:
+      $$\text{key, subkey} = \text{jax.random.split(key)}$$</li>
+    </ul>
+
+    <!-- SECTION 2: THE FOUR FUNCTION TRANSFORMATIONS -->
+    <h3>2. The Four Composable Function Transformations</h3>
+    <p>JAX's power comes from four mathematical function transformations that can be composed arbitrarily:</p>
+
+    <h4>1. <code>jax.grad</code>: Reverse-Mode Automatic Differentiation</h4>
+    <p>Transforms any pure scalar-valued Python function into its exact mathematical gradient function:</p>
+    $$f: \mathbb{R}^d \to \mathbb{R} \xrightarrow{\text{jax.grad}} \nabla f: \mathbb{R}^d \to \mathbb{R}^d$$
+    <p>Because transformations are composable, higher-order derivatives require zero extra code: <code>jax.grad(jax.grad(f))</code> automatically computes the exact Hessian!</p>
+
+    <h4>2. <code>jax.jit</code>: Just-In-Time Compilation via XLA</h4>
+    <p>Standard Python executes line-by-line in "eager mode", incurring Python interpreter overhead and writing intermediate tensors back to slow GPU memory. <code>@jax.jit</code> traces the Python function into an intermediate representation (<strong>Jaxpr</strong>) and compiles it into highly optimized machine code via <strong>XLA (Accelerated Linear Algebra)</strong>:</p>
+    <div class="key-insight">
+      <p><strong>Kernel Fusion in XLA:</strong><br>
+      Consider the operation $Y = \text{ReLU}(A \cdot X + B)$. In eager PyTorch, the GPU performs a matrix multiplication (stores result in VRAM), reads VRAM to add $B$ (stores in VRAM), and reads VRAM to apply ReLU. <strong>XLA fuses all three operations into a single GPU CUDA kernel</strong>! Data stays inside high-speed GPU registers, speeding up execution by <strong>$2\times$ to $4\times$</strong> with zero memory bandwidth waste!</p>
+    </div>
+
+    <h4>3. <code>jax.vmap</code>: Automatic Vectorization</h4>
+    <p>Writing batching logic manually (handling batch dimensions, broadcasting, tensor slicing) is error-prone. With <code>jax.vmap</code>, you write your function for a <strong>single sample</strong> ($\mathbf{x} \in \mathbb{R}^d$), and <code>jax.vmap</code> automatically pushes the batch dimension into SIMD hardware execution!</p>
+
+    <h4>4. <code>jax.pmap</code>: Parallel Mapping across Accelerators (SPMD)</h4>
+    <p>Replicates computation across multiple physical GPUs or TPU cores in a Single-Program Multiple-Data (SPMD) topology, executing inter-device collective reductions (like <code>jax.lax.pmean</code>) natively.</p>
+
+    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — JAX &amp; Compilers</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.7.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-deepmind">DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Explain what happens when a Python function decorated with <code>@jax.jit</code> contains an impure side-effect (e.g. <code>print("Tracing...")</code>) and a dynamic Python <code>if/else</code> condition on an array value. Why does JAX fail to compile dynamic shapes, and how does static argument tracing resolve this?</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+
+        <p class="step"><strong>Step 1: The Tracing Mechanism in <code>jax.jit</code>:</strong><br>
+        When a JIT-compiled function is invoked for the first time, JAX does <strong>not</strong> execute machine instructions. Instead, it runs the Python function with abstract <strong>Tracer Objects</strong> (which have shape and dtype, but no concrete numerical values) to record the computational DAG (Jaxpr).<br>
+        Because Python code runs only during the tracing phase, any <code>print()</code> statement executes <strong>exactly once during initial trace</strong>! In all subsequent invocations, XLA executes the compiled binary directly, completely bypassing Python, so the <code>print()</code> statement never executes again!</p>
+
+        <p class="step"><strong>Step 2: Dynamic Python Conditionals on Traced Arrays:</strong><br>
+        If the function contains <code>if x &gt; 0:</code> where <code>x</code> is a tracer, Python cannot evaluate whether an abstract tracer is true or false! JAX raises a fatal <code>ConcretizationTypeError</code>.<br>
+        To perform dynamic branching on array values, the engineer must use <strong>JAX control flow primitives</strong> (e.g. <code>jax.lax.cond</code>), which encode the branch directly into the compiled XLA graph.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 4: CODE LAB -->
+    <h3>3. Production Code Lab 3.7: Neural Network Training in Pure JAX</h3>
+    <p>Below is a production implementation of a complete multi-layer neural network trained from scratch in pure JAX using <code>grad</code>, <code>jit</code>, and <code>vmap</code>.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 3.7 — Deep Neural Network Training in Pure JAX</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part3_neural_networks/ch37_jax_functional/jax_mlp.py" target="_blank">🔗 View in GitHub: part3_neural_networks/ch37_jax_functional/jax_mlp.py</a></p>
+<pre><code>import jax
+import jax.numpy as jnp
+
+# 1. Initialize parameters as a pure PyTree (nested dict of arrays)
+def init_mlp_params(layer_sizes, key):
+    keys = jax.random.split(key, len(layer_sizes) - 1)
+    params = []
+    for k, (din, dout) in zip(keys, zip(layer_sizes[:-1], layer_sizes[1:])):
+        w = jax.random.normal(k, (din, dout)) * jnp.sqrt(2.0 / din)
+        b = jnp.zeros((dout,))
+        params.append({"w": w, "b": b})
+    return params
+
+# 2. Forward pass on a SINGLE sample (No batch dimension needed!)
+def forward_single(params, x):
+    for layer in params[:-1]:
+        x = jax.nn.relu(jnp.dot(x, layer["w"]) + layer["b"])
+    # Output layer
+    return jnp.dot(x, params[-1]["w"]) + params[-1]["b"]
+
+# 3. Vectorize across batch dimension automatically using vmap!
+forward_batch = jax.vmap(forward_single, in_axes=(None, 0))
+
+# 4. Pure Loss Function
+def loss_fn(params, x_batch, y_batch):
+    logits = forward_batch(params, x_batch)
+    return jnp.mean((logits - y_batch) ** 2)
+
+# 5. JIT-compiled update step with analytical automatic differentiation
+@jax.jit
+def update_step(params, x_batch, y_batch, lr=0.01):
+    loss, grads = jax.value_and_grad(loss_fn)(params, x_batch, y_batch)
+    # Functional parameter update (immutability preserved)
+    new_params = jax.tree_util.tree_map(lambda p, g: p - lr * g, params, grads)
+    return new_params, loss
+
+if __name__ == "__main__":
+    key = jax.random.PRNGKey(42)
+    params = init_mlp_params([4, 16, 16, 1], key)
+    x = jax.random.normal(key, (64, 4))
+    y = jax.random.normal(key, (64, 1))
+
+    print("Initial JAX Forward Pass Output Shape:", forward_batch(params, x).shape)
+    for epoch in range(5):
+        params, loss = update_step(params, x, y, lr=0.05)
+        print(f"Epoch {epoch+1}: JIT-Compiled MSE Loss = {loss:.4f}")</code></pre>
+    </div>
+
+    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 3.7 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 3.7: High-Speed JAX TPU/GPU Neural Benchmark Suite</h3>
+        <p class="project-desc">Architect and implement a high-speed functional neural benchmark suite in JAX, profiling XLA kernel fusion efficiency, evaluating automatic vectorization scalability with <code>vmap</code>, and benchmarking multi-accelerator data parallelism with <code>pmap</code>.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part3_neural_networks/ch37_jax_functional/jax_mlp.py" target="_blank">🔗 Full Project Code: part3_neural_networks/ch37_jax_functional/jax_mlp.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In high-throughput reinforcement learning and scientific simulation (Google DeepMind, Physics ML), standard Python overhead limits environment step throughput. In this project, you construct an end-to-end JAX pipeline that fuses neural policies with vectorized physics environments into a single JIT-compiled binary that runs entirely inside GPU registers without touching host RAM.</p>
+      </div>
+    </div>
+  </div>
+</div>
