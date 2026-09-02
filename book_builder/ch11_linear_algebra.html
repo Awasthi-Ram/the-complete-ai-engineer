@@ -1,0 +1,246 @@
+<!-- ======================================================================
+     CHAPTER 1.1 — LINEAR ALGEBRA & MATRIX DECOMPOSITIONS
+     ====================================================================== -->
+<div class="chapter" id="chapter-1-1">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 1.1</span>
+    <h2 class="chapter-title">Linear Algebra &amp; Matrix Decompositions</h2>
+    <span class="chapter-subtitle">Vectors, High-Dimensional Geometry, SVD, Eckart-Young &amp; Pseudoinverses</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Linear algebra is the language in which all of machine learning is written. If calculus is the engine of optimization, linear algebra is the geometry of space itself."</p>
+    <p class="attribution">— Gilbert Strang</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: VECTORS & GEOMETRY -->
+    <h3>1. Geometric Foundations: Space, Bases &amp; Projections</h3>
+    <p>To an AI engineer, a vector is not merely an array of numbers; it is a point or arrow in an abstract high-dimensional vector space $\mathbb{R}^d$. When OpenAI's <code>text-embedding-3-large</code> represents a sentence as a 3,072-dimensional vector, that vector represents a single coordinate inside a 3,072-dimensional semantic hypersphere. Concepts that are semantically related point in nearly identical spatial directions.</p>
+
+    <h4>Linear Combinations, Span &amp; Linear Independence</h4>
+    <p>Given a set of vectors $\{\mathbf{v}_1, \mathbf{v}_2, \dots, \mathbf{v}_k\} \subset \mathbb{R}^d$, a <strong>linear combination</strong> is any vector formed by scaling and adding them:
+    $$\mathbf{x} = c_1 \mathbf{v}_1 + c_2 \mathbf{v}_2 + \dots + c_k \mathbf{v}_k = \sum_{i=1}^k c_i \mathbf{v}_i, \quad c_i \in \mathbb{R}$$
+    The <strong>Span</strong> of these vectors is the set of all possible linear combinations. If no vector in the set can be expressed as a linear combination of the others, the set is <strong>linearly independent</strong>:
+    $$c_1 \mathbf{v}_1 + c_2 \mathbf{v}_2 + \dots + c_k \mathbf{v}_k = \mathbf{0} \iff c_1 = c_2 = \dots = c_k = 0$$
+    A linearly independent set of vectors that spans a space $V$ forms a <strong>Basis</strong> for $V$. The number of vectors in this basis defines the <strong>Dimension</strong> of $V$.</p>
+
+    <h4>The Dot Product, Norms &amp; Cosine Similarity</h4>
+    <p>The inner product (dot product) between two vectors $\mathbf{u}, \mathbf{v} \in \mathbb{R}^d$ is the algebraic engine of modern search, recommendation, and transformer attention:
+    $$\mathbf{u} \cdot \mathbf{v} = \mathbf{u}^T \mathbf{v} = \sum_{i=1}^d u_i v_i$$
+    Geometrically, the dot product connects algebra to trigonometry:
+    $$\mathbf{u} \cdot \mathbf{v} = \|\mathbf{u}\|_2 \|\mathbf{v}\|_2 \cos(\theta)$$
+    Where $\|\mathbf{u}\|_2 = \sqrt{\sum_{i=1}^d u_i^2}$ is the Euclidean $L_2$ norm. Dividing both sides yields <strong>Cosine Similarity</strong>, which measures the angular orientation of two vectors irrespective of their magnitude:
+    $$\text{CosineSimilarity}(\mathbf{u}, \mathbf{v}) = \frac{\mathbf{u} \cdot \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2} = \cos(\theta) \in [-1, 1]$$</p>
+
+    <div class="key-insight">
+      <p><strong>Why Transformers Normalize Vectors:</strong> When query and key vectors are $L_2$-normalized to unit length ($\|\mathbf{q}\|_2 = \|\mathbf{k}\|_2 = 1$), their dot product simplifies to pure cosine similarity: $\mathbf{q} \cdot \mathbf{k} = \cos(\theta)$. This bounds the input to the softmax attention function, preventing exponential saturation and vanishing gradients!</p>
+    </div>
+
+    <!-- SECTION 2: MATRIX MULTIPLICATION AS LINEAR TRANSFORMATION -->
+    <h3>2. Matrix Multiplication: Four Perspectives</h3>
+    <p>A matrix $A \in \mathbb{R}^{m \times n}$ is not a static 2D grid; it is a <strong>Linear Transformation</strong> mapping vectors from $\mathbb{R}^n$ into $\mathbb{R}^m$. To master deep learning, you must understand all four mathematical perspectives of matrix multiplication $C = A B$ (where $A \in \mathbb{R}^{m \times k}$ and $B \in \mathbb{R}^{k \times n}$):</p>
+
+    <ol>
+      <li><strong>The Element Perspective (Dot Products):</strong> Each element $C_{ij}$ is the dot product of row $i$ of $A$ and column $j$ of $B$:
+      $$C_{ij} = \sum_{p=1}^k A_{ip} B_{pj}$$</li>
+      <li><strong>The Column Perspective (Linear Combinations):</strong> Each column of $C$ is a linear combination of the columns of $A$, weighted by the corresponding column of $B$:
+      $$\mathbf{c}_j = \sum_{p=1}^k B_{pj} \mathbf{a}_p$$
+      <em>Deep Learning Insight:</em> A neural network forward pass $W \mathbf{x}$ takes a linear combination of the column features in weight matrix $W$!</li>
+      <li><strong>The Row Perspective:</strong> Each row of $C$ is a linear combination of the rows of $B$, weighted by the corresponding row of $A$.</li>
+      <li><strong>The Outer Product Perspective (Rank-1 Summation):</strong> $C$ is the sum of $k$ rank-1 outer product matrices:
+      $$C = \sum_{p=1}^k \mathbf{a}_p \mathbf{b}_p^T, \quad \text{where } \mathbf{a}_p \in \mathbb{R}^{m \times 1}, \mathbf{b}_p^T \in \mathbb{R}^{1 \times n}$$
+      <em>Hardware Insight:</em> Modern GPU Tensor Cores perform fused multiply-accumulate (FMA) across outer products to maximize arithmetic throughput.</li>
+    </ol>
+
+    <!-- SECTION 3: MATRIX RANK & SVD -->
+    <h3>3. Singular Value Decomposition (SVD) &amp; The Eckart-Young Theorem</h3>
+    <p>Eigenvalue decomposition ($A = Q \Lambda Q^{-1}$) is limited because it requires $A$ to be a square, diagonalizable matrix. In real-world AI, data matrices are almost always rectangular: $N$ samples by $d$ features ($N \neq d$).</p>
+
+    <p><strong>Singular Value Decomposition (SVD)</strong> is the pinnacle of linear algebra because it factorizes <strong>ANY</strong> rectangular matrix $A \in \mathbb{R}^{m \times n}$ into three geometrically pristine matrices:</p>
+    $$A = U \Sigma V^T$$
+    <ul>
+      <li>$U \in \mathbb{R}^{m \times m}$: An orthogonal matrix ($U^T U = I_m$). Its columns $\mathbf{u}_i$ are the <strong>Left Singular Vectors</strong> (eigenvectors of $A A^T$).</li>
+      <li>$\Sigma \in \mathbb{R}^{m \times n}$: A diagonal matrix of non-negative real numbers $\sigma_1 \ge \sigma_2 \ge \dots \ge \sigma_r > 0$ called the <strong>Singular Values</strong> ($\sigma_i = \sqrt{\lambda_i(A^T A)}$).</li>
+      <li>$V \in \mathbb{R}^{n \times n}$: An orthogonal matrix ($V^T V = I_n$). Its columns $\mathbf{v}_i$ are the <strong>Right Singular Vectors</strong> (eigenvectors of $A^T A$).</li>
+    </ul>
+
+    <h4>The Eckart-Young-Mirsky Theorem</h4>
+    <p>The practical superpower of SVD in machine learning is optimal low-rank matrix approximation. Suppose matrix $A$ has full rank $r$. What is the best possible rank-$k$ matrix $A_k$ (where $k &lt; r$) that approximates $A$?</p>
+
+    <div class="real-world-box">
+      <h4>🏆 The Eckart-Young-Mirsky Theorem (1936)</h4>
+      <p>The optimal rank-$k$ approximation of $A$ under both the Frobenius norm and the spectral $L_2$ norm is obtained by truncating the SVD summation to the top $k$ terms:</p>
+      $$A_k = \sum_{i=1}^k \sigma_i \mathbf{u}_i \mathbf{v}_i^T = U_k \Sigma_k V_k^T$$
+      <p>Furthermore, the exact approximation error is bounded by the sum of discarded singular values:</p>
+      $$\|A - A_k\|_F = \sqrt{\sum_{i=k+1}^{\min(m, n)} \sigma_i^2}$$
+      $$\|A - A_k\|_2 = \sigma_{k+1}$$
+    </div>
+    <p>This single theorem forms the mathematical foundation of Principal Component Analysis (PCA), latent semantic analysis in NLP, recommender systems (matrix factorization), and modern parameter-efficient fine-tuning (LoRA)!</p>
+
+    <!-- SECTION 4: MOORE-PENROSE PSEUDOINVERSE -->
+    <h3>4. The Moore-Penrose Pseudoinverse</h3>
+    <p>In classical school algebra, if $a x = b$, then $x = a^{-1} b$. But in AI, we frequently encounter linear systems $X \mathbf{w} = \mathbf{y}$ where $X \in \mathbb{R}^{N \times d}$ is not square ($N \gg d$ in regression, or $N \ll d$ in overparameterized deep networks). $X$ cannot be inverted because $X^{-1}$ does not exist.</p>
+
+    <p>The <strong>Moore-Penrose Pseudoinverse</strong> (denoted $X^+$) generalizes matrix inversion to all rectangular matrices using SVD:</p>
+    $$X^+ = V \Sigma^+ U^T$$
+    <p>Where $\Sigma^+$ is formed by inverting all non-zero singular values ($\frac{1}{\sigma_i}$) and transposing the matrix.</p>
+
+    <h4>Properties of the Pseudoinverse</h4>
+    <ul>
+      <li><strong>Overdetermined Systems ($N &gt; d$, full column rank):</strong> $X^+ = (X^T X)^{-1} X^T$. The solution $\mathbf{w} = X^+ \mathbf{y}$ is the exact Ordinary Least Squares (OLS) solution that minimizes the residual sum of squares $\|X \mathbf{w} - \mathbf{y}\|_2^2$.</li>
+      <li><strong>Underdetermined Systems ($N &lt; d$, full row rank):</strong> $X^+ = X^T (X X^T)^{-1}$. The solution $\mathbf{w} = X^+ \mathbf{y}$ is the unique interpolating solution ($X \mathbf{w} = \mathbf{y}$) with the <strong>minimum $L_2$ norm</strong> $\|\mathbf{w}\|_2$.</li>
+    </ul>
+
+    <!-- SECTION 5: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Linear Algebra &amp; SVD</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 1.1.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-netflix">Netflix</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are building a movie recommendation engine for a streaming platform with $M = 10,000$ users and $N = 2,000$ movies. The user-rating matrix $R \in \mathbb{R}^{M \times N}$ is stored in 32-bit floating point.</p>
+        <ol>
+          <li>Calculate the exact uncompressed memory size of matrix $R$.</li>
+          <li>You perform Truncated SVD to factorize $R$ into rank $k = 30$ latent factors: $R \approx U_k \Sigma_k V_k^T$. Calculate the total memory required to store $U_k$, $\Sigma_k$, and $V_k$.</li>
+          <li>Calculate the exact compression ratio achieved.</li>
+          <li>If the sum of all singular values squared is $\sum_{i=1}^{2000} \sigma_i^2 = 500,000$, and the sum of the top 30 singular values squared is $\sum_{i=1}^{30} \sigma_i^2 = 425,000$, calculate the percentage of total matrix variance captured by the rank-30 approximation.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+
+        <p class="step"><strong>Step 1: Calculate Uncompressed Memory Size:</strong><br>
+        $R$ has $10,000 \times 2,000 = 20,000,000$ elements.<br>
+        At 4 bytes per FP32 element:
+        $$\text{Raw Memory} = 20,000,000 \times 4 \text{ bytes} = 80,000,000 \text{ bytes} = 80 \text{ Megabytes (MB)}$$</p>
+
+        <p class="step"><strong>Step 2: Calculate Low-Rank Factorized Memory Size:</strong><br>
+        In truncated SVD with rank $k = 30$:
+        <ul>
+          <li>$U_k \in \mathbb{R}^{10,000 \times 30}$: $300,000$ elements.</li>
+          <li>$\Sigma_k \in \mathbb{R}^{30}$ (stored as a 1D vector of diagonal values): $30$ elements.</li>
+          <li>$V_k^T \in \mathbb{R}^{30 \times 2,000}$: $60,000$ elements.</li>
+        </ul>
+        $$\text{Total Elements} = 300,000 + 30 + 60,000 = 360,030 \text{ elements}$$
+        $$\text{Compressed Memory} = 360,030 \times 4 \text{ bytes} = 1,440,120 \text{ bytes} \approx 1.44 \text{ MB}$$</p>
+
+        <p class="step"><strong>Step 3: Calculate Compression Ratio:</strong>
+        $$\text{Compression Ratio} = \frac{\text{Raw Size}}{\text{Compressed Size}} = \frac{80 \text{ MB}}{1.44 \text{ MB}} \approx 55.55\times \text{ compression!}$$
+        <em>Production Value:</em> Storing user and movie vectors takes only 1.8% of the original memory footprint, allowing the entire model to fit inside the CPU L3 cache of an inference server!</p>
+
+        <p class="step"><strong>Step 4: Calculate Captured Variance:</strong><br>
+        By the Eckart-Young theorem, the total Frobenius energy of matrix $R$ is $\|R\|_F^2 = \sum_{i=1}^{\min(M,N)} \sigma_i^2$. The explained variance ratio captured by rank $k$ is:
+        $$\text{Explained Variance} = \frac{\sum_{i=1}^k \sigma_i^2}{\sum_{i=1}^r \sigma_i^2} = \frac{425,000}{500,000} = 0.85 = 85.0\%$$
+        <strong>Result: Rank 30 captures 85.0% of all user preference variance while slashing memory by 98.2%!</strong></p>
+      </div>
+    </div>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 1.1.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-openai">OpenAI</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Let $\mathbf{u}, \mathbf{v} \in \mathbb{R}^d$ be two non-zero embedding vectors. Derive the analytical gradient of the Cosine Similarity $S(\mathbf{u}, \mathbf{v}) = \frac{\mathbf{u}^T \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2}$ with respect to vector $\mathbf{u}$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
+
+        <p class="step"><strong>Step 1: Express Cosine Similarity as a Quotient:</strong><br>
+        Let $f(\mathbf{u}) = \mathbf{u}^T \mathbf{v}$ (scalar numerator).<br>
+        Let $g(\mathbf{u}) = \|\mathbf{u}\|_2 \|\mathbf{v}\|_2 = (\mathbf{u}^T \mathbf{u})^{1/2} \|\mathbf{v}\|_2$ (scalar denominator).<br>
+        We seek $\nabla_{\mathbf{u}} \left[ \frac{f(\mathbf{u})}{g(\mathbf{u})} \right]$. Applying the quotient rule of vector calculus:
+        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{g(\mathbf{u}) \nabla_{\mathbf{u}} f(\mathbf{u}) - f(\mathbf{u}) \nabla_{\mathbf{u}} g(\mathbf{u})}{g(\mathbf{u})^2}$$</p>
+
+        <p class="step"><strong>Step 2: Compute Gradients of Numerator and Denominator:</strong><br>
+        For the numerator: $\nabla_{\mathbf{u}} (\mathbf{u}^T \mathbf{v}) = \mathbf{v}$.<br>
+        For the denominator, use the chain rule on $\|\mathbf{u}\|_2$:
+        $$\nabla_{\mathbf{u}} \|\mathbf{u}\|_2 = \nabla_{\mathbf{u}} (\mathbf{u}^T \mathbf{u})^{1/2} = \frac{1}{2 (\mathbf{u}^T \mathbf{u})^{1/2}} \cdot 2 \mathbf{u} = \frac{\mathbf{u}}{\|\mathbf{u}\|_2}$$
+        Therefore:
+        $$\nabla_{\mathbf{u}} g(\mathbf{u}) = \|\mathbf{v}\|_2 \frac{\mathbf{u}}{\|\mathbf{u}\|_2}$$</p>
+
+        <p class="step"><strong>Step 3: Substitute and Simplify:</strong>
+        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2 \mathbf{v} - (\mathbf{u}^T \mathbf{v}) \|\mathbf{v}\|_2 \frac{\mathbf{u}}{\|\mathbf{u}\|_2}}{\|\mathbf{u}\|_2^2 \|\mathbf{v}\|_2^2}$$
+        Cancel $\|\mathbf{v}\|_2$ from numerator and denominator:
+        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{\|\mathbf{u}\|_2 \mathbf{v} - (\mathbf{u}^T \mathbf{v}) \frac{\mathbf{u}}{\|\mathbf{u}\|_2}}{\|\mathbf{u}\|_2^2 \|\mathbf{v}\|_2}$$
+        Factor out $\frac{1}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2}$:
+        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{1}{\|\mathbf{u}\|_2} \left[ \frac{\mathbf{v}}{\|\mathbf{v}\|_2} - \frac{\mathbf{u}^T \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2} \frac{\mathbf{u}}{\|\mathbf{u}\|_2} \right]$$
+        Let $\hat{\mathbf{u}} = \frac{\mathbf{u}}{\|\mathbf{u}\|_2}$ and $\hat{\mathbf{v}} = \frac{\mathbf{v}}{\|\mathbf{v}\|_2}$ be the unit vectors. Then:
+        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{1}{\|\mathbf{u}\|_2} \left[ \hat{\mathbf{v}} - (\hat{\mathbf{u}}^T \hat{\mathbf{v}}) \hat{\mathbf{u}} \right]$$
+        <em>Geometric Beauty:</em> Notice that $(\hat{\mathbf{u}}^T \hat{\mathbf{v}}) \hat{\mathbf{u}}$ is the orthogonal projection of $\hat{\mathbf{v}}$ onto $\hat{\mathbf{u}}$! The gradient vector $\nabla_{\mathbf{u}} S$ is strictly <strong>orthogonal to $\mathbf{u}$</strong>, rotating $\mathbf{u}$ toward $\mathbf{v}$ without changing its norm!</p>
+      </div>
+    </div>
+
+    <!-- SECTION 6: CODE LAB -->
+    <h3>5. Production Code Lab 1.1: Truncated SVD from First Principles</h3>
+    <p>Below is a production implementation of Truncated SVD low-rank compression using NumPy, verifying the Eckart-Young reconstruction error bound.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 1.1 — SVD Matrix Compression &amp; Frobenius Error Verification</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch11_linear_algebra_svd/svd_compression.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch11_linear_algebra_svd/svd_compression.py</a></p>
+<pre><code>import numpy as np
+
+def truncated_svd_compress(A: np.ndarray, k: int):
+    """
+    Computes optimal rank-k approximation via Eckart-Young Theorem.
+    """
+    # 1. Full SVD decomposition
+    U, s, Vt = np.linalg.svd(A, full_matrices=False)
+
+    # 2. Truncate to top k singular values and vectors
+    U_k = U[:, :k]
+    s_k = s[:k]
+    Vt_k = Vt[:k, :]
+
+    # 3. Reconstruct optimal rank-k matrix: A_k = U_k * diag(s_k) * V_k^T
+    A_k = np.dot(U_k * s_k, Vt_k)
+
+    # 4. Verify Eckart-Young Frobenius Error
+    actual_error = np.linalg.norm(A - A_k, ord='fro')
+    theoretical_error = np.sqrt(np.sum(s[k:] ** 2))
+
+    variance_explained = np.sum(s_k ** 2) / np.sum(s ** 2)
+
+    return {
+        "A_k": A_k,
+        "actual_error": float(actual_error),
+        "theoretical_error": float(theoretical_error),
+        "variance_explained": float(variance_explained),
+        "error_match": bool(np.isclose(actual_error, theoretical_error))
+    }
+
+if __name__ == "__main__":
+    # Test on a 500x200 random matrix
+    np.random.seed(42)
+    X = np.random.randn(500, 200)
+    res = truncated_svd_compress(X, k=25)
+    print(f"Variance Explained (k=25) : {res['variance_explained']*100:.2f}%")
+    print(f"Actual Frobenius Error    : {res['actual_error']:.4f}")
+    print(f"Theoretical Bound Error   : {res['theoretical_error']:.4f}")
+    print(f"Eckart-Young Verified     : {res['error_match']}")</code></pre>
+    </div>
+
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 1.1 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 1.1: High-Resolution Image &amp; Weight Matrix SVD Compression Engine</h3>
+        <p class="project-desc">Build a production compression tool that factorizes high-resolution image channels and deep learning linear layer weights ($W \in \mathbb{R}^{d_{out} \times d_{in}}$) into low-rank factor matrices, measuring perceptual Peak Signal-to-Noise Ratio (PSNR) and inference FLOP reduction.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch11_linear_algebra_svd/svd_compression.py" target="_blank">🔗 Full Project Code: part1_mathematics/ch11_linear_algebra_svd/svd_compression.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In edge AI deployment (e.g. running transformer models on mobile phones or autonomous vehicle microcontrollers), standard floating-point weight matrices are too large to fit in on-chip SRAM cache. In this project, you apply SVD to compress dense linear projections $W \approx B \times A$ (identical to LoRA parameter factorization), slashing parameter storage by 70% while maintaining 95% model accuracy.</p>
+      </div>
+    </div>
+  </div>
+</div>

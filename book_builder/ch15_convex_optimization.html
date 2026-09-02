@@ -1,0 +1,172 @@
+<!-- ======================================================================
+     CHAPTER 1.5 — CONVEX OPTIMIZATION & DUALITY
+     ====================================================================== -->
+<div class="chapter" id="chapter-1-5">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 1.5</span>
+    <h2 class="chapter-title">Convex Optimization &amp; Duality</h2>
+    <span class="chapter-subtitle">Convex Sets, The Lagrangian, KKT Conditions &amp; The Dual Problem</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"The great watershed in optimization isn't between linearity and nonlinearity, but between convexity and nonconvexity."</p>
+    <p class="attribution">— R. Tyrrell Rockafellar, 1993</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: CONVEXITY -->
+    <h3>1. The Geometry of Convexity</h3>
+    <p>In general non-convex optimization, finding a global minimum is NP-hard: algorithms easily get trapped in poor local minima or stranded on high-dimensional saddle points. However, in <strong>Convex Optimization</strong>, any local minimum is guaranteed to be a <strong>Global Minimum</strong>. Support Vector Machines, Logistic Regression, Lasso, and Ridge Regression are all convex optimization problems.</p>
+
+    <h4>Convex Sets &amp; Convex Functions</h4>
+    <p>A set $C \subseteq \mathbb{R}^d$ is <strong>convex</strong> if the line segment connecting any two points in $C$ lies entirely within $C$:
+    $$\forall \mathbf{x}, \mathbf{y} \in C, \ \alpha \in [0, 1] \implies \alpha \mathbf{x} + (1 - \alpha) \mathbf{y} \in C$$</p>
+
+    <p>A function $f: C \to \mathbb{R}$ is <strong>convex</strong> if its epigraph (the region on or above its graph) is a convex set:
+    $$f(\alpha \mathbf{x} + (1 - \alpha) \mathbf{y}) \le \alpha f(\mathbf{x}) + (1 - \alpha) f(\mathbf{y}), \quad \forall \alpha \in [0, 1]$$</p>
+
+    <div class="key-insight">
+      <p><strong>First-Order Characterization of Convexity:</strong><br>
+      A differentiable function $f$ is convex if and only if its first-order Taylor approximation is a global lower bound:</p>
+      $$f(\mathbf{y}) \ge f(\mathbf{x}) + \nabla f(\mathbf{x})^T (\mathbf{y} - \mathbf{x}), \quad \forall \mathbf{x}, \mathbf{y}$$
+      <p><em>Geometric Meaning:</em> The tangent hyperplane to a convex function always lies completely below the function!</p>
+    </div>
+
+    <!-- SECTION 2: CONSTRAINED OPTIMIZATION & KKT -->
+    <h3>2. Constrained Optimization &amp; The Karush-Kuhn-Tucker (KKT) Conditions</h3>
+    <p>In engineering, we rarely optimize without constraints (e.g. latency must be under 20ms, budget must not exceed $10,000, weights must sum to 1). A standard mathematical optimization problem is formulated as:</p>
+    $$\min_{\mathbf{x}} f_0(\mathbf{x}) \quad \text{subject to } f_i(\mathbf{x}) \le 0 \ (i=1,\dots,m), \quad h_j(\mathbf{x}) = 0 \ (j=1,\dots,p)$$
+
+    <h4>The Lagrangian Function</h4>
+    <p>We convert the constrained problem into an unconstrained objective by introducing Lagrange multiplier vectors $\boldsymbol{\lambda} \in \mathbb{R}^m$ (with $\lambda_i \ge 0$) and $\boldsymbol{\nu} \in \mathbb{R}^p$:</p>
+    $$\mathcal{L}(\mathbf{x}, \boldsymbol{\lambda}, \boldsymbol{\nu}) = f_0(\mathbf{x}) + \sum_{i=1}^m \lambda_i f_i(\mathbf{x}) + \sum_{j=1}^p \nu_j h_j(\mathbf{x})$$
+
+    <div class="real-world-box">
+      <h4>🏆 The Karush-Kuhn-Tucker (KKT) Conditions</h4>
+      <p>For any optimization problem with differentiable objective and constraint functions, if strong duality holds, the optimal primal point $\mathbf{x}^*$ and dual points $(\boldsymbol{\lambda}^*, \boldsymbol{\nu}^*)$ must satisfy four conditions:</p>
+      <ol>
+        <li><strong>Stationarity:</strong> $\nabla_{\mathbf{x}} \mathcal{L}(\mathbf{x}^*, \boldsymbol{\lambda}^*, \boldsymbol{\nu}^*) = \nabla f_0(\mathbf{x}^*) + \sum_{i=1}^m \lambda_i^* \nabla f_i(\mathbf{x}^*) + \sum_{j=1}^p \nu_j^* \nabla h_j(\mathbf{x}^*) = \mathbf{0}$.</li>
+        <li><strong>Primal Feasibility:</strong> $f_i(\mathbf{x}^*) \le 0 \ (\forall i)$, and $h_j(\mathbf{x}^*) = 0 \ (\forall j)$.</li>
+        <li><strong>Dual Feasibility:</strong> $\lambda_i^* \ge 0 \ (\forall i)$.</li>
+        <li><strong>Complementary Slackness:</strong> $\lambda_i^* f_i(\mathbf{x}^*) = 0 \ (\forall i)$.</li>
+      </ol>
+    </div>
+
+    <p><strong>The Magic of Complementary Slackness:</strong> Condition 4 asserts that for every inequality constraint $i$, either $\lambda_i^* = 0$ OR $f_i(\mathbf{x}^*) = 0$:</p>
+    <ul>
+      <li>If the constraint is <em>inactive</em> at the optimum ($f_i(\mathbf{x}^*) &lt; 0$), then its multiplier <strong>must be zero</strong> ($\lambda_i^* = 0$). It exerts zero influence on the solution.</li>
+      <li>If $\lambda_i^* &gt; 0$, the constraint is <em>active</em> on the boundary ($f_i(\mathbf{x}^*) = 0$).</li>
+    </ul>
+    <p>This is the exact mathematical reason why Support Vector Machines (SVMs) ignore 99% of training data: only the data points lying directly on the margin boundary have $\lambda_i^* &gt; 0$ (the Support Vectors)!</p>
+
+    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Optimization &amp; KKT</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 1.5.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In a Hard-Margin Support Vector Machine, we seek a hyperplane $(\mathbf{w}, b)$ that separates two classes with maximum geometric margin $\frac{2}{\|\mathbf{w}\|_2}$. This is formulated as the convex primal problem:
+        $$\min_{\mathbf{w}, b} \frac{1}{2} \|\mathbf{w}\|_2^2 \quad \text{subject to } 1 - y_i (\mathbf{w}^T \mathbf{x}_i + b) \le 0, \quad \forall i=1,\dots,N$$
+        Apply the KKT conditions to derive the exact dual optimization problem in terms of multipliers $\alpha_i \ge 0$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
+
+        <p class="step"><strong>Step 1: Construct the Lagrangian:</strong><br>
+        Introduce dual variables $\alpha_i \ge 0$ for each of the $N$ constraints:
+        $$\mathcal{L}(\mathbf{w}, b, \boldsymbol{\alpha}) = \frac{1}{2} \|\mathbf{w}\|_2^2 + \sum_{i=1}^N \alpha_i \left[ 1 - y_i (\mathbf{w}^T \mathbf{x}_i + b) \right]$$
+        $$\mathcal{L}(\mathbf{w}, b, \boldsymbol{\alpha}) = \frac{1}{2} \mathbf{w}^T \mathbf{w} + \sum_{i=1}^N \alpha_i - \sum_{i=1}^N \alpha_i y_i \mathbf{w}^T \mathbf{x}_i - b \sum_{i=1}^N \alpha_i y_i$$</p>
+
+        <p class="step"><strong>Step 2: Apply KKT Stationarity Conditions:</strong><br>
+        Differentiate $\mathcal{L}$ with respect to primal variables $\mathbf{w}$ and $b$ and set to zero:
+        $$\nabla_{\mathbf{w}} \mathcal{L} = \mathbf{w} - \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i = \mathbf{0} \implies \mathbf{w}^* = \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i$$
+        $$\frac{\partial \mathcal{L}}{\partial b} = -\sum_{i=1}^N \alpha_i y_i = 0 \implies \sum_{i=1}^N \alpha_i y_i = 0$$</p>
+
+        <p class="step"><strong>Step 3: Substitute Back to Form the Dual Objective:</strong><br>
+        Substitute $\mathbf{w}^* = \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i$ and $\sum_{i=1}^N \alpha_i y_i = 0$ into $\mathcal{L}$:</p>
+        <ul>
+          <li>The term $-b \sum_{i=1}^N \alpha_i y_i = -b(0) = 0$ vanishes completely!</li>
+          <li>$\frac{1}{2} \|\mathbf{w}^*\|_2^2 = \frac{1}{2} \sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i^T \mathbf{x}_j)$.</li>
+          <li>$-\sum_{i=1}^N \alpha_i y_i (\mathbf{w}^{*T} \mathbf{x}_i) = -\sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i^T \mathbf{x}_j)$.</li>
+        </ul>
+        Combining these terms yields the famous <strong>SVM Dual Optimization Problem</strong>:
+        $$\max_{\boldsymbol{\alpha}} \left[ \sum_{i=1}^N \alpha_i - \frac{1}{2} \sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i \cdot \mathbf{x}_j) \right]$$
+        $$\text{subject to } \alpha_i \ge 0, \quad \sum_{i=1}^N \alpha_i y_i = 0$$
+        <em>The Kernel Trick Revealed:</em> Notice that features appear <strong>only as inner products $\mathbf{x}_i \cdot \mathbf{x}_j$</strong>! This allows us to replace $\mathbf{x}_i \cdot \mathbf{x}_j$ with a non-linear Kernel function $K(\mathbf{x}_i, \mathbf{x}_j)$, lifting data into infinite-dimensional Hilbert spaces without ever computing the high-dimensional coordinates!</p>
+      </div>
+    </div>
+
+    <!-- SECTION 4: CODE LAB -->
+    <h3>3. Production Code Lab 1.5: Constrained Optimization with Projected Gradient Descent</h3>
+    <p>Below is a Python implementation of Projected Gradient Descent solving a constrained resource allocation problem under simplex constraints.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 1.5 — Projected Gradient Descent on the Probability Simplex</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch15_convex_optimization/projected_gradient_descent.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch15_convex_optimization/projected_gradient_descent.py</a></p>
+<pre><code>import numpy as np
+
+def project_onto_simplex(v, z=1.0):
+    """
+    Exact Euclidean projection of vector v onto the simplex sum(w) = z, w >= 0.
+    O(d log d) algorithm via sorted thresholding.
+    """
+    d = len(v)
+    u = np.sort(v)[::-1]
+    cssv = np.cumsum(u) - z
+    ind = np.arange(1, d + 1)
+    cond = u - cssv / ind > 0
+    rho = ind[cond][-1]
+    theta = cssv[cond][-1] / float(rho)
+    return np.maximum(v - theta, 0)
+
+def solve_constrained_allocation(returns, cov_matrix, lr=0.01, steps=200):
+    """
+    Minimizes risk: w^T Cov w subject to sum(w) = 1, w >= 0 (Markowitz Simplex).
+    """
+    d = len(returns)
+    w = np.ones(d) / d # Uniform initial allocation
+
+    for step in range(steps):
+        # Gradient of w^T Cov w with respect to w is: 2 * Cov * w
+        grad = 2.0 * np.dot(cov_matrix, w)
+        
+        # Gradient step
+        w_step = w - lr * grad
+        
+        # Euclidean projection onto simplex constraint
+        w = project_onto_simplex(w_step, z=1.0)
+
+    variance = float(np.dot(w.T, np.dot(cov_matrix, w)))
+    return {"weights": w, "portfolio_variance": variance}
+
+if __name__ == "__main__":
+    Cov = np.array([[0.04, 0.01, 0.02],
+                    [0.01, 0.09, 0.03],
+                    [0.02, 0.03, 0.16]])
+    res = solve_constrained_allocation(None, Cov)
+    print("Optimal Simplex Allocation Weights:", np.round(res['weights'], 4))
+    print(f"Minimized Portfolio Variance       : {res['portfolio_variance']:.6f}")</code></pre>
+    </div>
+
+    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 1.5 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 1.5: Quadratic Programming Solver &amp; Resource Allocation Engine</h3>
+        <p class="project-desc">Architect and implement a primal-dual interior point solver for convex quadratic programs ($ \min \frac{1}{2} \mathbf{x}^T P \mathbf{x} + \mathbf{q}^T \mathbf{x} $ subject to $A \mathbf{x} \le \mathbf{b}$), enforcing KKT conditions at each iteration.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch15_convex_optimization/projected_gradient_descent.py" target="_blank">🔗 Full Project Code: part1_mathematics/ch15_convex_optimization/projected_gradient_descent.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In high-frequency advertising auctions (Google Ads, Meta Ads) and cloud computing spot-pricing clusters, platforms solve millions of constrained convex optimization problems per minute to dynamically allocate budgets across advertisers while strictly respecting budget caps and bid constraints. In this project, you construct a high-speed projected gradient optimizer that computes optimal resource distributions in sub-millisecond execution time.</p>
+      </div>
+    </div>
+  </div>
+</div>

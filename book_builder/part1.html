@@ -5,142 +5,404 @@
 <div class="part-page">
   <div class="part-number">Part 1</div>
   <div class="part-title">The Mathematics of AI</div>
-  <div class="part-subtitle">The four pillars: Linear Algebra, Calculus, Probability & Information Theory</div>
+  <div class="part-subtitle">Linear Algebra, SVD, Multivariable Autograd, Bayesian Probability &amp; Convex Duality</div>
   <div class="part-ornament">✦ ✦ ✦</div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 1.1 — LINEAR ALGEBRA
+     CHAPTER 1.1 — LINEAR ALGEBRA & MATRIX DECOMPOSITIONS
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-1-1">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 1.1</span>
-    <h2 class="chapter-title">Linear Algebra</h2>
-    <span class="chapter-subtitle">The Language Machines Think In</span>
+    <h2 class="chapter-title">Linear Algebra &amp; Matrix Decompositions</h2>
+    <span class="chapter-subtitle">Vectors, High-Dimensional Geometry, SVD, Eckart-Young &amp; Pseudoinverses</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"Mathematics is the art of giving the same name to different things."</p>
-    <p class="attribution">— Henri Poincaré</p>
+    <p>"Linear algebra is the language in which all of machine learning is written. If calculus is the engine of optimization, linear algebra is the geometry of space itself."</p>
+    <p class="attribution">— Gilbert Strang</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>Everything in artificial intelligence is a vector, a matrix, or a higher-order tensor. An image is a 3D tensor of pixel intensities $(C, H, W)$. A word or sentence is a high-dimensional dense embedding vector in $\mathbb{R}^{4096}$. A transformer layer is a sequence of matrix multiplications projecting query, key, and value vectors. If you do not understand linear algebra, you cannot reason about neural network architectures.</p>
+    <!-- SECTION 1: VECTORS & GEOMETRY -->
+    <h3>1. Geometric Foundations: Space, Bases &amp; Projections</h3>
+    <p>To an AI engineer, a vector is not merely an array of numbers; it is a point or arrow in an abstract high-dimensional vector space $\mathbb{R}^d$. When OpenAI's <code>text-embedding-3-large</code> represents a sentence as a 3,072-dimensional vector, that vector represents a single coordinate inside a 3,072-dimensional semantic hypersphere. Concepts that are semantically related point in nearly identical spatial directions.</p>
+
+    <h4>Linear Combinations, Span &amp; Linear Independence</h4>
+    <p>Given a set of vectors $\{\mathbf{v}_1, \mathbf{v}_2, \dots, \mathbf{v}_k\} \subset \mathbb{R}^d$, a <strong>linear combination</strong> is any vector formed by scaling and adding them:
+    $$\mathbf{x} = c_1 \mathbf{v}_1 + c_2 \mathbf{v}_2 + \dots + c_k \mathbf{v}_k = \sum_{i=1}^k c_i \mathbf{v}_i, \quad c_i \in \mathbb{R}$$
+    The <strong>Span</strong> of these vectors is the set of all possible linear combinations. If no vector in the set can be expressed as a linear combination of the others, the set is <strong>linearly independent</strong>:
+    $$c_1 \mathbf{v}_1 + c_2 \mathbf{v}_2 + \dots + c_k \mathbf{v}_k = \mathbf{0} \iff c_1 = c_2 = \dots = c_k = 0$$
+    A linearly independent set of vectors that spans a space $V$ forms a <strong>Basis</strong> for $V$. The number of vectors in this basis defines the <strong>Dimension</strong> of $V$.</p>
+
+    <h4>The Dot Product, Norms &amp; Cosine Similarity</h4>
+    <p>The inner product (dot product) between two vectors $\mathbf{u}, \mathbf{v} \in \mathbb{R}^d$ is the algebraic engine of modern search, recommendation, and transformer attention:
+    $$\mathbf{u} \cdot \mathbf{v} = \mathbf{u}^T \mathbf{v} = \sum_{i=1}^d u_i v_i$$
+    Geometrically, the dot product connects algebra to trigonometry:
+    $$\mathbf{u} \cdot \mathbf{v} = \|\mathbf{u}\|_2 \|\mathbf{v}\|_2 \cos(\theta)$$
+    Where $\|\mathbf{u}\|_2 = \sqrt{\sum_{i=1}^d u_i^2}$ is the Euclidean $L_2$ norm. Dividing both sides yields <strong>Cosine Similarity</strong>, which measures the angular orientation of two vectors irrespective of their magnitude:
+    $$\text{CosineSimilarity}(\mathbf{u}, \mathbf{v}) = \frac{\mathbf{u} \cdot \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2} = \cos(\theta) \in [-1, 1]$$</p>
+
+    <div class="key-insight">
+      <p><strong>Why Transformers Normalize Vectors:</strong> When query and key vectors are $L_2$-normalized to unit length ($\|\mathbf{q}\|_2 = \|\mathbf{k}\|_2 = 1$), their dot product simplifies to pure cosine similarity: $\mathbf{q} \cdot \mathbf{k} = \cos(\theta)$. This bounds the input to the softmax attention function, preventing exponential saturation and vanishing gradients!</p>
+    </div>
+
+    <!-- SECTION 2: MATRIX MULTIPLICATION AS LINEAR TRANSFORMATION -->
+    <h3>2. Matrix Multiplication: Four Perspectives</h3>
+    <p>A matrix $A \in \mathbb{R}^{m \times n}$ is not a static 2D grid; it is a <strong>Linear Transformation</strong> mapping vectors from $\mathbb{R}^n$ into $\mathbb{R}^m$. To master deep learning, you must understand all four mathematical perspectives of matrix multiplication $C = A B$ (where $A \in \mathbb{R}^{m \times k}$ and $B \in \mathbb{R}^{k \times n}$):</p>
+
+    <ol>
+      <li><strong>The Element Perspective (Dot Products):</strong> Each element $C_{ij}$ is the dot product of row $i$ of $A$ and column $j$ of $B$:
+      $$C_{ij} = \sum_{p=1}^k A_{ip} B_{pj}$$</li>
+      <li><strong>The Column Perspective (Linear Combinations):</strong> Each column of $C$ is a linear combination of the columns of $A$, weighted by the corresponding column of $B$:
+      $$\mathbf{c}_j = \sum_{p=1}^k B_{pj} \mathbf{a}_p$$
+      <em>Deep Learning Insight:</em> A neural network forward pass $W \mathbf{x}$ takes a linear combination of the column features in weight matrix $W$!</li>
+      <li><strong>The Row Perspective:</strong> Each row of $C$ is a linear combination of the rows of $B$, weighted by the corresponding row of $A$.</li>
+      <li><strong>The Outer Product Perspective (Rank-1 Summation):</strong> $C$ is the sum of $k$ rank-1 outer product matrices:
+      $$C = \sum_{p=1}^k \mathbf{a}_p \mathbf{b}_p^T, \quad \text{where } \mathbf{a}_p \in \mathbb{R}^{m \times 1}, \mathbf{b}_p^T \in \mathbb{R}^{1 \times n}$$
+      <em>Hardware Insight:</em> Modern GPU Tensor Cores perform fused multiply-accumulate (FMA) across outer products to maximize arithmetic throughput.</li>
+    </ol>
+
+    <!-- SECTION 3: MATRIX RANK & SVD -->
+    <h3>3. Singular Value Decomposition (SVD) &amp; The Eckart-Young Theorem</h3>
+    <p>Eigenvalue decomposition ($A = Q \Lambda Q^{-1}$) is limited because it requires $A$ to be a square, diagonalizable matrix. In real-world AI, data matrices are almost always rectangular: $N$ samples by $d$ features ($N \neq d$).</p>
+
+    <p><strong>Singular Value Decomposition (SVD)</strong> is the pinnacle of linear algebra because it factorizes <strong>ANY</strong> rectangular matrix $A \in \mathbb{R}^{m \times n}$ into three geometrically pristine matrices:</p>
+    $$A = U \Sigma V^T$$
+    <ul>
+      <li>$U \in \mathbb{R}^{m \times m}$: An orthogonal matrix ($U^T U = I_m$). Its columns $\mathbf{u}_i$ are the <strong>Left Singular Vectors</strong> (eigenvectors of $A A^T$).</li>
+      <li>$\Sigma \in \mathbb{R}^{m \times n}$: A diagonal matrix of non-negative real numbers $\sigma_1 \ge \sigma_2 \ge \dots \ge \sigma_r > 0$ called the <strong>Singular Values</strong> ($\sigma_i = \sqrt{\lambda_i(A^T A)}$).</li>
+      <li>$V \in \mathbb{R}^{n \times n}$: An orthogonal matrix ($V^T V = I_n$). Its columns $\mathbf{v}_i$ are the <strong>Right Singular Vectors</strong> (eigenvectors of $A^T A$).</li>
+    </ul>
+
+    <h4>The Eckart-Young-Mirsky Theorem</h4>
+    <p>The practical superpower of SVD in machine learning is optimal low-rank matrix approximation. Suppose matrix $A$ has full rank $r$. What is the best possible rank-$k$ matrix $A_k$ (where $k &lt; r$) that approximates $A$?</p>
 
     <div class="real-world-box">
-      <h4>🏢 Real-World Problem Mapping: LoRA Fine-Tuning & SVD Compression</h4>
-      <p>Modern Large Language Models (such as LLaMA-3 70B) have tens of billions of parameters. Fine-tuning all weights requires 160GB+ of VRAM, costing thousands of dollars per run. Through <strong>Singular Value Decomposition (SVD)</strong> and low-rank approximation, we discover that weight update matrices $\Delta W \in \mathbb{R}^{d \times d}$ have an extremely low intrinsic rank $r \ll d$. By factorizing $\Delta W = B \cdot A$ where $B \in \mathbb{R}^{d \times r}$ and $A \in \mathbb{R}^{r \times d}$, LoRA reduces trainable memory by over 99.8%, allowing 70B models to be fine-tuned on a single consumer GPU.</p>
+      <h4>🏆 The Eckart-Young-Mirsky Theorem (1936)</h4>
+      <p>The optimal rank-$k$ approximation of $A$ under both the Frobenius norm and the spectral $L_2$ norm is obtained by truncating the SVD summation to the top $k$ terms:</p>
+      $$A_k = \sum_{i=1}^k \sigma_i \mathbf{u}_i \mathbf{v}_i^T = U_k \Sigma_k V_k^T$$
+      <p>Furthermore, the exact approximation error is bounded by the sum of discarded singular values:</p>
+      $$\|A - A_k\|_F = \sqrt{\sum_{i=k+1}^{\min(m, n)} \sigma_i^2}$$
+      $$\|A - A_k\|_2 = \sigma_{k+1}$$
     </div>
+    <p>This single theorem forms the mathematical foundation of Principal Component Analysis (PCA), latent semantic analysis in NLP, recommender systems (matrix factorization), and modern parameter-efficient fine-tuning (LoRA)!</p>
 
-    <h3>1. Vectors, Norms & Cosine Similarity</h3>
-    <p>A vector $\mathbf{v} \in \mathbb{R}^n$ represents a point or direction in $n$-dimensional geometric space. The magnitude of a vector is measured by its $L_p$ norm:
-    $$\|\mathbf{v}\|_2 = \sqrt{\sum_{i=1}^n v_i^2} \quad (L_2 \text{ Euclidean Norm})$$
-    $$\|\mathbf{v}\|_1 = \sum_{i=1}^n |v_i| \quad (L_1 \text{ Manhattan Norm})$$</p>
-    <p>In vector databases (Pinecone, Milvus, Qdrant) and retrieval-augmented generation (RAG), semantic similarity is calculated using <strong>Cosine Similarity</strong>, which measures the cosine of the angle $\theta$ between two normalized vectors, independent of their lengths:
-    $$\cos(\theta) = \frac{\mathbf{u} \cdot \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2} = \frac{\sum_{i=1}^n u_i v_i}{\sqrt{\sum_{i=1}^n u_i^2}\sqrt{\sum_{i=1}^n v_i^2}}$$</p>
+    <!-- SECTION 4: MOORE-PENROSE PSEUDOINVERSE -->
+    <h3>4. The Moore-Penrose Pseudoinverse</h3>
+    <p>In classical school algebra, if $a x = b$, then $x = a^{-1} b$. But in AI, we frequently encounter linear systems $X \mathbf{w} = \mathbf{y}$ where $X \in \mathbb{R}^{N \times d}$ is not square ($N \gg d$ in regression, or $N \ll d$ in overparameterized deep networks). $X$ cannot be inverted because $X^{-1}$ does not exist.</p>
 
-    <div class="code-lab">
-      <div class="code-lab-header">Code Lab 1.1 — Cosine Similarity & SVD Low-Rank Approximation</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch11_linear_algebra/solutions.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch11_linear_algebra/solutions.py</a></p>
-<pre><code>import numpy as np
+    <p>The <strong>Moore-Penrose Pseudoinverse</strong> (denoted $X^+$) generalizes matrix inversion to all rectangular matrices using SVD:</p>
+    $$X^+ = V \Sigma^+ U^T$$
+    <p>Where $\Sigma^+$ is formed by inverting all non-zero singular values ($\frac{1}{\sigma_i}$) and transposing the matrix.</p>
 
-def cosine_similarity(u, v):
-    dot = np.dot(u, v)
-    return dot / (np.linalg.norm(u) * np.linalg.norm(v) + 1e-12)
+    <h4>Properties of the Pseudoinverse</h4>
+    <ul>
+      <li><strong>Overdetermined Systems ($N &gt; d$, full column rank):</strong> $X^+ = (X^T X)^{-1} X^T$. The solution $\mathbf{w} = X^+ \mathbf{y}$ is the exact Ordinary Least Squares (OLS) solution that minimizes the residual sum of squares $\|X \mathbf{w} - \mathbf{y}\|_2^2$.</li>
+      <li><strong>Underdetermined Systems ($N &lt; d$, full row rank):</strong> $X^+ = X^T (X X^T)^{-1}$. The solution $\mathbf{w} = X^+ \mathbf{y}$ is the unique interpolating solution ($X \mathbf{w} = \mathbf{y}$) with the <strong>minimum $L_2$ norm</strong> $\|\mathbf{w}\|_2$.</li>
+    </ul>
 
-def low_rank_svd(A, k):
-    """Reconstructs rank-k optimal approximation via Eckart-Young Theorem."""
-    U, S, Vt = np.linalg.svd(A, full_matrices=False)
-    return np.dot(U[:, :k], np.dot(np.diag(S[:k]), Vt[:k, :]))</code></pre>
-    </div>
-
-    <h3>FAANG Interview Problems — Linear Algebra</h3>
+    <!-- SECTION 5: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Linear Algebra &amp; SVD</h3>
 
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 1.1.1</span>
-        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-netflix">Netflix</span>
         <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are building a movie recommendation engine for a streaming platform with $M = 10,000$ users and $N = 2,000$ movies. The user-rating matrix $R \in \mathbb{R}^{M \times N}$ is stored in 32-bit floating point.</p>
+        <ol>
+          <li>Calculate the exact uncompressed memory size of matrix $R$.</li>
+          <li>You perform Truncated SVD to factorize $R$ into rank $k = 30$ latent factors: $R \approx U_k \Sigma_k V_k^T$. Calculate the total memory required to store $U_k$, $\Sigma_k$, and $V_k$.</li>
+          <li>Calculate the exact compression ratio achieved.</li>
+          <li>If the sum of all singular values squared is $\sum_{i=1}^{2000} \sigma_i^2 = 500,000$, and the sum of the top 30 singular values squared is $\sum_{i=1}^{30} \sigma_i^2 = 425,000$, calculate the percentage of total matrix variance captured by the rank-30 approximation.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+
+        <p class="step"><strong>Step 1: Calculate Uncompressed Memory Size:</strong><br>
+        $R$ has $10,000 \times 2,000 = 20,000,000$ elements.<br>
+        At 4 bytes per FP32 element:
+        $$\text{Raw Memory} = 20,000,000 \times 4 \text{ bytes} = 80,000,000 \text{ bytes} = 80 \text{ Megabytes (MB)}$$</p>
+
+        <p class="step"><strong>Step 2: Calculate Low-Rank Factorized Memory Size:</strong><br>
+        In truncated SVD with rank $k = 30$:
+        <ul>
+          <li>$U_k \in \mathbb{R}^{10,000 \times 30}$: $300,000$ elements.</li>
+          <li>$\Sigma_k \in \mathbb{R}^{30}$ (stored as a 1D vector of diagonal values): $30$ elements.</li>
+          <li>$V_k^T \in \mathbb{R}^{30 \times 2,000}$: $60,000$ elements.</li>
+        </ul>
+        $$\text{Total Elements} = 300,000 + 30 + 60,000 = 360,030 \text{ elements}$$
+        $$\text{Compressed Memory} = 360,030 \times 4 \text{ bytes} = 1,440,120 \text{ bytes} \approx 1.44 \text{ MB}$$</p>
+
+        <p class="step"><strong>Step 3: Calculate Compression Ratio:</strong>
+        $$\text{Compression Ratio} = \frac{\text{Raw Size}}{\text{Compressed Size}} = \frac{80 \text{ MB}}{1.44 \text{ MB}} \approx 55.55\times \text{ compression!}$$
+        <em>Production Value:</em> Storing user and movie vectors takes only 1.8% of the original memory footprint, allowing the entire model to fit inside the CPU L3 cache of an inference server!</p>
+
+        <p class="step"><strong>Step 4: Calculate Captured Variance:</strong><br>
+        By the Eckart-Young theorem, the total Frobenius energy of matrix $R$ is $\|R\|_F^2 = \sum_{i=1}^{\min(M,N)} \sigma_i^2$. The explained variance ratio captured by rank $k$ is:
+        $$\text{Explained Variance} = \frac{\sum_{i=1}^k \sigma_i^2}{\sum_{i=1}^r \sigma_i^2} = \frac{425,000}{500,000} = 0.85 = 85.0\%$$
+        <strong>Result: Rank 30 captures 85.0% of all user preference variance while slashing memory by 98.2%!</strong></p>
+      </div>
+    </div>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 1.1.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-meta">Meta</span>
         <span class="company-tag company-openai">OpenAI</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Let $A \in \mathbb{R}^{m \times n}$ with rank $r$. State the Eckart-Young-Mirsky Theorem and prove how Singular Value Decomposition provides the optimal rank-$k$ approximation ($k < r$) minimizing the Frobenius norm error $\|A - A_k\|_F$.</p>
+        <p><strong>QUESTION:</strong> Let $\mathbf{u}, \mathbf{v} \in \mathbb{R}^d$ be two non-zero embedding vectors. Derive the analytical gradient of the Cosine Similarity $S(\mathbf{u}, \mathbf{v}) = \frac{\mathbf{u}^T \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2}$ with respect to vector $\mathbf{u}$.</p>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Solution</div>
-        <p class="step"><strong>Step 1: Singular Value Decomposition (SVD):</strong> Any real matrix $A \in \mathbb{R}^{m \times n}$ can be factorized as:
-        $$A = U \Sigma V^T = \sum_{i=1}^r \sigma_i \mathbf{u}_i \mathbf{v}_i^T$$
-        where $U \in \mathbb{R}^{m \times m}$ and $V \in \mathbb{R}^{n \times n}$ are orthogonal matrices, and $\Sigma$ contains singular values ordered non-increasingly: $\sigma_1 \ge \sigma_2 \ge \dots \ge \sigma_r > 0$.</p>
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
 
-        <p class="step"><strong>Step 2: The Rank-$k$ Truncated Matrix:</strong> Setting all singular values beyond index $k$ to zero gives:
-        $$A_k = \sum_{i=1}^k \sigma_i \mathbf{u}_i \mathbf{v}_i^T$$</p>
+        <p class="step"><strong>Step 1: Express Cosine Similarity as a Quotient:</strong><br>
+        Let $f(\mathbf{u}) = \mathbf{u}^T \mathbf{v}$ (scalar numerator).<br>
+        Let $g(\mathbf{u}) = \|\mathbf{u}\|_2 \|\mathbf{v}\|_2 = (\mathbf{u}^T \mathbf{u})^{1/2} \|\mathbf{v}\|_2$ (scalar denominator).<br>
+        We seek $\nabla_{\mathbf{u}} \left[ \frac{f(\mathbf{u})}{g(\mathbf{u})} \right]$. Applying the quotient rule of vector calculus:
+        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{g(\mathbf{u}) \nabla_{\mathbf{u}} f(\mathbf{u}) - f(\mathbf{u}) \nabla_{\mathbf{u}} g(\mathbf{u})}{g(\mathbf{u})^2}$$</p>
 
-        <p class="step"><strong>Step 3: Frobenius Norm Formulation:</strong> Recall that the Frobenius norm is the square root of the sum of squared singular values: $\|M\|_F^2 = \sum \sigma_i(M)^2$. Thus:
-        $$A - A_k = \sum_{i=k+1}^r \sigma_i \mathbf{u}_i \mathbf{v}_i^T \implies \|A - A_k\|_F = \sqrt{\sum_{i=k+1}^r \sigma_i^2}$$</p>
+        <p class="step"><strong>Step 2: Compute Gradients of Numerator and Denominator:</strong><br>
+        For the numerator: $\nabla_{\mathbf{u}} (\mathbf{u}^T \mathbf{v}) = \mathbf{v}$.<br>
+        For the denominator, use the chain rule on $\|\mathbf{u}\|_2$:
+        $$\nabla_{\mathbf{u}} \|\mathbf{u}\|_2 = \nabla_{\mathbf{u}} (\mathbf{u}^T \mathbf{u})^{1/2} = \frac{1}{2 (\mathbf{u}^T \mathbf{u})^{1/2}} \cdot 2 \mathbf{u} = \frac{\mathbf{u}}{\|\mathbf{u}\|_2}$$
+        Therefore:
+        $$\nabla_{\mathbf{u}} g(\mathbf{u}) = \|\mathbf{v}\|_2 \frac{\mathbf{u}}{\|\mathbf{u}\|_2}$$</p>
 
-        <p class="step"><strong>Step 4: Eckart-Young Theorem Conclusion:</strong> For any arbitrary matrix $B$ of rank at most $k$, $\|A - B\|_F \ge \|A - A_k\|_F$. Thus, SVD truncation is mathematically guaranteed to be the optimal low-rank projection.</p>
+        <p class="step"><strong>Step 3: Substitute and Simplify:</strong>
+        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2 \mathbf{v} - (\mathbf{u}^T \mathbf{v}) \|\mathbf{v}\|_2 \frac{\mathbf{u}}{\|\mathbf{u}\|_2}}{\|\mathbf{u}\|_2^2 \|\mathbf{v}\|_2^2}$$
+        Cancel $\|\mathbf{v}\|_2$ from numerator and denominator:
+        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{\|\mathbf{u}\|_2 \mathbf{v} - (\mathbf{u}^T \mathbf{v}) \frac{\mathbf{u}}{\|\mathbf{u}\|_2}}{\|\mathbf{u}\|_2^2 \|\mathbf{v}\|_2}$$
+        Factor out $\frac{1}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2}$:
+        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{1}{\|\mathbf{u}\|_2} \left[ \frac{\mathbf{v}}{\|\mathbf{v}\|_2} - \frac{\mathbf{u}^T \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2} \frac{\mathbf{u}}{\|\mathbf{u}\|_2} \right]$$
+        Let $\hat{\mathbf{u}} = \frac{\mathbf{u}}{\|\mathbf{u}\|_2}$ and $\hat{\mathbf{v}} = \frac{\mathbf{v}}{\|\mathbf{v}\|_2}$ be the unit vectors. Then:
+        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{1}{\|\mathbf{u}\|_2} \left[ \hat{\mathbf{v}} - (\hat{\mathbf{u}}^T \hat{\mathbf{v}}) \hat{\mathbf{u}} \right]$$
+        <em>Geometric Beauty:</em> Notice that $(\hat{\mathbf{u}}^T \hat{\mathbf{v}}) \hat{\mathbf{u}}$ is the orthogonal projection of $\hat{\mathbf{v}}$ onto $\hat{\mathbf{u}}$! The gradient vector $\nabla_{\mathbf{u}} S$ is strictly <strong>orthogonal to $\mathbf{u}$</strong>, rotating $\mathbf{u}$ toward $\mathbf{v}$ without changing its norm!</p>
+      </div>
+    </div>
+
+    <!-- SECTION 6: CODE LAB -->
+    <h3>5. Production Code Lab 1.1: Truncated SVD from First Principles</h3>
+    <p>Below is a production implementation of Truncated SVD low-rank compression using NumPy, verifying the Eckart-Young reconstruction error bound.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 1.1 — SVD Matrix Compression &amp; Frobenius Error Verification</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch11_linear_algebra_svd/svd_compression.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch11_linear_algebra_svd/svd_compression.py</a></p>
+<pre><code>import numpy as np
+
+def truncated_svd_compress(A: np.ndarray, k: int):
+    """
+    Computes optimal rank-k approximation via Eckart-Young Theorem.
+    """
+    # 1. Full SVD decomposition
+    U, s, Vt = np.linalg.svd(A, full_matrices=False)
+
+    # 2. Truncate to top k singular values and vectors
+    U_k = U[:, :k]
+    s_k = s[:k]
+    Vt_k = Vt[:k, :]
+
+    # 3. Reconstruct optimal rank-k matrix: A_k = U_k * diag(s_k) * V_k^T
+    A_k = np.dot(U_k * s_k, Vt_k)
+
+    # 4. Verify Eckart-Young Frobenius Error
+    actual_error = np.linalg.norm(A - A_k, ord='fro')
+    theoretical_error = np.sqrt(np.sum(s[k:] ** 2))
+
+    variance_explained = np.sum(s_k ** 2) / np.sum(s ** 2)
+
+    return {
+        "A_k": A_k,
+        "actual_error": float(actual_error),
+        "theoretical_error": float(theoretical_error),
+        "variance_explained": float(variance_explained),
+        "error_match": bool(np.isclose(actual_error, theoretical_error))
+    }
+
+if __name__ == "__main__":
+    # Test on a 500x200 random matrix
+    np.random.seed(42)
+    X = np.random.randn(500, 200)
+    res = truncated_svd_compress(X, k=25)
+    print(f"Variance Explained (k=25) : {res['variance_explained']*100:.2f}%")
+    print(f"Actual Frobenius Error    : {res['actual_error']:.4f}")
+    print(f"Theoretical Bound Error   : {res['theoretical_error']:.4f}")
+    print(f"Eckart-Young Verified     : {res['error_match']}")</code></pre>
+    </div>
+
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 1.1 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 1.1: High-Resolution Image &amp; Weight Matrix SVD Compression Engine</h3>
+        <p class="project-desc">Build a production compression tool that factorizes high-resolution image channels and deep learning linear layer weights ($W \in \mathbb{R}^{d_{out} \times d_{in}}$) into low-rank factor matrices, measuring perceptual Peak Signal-to-Noise Ratio (PSNR) and inference FLOP reduction.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch11_linear_algebra_svd/svd_compression.py" target="_blank">🔗 Full Project Code: part1_mathematics/ch11_linear_algebra_svd/svd_compression.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In edge AI deployment (e.g. running transformer models on mobile phones or autonomous vehicle microcontrollers), standard floating-point weight matrices are too large to fit in on-chip SRAM cache. In this project, you apply SVD to compress dense linear projections $W \approx B \times A$ (identical to LoRA parameter factorization), slashing parameter storage by 70% while maintaining 95% model accuracy.</p>
       </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 1.2 — CALCULUS
+     CHAPTER 1.2 — MULTIVARIABLE CALCULUS & AUTOMATIC DIFFERENTIATION
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-1-2">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 1.2</span>
-    <h2 class="chapter-title">Calculus</h2>
-    <span class="chapter-subtitle">The Engine of Learning & Automatic Differentiation</span>
+    <h2 class="chapter-title">Multivariable Calculus &amp; Automatic Differentiation</h2>
+    <span class="chapter-subtitle">Gradients, Jacobians, Hessians, Vector-Jacobian Products &amp; Autograd from Scratch</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"If I have seen further, it is by standing on the shoulders of giants."</p>
-    <p class="attribution">— Isaac Newton</p>
+    <p>"Calculus is the most powerful weapon of thought yet devised by the wit of man."</p>
+    <p class="attribution">— Wallace B. Smith</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>If linear algebra is the skeleton of artificial intelligence, calculus is its muscular engine. Machine learning is fundamentally an optimization problem: we define a loss function measuring how poorly our model performs, and we use derivatives to guide model parameters downhill toward minimum error. Every weight update in every neural network on Earth is governed by the chain rule of multivariable calculus.</p>
+    <!-- SECTION 1: THE GRADIENT -->
+    <h3>1. Gradients: The Direction of Steepest Descent</h3>
+    <p>Machine learning models learn by minimizing an empirical loss function $\mathcal{L}(\mathbf{w}): \mathbb{R}^d \to \mathbb{R}$. In high dimensions ($d = 70 \times 10^9$ parameters), we cannot visualize the loss surface. Calculus provides the mathematical compass that guides us toward the minimum.</p>
+
+    <h4>The Gradient Vector</h4>
+    <p>For a scalar-valued function $f(\mathbf{x})$, the gradient $\nabla f(\mathbf{x}) \in \mathbb{R}^d$ is the vector of all first-order partial derivatives:
+    $$\nabla f(\mathbf{x}) = \begin{bmatrix} \frac{\partial f}{\partial x_1}, & \frac{\partial f}{\partial x_2}, & \dots, & \frac{\partial f}{\partial x_d} \end{bmatrix}^T$$</p>
 
     <div class="real-world-box">
-      <h4>🏢 Real-World Problem Mapping: Exploding Gradients & Loss Spikes</h4>
-      <p>During large-scale pre-training of models like GPT-4 or Gemini, training runs frequently encounter catastrophic "loss spikes" where the loss abruptly shoots to infinity or becomes `NaN`. This occurs when the gradient vector $\|\nabla_\theta \mathcal{L}\|$ explodes across steep cliffs in the high-dimensional non-convex loss surface. Understanding partial derivatives, gradient norms, and Lipschitz continuity enables engineers to implement gradient clipping and learning rate warmups that keep multi-million dollar cluster runs stable.</p>
+      <h4>📐 Mathematical Proof: Why the Gradient Points in the Direction of Steepest Ascent</h4>
+      <p>Let $\mathbf{u}$ be a unit vector ($\|\mathbf{u}\|_2 = 1$) representing an arbitrary direction in parameter space. The <strong>directional derivative</strong> $D_{\mathbf{u}} f(\mathbf{x})$ measures the rate of change of $f$ in direction $\mathbf{u}$:</p>
+      $$D_{\mathbf{u}} f(\mathbf{x}) = \lim_{h \to 0} \frac{f(\mathbf{x} + h \mathbf{u}) - f(\mathbf{x})}{h} = \nabla f(\mathbf{x}) \cdot \mathbf{u}$$
+      <p>By the Cauchy-Schwarz inequality and trigonometric dot-product definition:</p>
+      $$D_{\mathbf{u}} f(\mathbf{x}) = \|\nabla f(\mathbf{x})\|_2 \|\mathbf{u}\|_2 \cos(\theta) = \|\nabla f(\mathbf{x})\|_2 \cos(\theta)$$
+      <p>Since $\cos(\theta) \in [-1, 1]$, this rate of change is maximized when $\cos(\theta) = 1$, which occurs when $\theta = 0^\circ$ (meaning $\mathbf{u}$ points in the <strong>exact same direction</strong> as $\nabla f(\mathbf{x})$)! Conversely, it is minimized (steepest descent) when $\cos(\theta) = -1$, pointing in direction $-\nabla f(\mathbf{x})$.</p>
     </div>
 
-    <h3>1. Derivatives, Partial Derivatives & The Gradient Vector</h3>
-    <p>For a single-variable function $f(x)$, the derivative represents the instantaneous rate of change:
-    $$f'(x) = \lim_{h \to 0} \frac{f(x + h) - f(x)}{h}$$</p>
-    <p>In AI, our loss functions $\mathcal{L}(w_1, w_2, \dots, w_n)$ depend on millions or billions of parameters. We compute the <strong>partial derivative</strong> $\frac{\partial \mathcal{L}}{\partial w_i}$ by treating all other variables as constant. Collecting all partial derivatives yields the <strong>Gradient Vector</strong> $\nabla \mathcal{L}$:
-    $$\nabla \mathcal{L}(\mathbf{w}) = \begin{bmatrix} \frac{\partial \mathcal{L}}{\partial w_1} \\ \frac{\partial \mathcal{L}}{\partial w_2} \\ \vdots \\ \frac{\partial \mathcal{L}}{\partial w_n} \end{bmatrix}$$</p>
+    <!-- SECTION 2: JACOBIAN & HESSIAN -->
+    <h3>2. Higher-Order Derivatives: Jacobians &amp; Hessians</h3>
+    
+    <h4>The Jacobian Matrix (Vector-to-Vector Derivatives)</h4>
+    <p>When a function maps a vector to another vector $\mathbf{f}: \mathbb{R}^n \to \mathbb{R}^m$, its first derivatives form the <strong>Jacobian matrix</strong> $J \in \mathbb{R}^{m \times n}$:</p>
+    $$J_{ij} = \frac{\partial f_i}{\partial x_j} \implies J = \begin{bmatrix}
+    \frac{\partial f_1}{\partial x_1} & \cdots & \frac{\partial f_1}{\partial x_n} \\
+    \vdots & \ddots & \vdots \\
+    \frac{\partial f_m}{\partial x_1} & \cdots & \frac{\partial f_m}{\partial x_n}
+    \end{bmatrix}$$
+
+    <h4>The Hessian Matrix &amp; Loss Surface Curvature</h4>
+    <p>For a scalar loss function $\mathcal{L}(\mathbf{w})$, the second-order partial derivatives form the symmetric <strong>Hessian matrix</strong> $H \in \mathbb{R}^{d \times d}$ where $H_{ij} = \frac{\partial^2 \mathcal{L}}{\partial w_i \partial w_j}$.</p>
+    <p>The Hessian dictates the curvature of the loss surface via the second-order Taylor expansion:</p>
+    $$\mathcal{L}(\mathbf{w} + \Delta \mathbf{w}) \approx \mathcal{L}(\mathbf{w}) + \nabla \mathcal{L}(\mathbf{w})^T \Delta \mathbf{w} + \frac{1}{2} \Delta \mathbf{w}^T H(\mathbf{w}) \Delta \mathbf{w}$$
+    <ul>
+      <li><strong>All Eigenvalues $\lambda_i(H) &gt; 0$ (Positive Definite):</strong> The surface curves upward in all directions $\to$ Local Minimum.</li>
+      <li><strong>Mixed Eigenvalues (Some positive, some negative):</strong> Saddle Point! In high-dimensional deep learning ($d &gt; 10^6$), local minima are extremely rare; <strong>saddle points dominate</strong>.</li>
+      <li><strong>Condition Number $\kappa(H) = \frac{\lambda_{\max}}{\lambda_{\min}} \gg 1$:</strong> Ill-conditioned "ravine"! Gradient descent will oscillate wildly across steep ravine walls while making excruciatingly slow progress along the flat valley. This physical reality is why <strong>Momentum and Adam</strong> optimizers are mandatory!</li>
+    </ul>
+
+    <!-- SECTION 3: AUTOMATIC DIFFERENTIATION -->
+    <h3>3. Forward-Mode vs. Reverse-Mode Automatic Differentiation</h3>
+    <p>How does PyTorch compute gradients across a model with 100 billion parameters? There are four ways to differentiate:</p>
+    <ol>
+      <li><strong>Manual Analytical Calculus:</strong> Writing derivative formulas by hand. Impractical for multi-layer composite models.</li>
+      <li><strong>Numerical Differentiation (Finite Differences):</strong> $\frac{\partial f}{\partial x_i} \approx \frac{f(\mathbf{x} + \epsilon \mathbf{e}_i) - f(\mathbf{x})}{\epsilon}$. Requires $d + 1$ full forward evaluations. For 70 billion parameters, computing ONE gradient step would take 1,000 years!</li>
+      <li><strong>Symbolic Differentiation (e.g. SymPy, Mathematica):</strong> Manipulating algebraic trees. Suffers from catastrophic "expression swell."</li>
+      <li><strong>Automatic Differentiation (Autograd):</strong> Evaluates exact machine derivatives at machine precision by recursively applying the chain rule to the execution graph.</li>
+    </ol>
+
     <div class="key-insight">
-      <p><strong>Fundamental Geometric Theorem of Gradients:</strong> The gradient vector $\nabla \mathcal{L}(\mathbf{w})$ points in the direction of <em>steepest instantaneous ascent</em>. Therefore, moving in the negative direction $-\nabla \mathcal{L}(\mathbf{w})$ guarantees steepest descent toward lower loss.</p>
+      <p><strong>Why Deep Learning Uses Reverse-Mode Autograd (Backpropagation):</strong></p>
+      <ul>
+        <li><strong>Forward-Mode Autograd (JVPs):</strong> Computes $\frac{\partial \mathbf{y}}{\partial x_i}$ by propagating derivatives forward alongside activations. It requires <strong>1 forward pass per input variable</strong>. Optimal when inputs $n \ll \text{outputs } m$.</li>
+        <li><strong>Reverse-Mode Autograd (VJPs):</strong> Executes 1 forward pass to evaluate activations and build the computational tape, then executes <strong>1 single backward pass</strong> to compute the exact gradients of the scalar loss $\mathcal{L}$ with respect to ALL $d$ parameters simultaneously! Because deep learning has millions of inputs ($n \gg 1$) but only ONE scalar loss ($m = 1$), reverse-mode is infinitely superior.</li>
+      </ul>
     </div>
 
-    <h3>2. The Multivariate Chain Rule</h3>
-    <p>Neural networks are composite functions: $\hat{y} = f_L(f_{L-1}(\dots f_1(\mathbf{x})))$. The chain rule dictates that the gradient of a composition is the product of intermediate derivatives. For $z = g(y)$ and $y = f(x)$:
-    $$\frac{dz}{dx} = \frac{dz}{dy} \cdot \frac{dy}{dx}$$
-    In vector space, this becomes a sequence of <strong>Vector-Jacobian Products (VJPs)</strong>, which forms the computational backbone of PyTorch autograd.</p>
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Calculus &amp; Gradients</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 1.2.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google DeepMind</span>
+        <span class="company-tag company-openai">OpenAI</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In classification models, the Softmax activation function maps raw logit scores $\mathbf{z} \in \mathbb{R}^C$ into probabilities $\mathbf{p} \in \mathbb{R}^C$:
+        $$p_i = \frac{e^{z_i}}{\sum_{k=1}^C e^{z_k}}$$
+        The model is trained using Cross-Entropy loss with ground-truth one-hot label vector $\mathbf{y} \in \{0, 1\}^C$:
+        $$\mathcal{L}_{CE} = -\sum_{k=1}^C y_k \ln(p_k)$$
+        Prove analytically from first principles that the gradient of the loss with respect to logit $z_i$ is given by the remarkably simple expression:
+        $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = p_i - y_i$$</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
+
+        <p class="step"><strong>Step 1: Compute the Jacobian of the Softmax Function:</strong><br>
+        Notice that $p_j$ depends on <em>all</em> logits because $\sum_k e^{z_k}$ is in the denominator. We must evaluate $\frac{\partial p_j}{\partial z_i}$ for two cases: $j = i$ and $j \neq i$.<br>
+        Let $S = \sum_{k=1}^C e^{z_k}$. Then $p_j = \frac{e^{z_j}}{S}$.</p>
+        <ul>
+          <li><strong>Case 1 ($j = i$):</strong> Using quotient rule:
+          $$\frac{\partial p_i}{\partial z_i} = \frac{e^{z_i} S - e^{z_i} e^{z_i}}{S^2} = \frac{e^{z_i}}{S} \left( \frac{S - e^{z_i}}{S} \right) = p_i (1 - p_i)$$</li>
+          <li><strong>Case 2 ($j \neq i$):</strong> The numerator $e^{z_j}$ is constant with respect to $z_i$:
+          $$\frac{\partial p_j}{\partial z_i} = \frac{0 \cdot S - e^{z_j} e^{z_i}}{S^2} = -\frac{e^{z_j}}{S} \frac{e^{z_i}}{S} = -p_j p_i$$</li>
+        </ul>
+        Unifying both cases using the Kronecker delta $\delta_{ij}$ (where $\delta_{ij}=1$ if $i=j$, else $0$):
+        $$\frac{\partial p_j}{\partial z_i} = p_j (\delta_{ij} - p_i)$$
+
+        <p class="step"><strong>Step 2: Apply the Multivariable Chain Rule to Cross-Entropy Loss:</strong><br>
+        $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = \sum_{j=1}^C \frac{\partial \mathcal{L}_{CE}}{\partial p_j} \frac{\partial p_j}{\partial z_i}$$
+        Since $\mathcal{L}_{CE} = -\sum_{k=1}^C y_k \ln(p_k)$, the derivative with respect to probability $p_j$ is:
+        $$\frac{\partial \mathcal{L}_{CE}}{\partial p_j} = -\frac{y_j}{p_j}$$</p>
+
+        <p class="step"><strong>Step 3: Substitute and Simplify:</strong>
+        $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = \sum_{j=1}^C \left( -\frac{y_j}{p_j} \right) \left[ p_j (\delta_{ij} - p_i) \right]$$
+        Cancel $p_j$ in the product:
+        $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = -\sum_{j=1}^C y_j (\delta_{ij} - p_i) = -\sum_{j=1}^C y_j \delta_{ij} + \sum_{j=1}^C y_j p_i$$
+        Evaluate each sum:
+        <ul>
+          <li>$\sum_{j=1}^C y_j \delta_{ij} = y_i$ (all terms vanish except when $j = i$).</li>
+          <li>$\sum_{j=1}^C y_j p_i = p_i \sum_{j=1}^C y_j = p_i (1) = p_i$ (since $\mathbf{y}$ is a one-hot distribution summing to 1).</li>
+        </ul>
+        Combining terms:
+        $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = p_i - y_i$$
+        <em>Mathematical Elegance:</em> The gradient is simply <strong>(Predicted Probability $-$ True Probability)</strong>! If the model predicts $p_i = 0.9$ when true label $y_i = 1.0$, the gradient error signal is $-0.1$, gently nudging logit $z_i$ upward.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>5. Production Code Lab 1.2: A Micro-Autograd Engine from Scratch</h3>
+    <p>To understand reverse-mode automatic differentiation, we build a micro-autograd engine from scratch in pure Python with a dynamic computational graph and topological sorting.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 1.2 — Micro-Autograd Engine from Scratch</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch12_calculus/autograd_engine.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch12_calculus/autograd_engine.py</a></p>
+      <div class="code-lab-header">Code Lab 1.2 — Micro-Autograd Scalar Engine</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch12_calculus_autograd/micro_autograd.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch12_calculus_autograd/micro_autograd.py</a></p>
 <pre><code>class Value:
-    """Scalar node with reverse-mode automatic differentiation."""
-    def __init__(self, data, _children=()):
+    """A scalar node in the reverse-mode autograd computational graph."""
+    def __init__(self, data, _children=(), _op=''):
         self.data = float(data)
         self.grad = 0.0
         self._backward = lambda: None
         self._prev = set(_children)
+        self._op = _op
 
     def __add__(self, other):
         other = other if isinstance(other, Value) else Value(other)
-        out = Value(self.data + other.data, (self, other))
+        out = Value(self.data + other.data, (self, other), '+')
         def _backward():
             self.grad += 1.0 * out.grad
             other.grad += 1.0 * out.grad
@@ -149,7 +411,7 @@ def low_rank_svd(A, k):
 
     def __mul__(self, other):
         other = other if isinstance(other, Value) else Value(other)
-        out = Value(self.data * other.data, (self, other))
+        out = Value(self.data * other.data, (self, other), '*')
         def _backward():
             self.grad += other.data * out.grad
             other.grad += self.data * out.grad
@@ -157,135 +419,250 @@ def low_rank_svd(A, k):
         return out
 
     def backward(self):
-        topo, visited = [], set()
-        def build(v):
+        # Build topological sort of the computational DAG
+        topo = []
+        visited = set()
+        def build_topo(v):
             if v not in visited:
                 visited.add(v)
-                for child in v._prev: build(child)
+                for child in v._prev:
+                    build_topo(child)
                 topo.append(v)
-        build(self)
-        self.grad = 1.0
+        build_topo(self)
+
+        self.grad = 1.0 # Base case: dL/dL = 1.0
         for node in reversed(topo):
-            node._backward()</code></pre>
+            node._backward()
+
+    def __repr__(self):
+        return f"Value(data={self.data:.4f}, grad={self.grad:.4f})"
+
+if __name__ == "__main__":
+    # Test: L = (x * y) + (y * 2)
+    x = Value(3.0)
+    y = Value(-4.0)
+    L = (x * y) + (y * 2.0)
+    L.backward()
+    print(f"L value : {L.data}") # -12 + -8 = -20
+    print(f"dL/dx   : {x.grad}") # y = -4.0
+    print(f"dL/dy   : {y.grad}") # x + 2 = 5.0</code></pre>
     </div>
 
-    <h3>FAANG Interview Problems — Calculus & Optimization</h3>
-
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 1.2.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
-        <span class="company-tag company-deepmind">DeepMind</span>
-        <span class="company-tag company-openai">OpenAI</span>
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 1.2 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 1.2: Custom Autograd Engine &amp; Neural Optimization Suite</h3>
+        <p class="project-desc">Extend your custom scalar autograd engine with activation functions (ReLU, Tanh, Sigmoid), build a multi-layer perceptron entirely out of pure Python <code>Value</code> nodes, and train it on non-linear synthetic data using analytical backpropagation.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch12_calculus_autograd/micro_autograd.py" target="_blank">🔗 Full Project Code: part1_mathematics/ch12_calculus_autograd/micro_autograd.py</a></p>
       </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> Let $f(x_1, x_2) = x_1^2 - x_2^2$ (a hyperbolic paraboloid saddle point). Calculate the gradient $\nabla f$ and Hessian matrix $H(f)$ at $(0, 0)$. Prove using the eigenvalues of the Hessian why standard gradient descent can get stuck on saddle points, and explain how momentum escapes them.</p>
-      </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Solution</div>
-        <p class="step"><strong>Step 1: Compute Partial Derivatives & Gradient:</strong>
-        $$\frac{\partial f}{\partial x_1} = 2x_1, \quad \frac{\partial f}{\partial x_2} = -2x_2 \implies \nabla f(x_1, x_2) = \begin{bmatrix} 2x_1 \\ -2x_2 \end{bmatrix}$$
-        At $(0, 0)$, $\nabla f(0, 0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix}$. Thus $(0, 0)$ is a critical station point.</p>
-
-        <p class="step"><strong>Step 2: Construct the Hessian Matrix:</strong>
-        $$H(f) = \begin{bmatrix} \frac{\partial^2 f}{\partial x_1^2} & \frac{\partial^2 f}{\partial x_1 \partial x_2} \\ \frac{\partial^2 f}{\partial x_2 \partial x_1} & \frac{\partial^2 f}{\partial x_2^2} \end{bmatrix} = \begin{bmatrix} 2 & 0 \\ 0 & -2 \end{bmatrix}$$</p>
-
-        <p class="step"><strong>Step 3: Analyze Eigenvalues:</strong>
-        The eigenvalues of $H$ are $\lambda_1 = +2$ and $\lambda_2 = -2$.
-        Because one eigenvalue is strictly positive and one is strictly negative, the Hessian is <strong>indefinite</strong>. Along the $x_1$ axis, $(0,0)$ is a local minimum (curvature $> 0$); along the $x_2$ axis, $(0,0)$ is a local maximum (curvature $< 0$). Hence, $(0, 0)$ is a <strong>saddle point</strong>.</p>
-
-        <p class="step"><strong>Step 4: Gradient Descent Failure vs Momentum Escape:</strong> In vanilla gradient descent: $\mathbf{w}_{t+1} = \mathbf{w}_t - \alpha \nabla f(\mathbf{w}_t)$. If the optimizer lands exactly on the stationary subspace where $\nabla f = \mathbf{0}$, the update magnitude is identically zero, and the model halts. With momentum: $\mathbf{v}_{t+1} = \beta \mathbf{v}_t + \alpha \nabla f$, past velocity carries the optimizer through zero-gradient plateaus and along the negative curvature escape route.</p>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> Deep learning libraries like PyTorch are not magical black boxes; they are C++ implementations of reverse-mode automatic differentiation tracking directed acyclic graphs (DAGs). In this project, you implement the complete backward chain rule for forward passes, topological graph linearization, gradient accumulation, and gradient descent updates without importing a single third-party framework.</p>
       </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 1.3 — PROBABILITY & STATISTICS
+     CHAPTER 1.3 — PROBABILITY & BAYESIAN INFERENCE
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-1-3">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 1.3</span>
-    <h2 class="chapter-title">Probability &amp; Statistics</h2>
-    <span class="chapter-subtitle">Thinking in Uncertainty</span>
+    <h2 class="chapter-title">Probability &amp; Bayesian Inference</h2>
+    <span class="chapter-subtitle">Uncertainty, Bayes' Theorem, Gaussian Distributions &amp; Maximum Likelihood Estimation</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"Probability is expectation founded upon partial knowledge."</p>
-    <p class="attribution">— George Boole</p>
+    <p>"Probability is the logic of science. In the real world, we never know anything with absolute certainty; we can only update our degrees of belief as evidence arrives."</p>
+    <p class="attribution">— E.T. Jaynes</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>Deterministic rules cannot model a messy world. Sensors have noise, text has linguistic ambiguity, and future stock prices are stochastic. Probability provides the rigorous mathematical framework for quantifying uncertainty, while statistics allows us to infer hidden parameters from finite observations.</p>
+    <!-- SECTION 1: PROBABILITY FOUNDATIONS -->
+    <h3>1. The Mathematics of Uncertainty</h3>
+    <p>Deterministic software engineering operates in boolean binaries: a condition is either <code>True</code> or <code>False</code>. Machine learning operates in continuous probability spaces: an autonomous vehicle never says "the obstacle ahead is definitely a stop sign"; it calculates a posterior probability distribution $P(\text{StopSign} \mid \text{Lidar}, \text{Camera}) = 0.987$.</p>
+
+    <h4>Kolmogorov's Axioms of Probability</h4>
+    <p>Given a sample space $\Omega$ of all possible outcomes, a valid probability measure $P$ must satisfy three fundamental axioms:</p>
+    <ol>
+      <li><strong>Non-negativity:</strong> For any event $A$, $P(A) \ge 0$.</li>
+      <li><strong>Unit Measure:</strong> The probability of the entire sample space is unity: $P(\Omega) = 1$.</li>
+      <li><strong>Countable Additivity:</strong> For any sequence of mutually exclusive events ($A_i \cap A_j = \emptyset$ for $i \neq j$):
+      $$P\left(\bigcup_{i=1}^\infty A_i\right) = \sum_{i=1}^\infty P(A_i)$$</li>
+    </ol>
+
+    <!-- SECTION 2: BAYES THEOREM -->
+    <h3>2. Conditional Probability &amp; Bayes' Theorem</h3>
+    <p>The conditional probability of event $A$ occurring given that event $B$ has occurred is defined as:
+    $$P(A \mid B) = \frac{P(A \cap B)}{P(B)}, \quad \text{provided } P(B) &gt; 0$$
+    Rearranging this definition yields <strong>Bayes' Theorem</strong>—the foundational equation of modern probabilistic machine learning:</p>
 
     <div class="real-world-box">
-      <h4>🏢 Real-World Problem Mapping: The Base Rate Fallacy in Fraud Detection</h4>
-      <p>Suppose you build a fraud detection model with 99% accuracy (99% sensitivity and 99% specificity). In production, credit card fraud occurs in only 1 out of 1,000 transactions (0.1% base rate). When your model flags a transaction as fraudulent, what is the actual probability that it is truly fraudulent? Most untrained engineers instinctively guess 99%. Applying Bayes' Rule reveals the real probability is only <strong>~9%</strong>! Nine out of ten flagged users are innocent customers. Understanding Bayesian statistics prevents catastrophic product decisions.</p>
+      <h4>🏆 Bayes' Theorem Dissected</h4>
+      $$P(\theta \mid \mathcal{D}) = \frac{P(\mathcal{D} \mid \theta) P(\theta)}{P(\mathcal{D})} = \frac{P(\mathcal{D} \mid \theta) P(\theta)}{\int P(\mathcal{D} \mid \theta') P(\theta') d\theta'}$$
+      <ul>
+        <li>$P(\theta)$: <strong>The Prior.</strong> Our belief about model parameters $\theta$ before seeing data $\mathcal{D}$.</li>
+        <li>$P(\mathcal{D} \mid \theta)$: <strong>The Likelihood.</strong> How probable the observed data is under parameters $\theta$.</li>
+        <li>$P(\mathcal{D})$: <strong>The Marginal Likelihood (Evidence).</strong> Normalizing constant integrating over all possible parameters.</li>
+        <li>$P(\theta \mid \mathcal{D})$: <strong>The Posterior.</strong> Our updated belief about parameters after assimilating empirical evidence $\mathcal{D}$.</li>
+      </ul>
     </div>
 
-    <h3>1. Bayes' Theorem: Updating Beliefs with Evidence</h3>
-    <p>Bayes' Theorem establishes how an initial prior probability $P(A)$ is updated into a posterior probability $P(A|B)$ upon observing new evidence $B$:
-    $$P(A|B) = \frac{P(B|A) \cdot P(A)}{P(B)}$$
-    Where:
-    <ul>
-      <li><strong>$P(A)$ (Prior):</strong> Initial belief before seeing data.</li>
-      <li><strong>$P(B|A)$ (Likelihood):</strong> Probability that evidence $B$ occurs given hypothesis $A$.</li>
-      <li><strong>$P(B)$ (Marginal Evidence):</strong> Total probability of evidence across all possibilities: $P(B) = P(B|A)P(A) + P(B|\neg A)P(\neg A)$.</li>
-      <li><strong>$P(A|B)$ (Posterior):</strong> Updated degree of belief after observing evidence $B$.</li>
-    </ul></p>
+    <!-- SECTION 3: MLE VS MAP -->
+    <h3>3. Estimation Theory: MLE, MAP &amp; The Loss Function Bridge</h3>
+    <p>How do we find the "best" parameters $\mathbf{w}$ for an AI model? Statistics gives two primary answers:</p>
 
-    <h3>2. Maximum Likelihood Estimation (MLE)</h3>
-    <p>Given independent and identically distributed (i.i.d.) observations $\mathcal{D} = \{x_1, x_2, \dots, x_N\}$, the likelihood of model parameters $\theta$ is the joint probability:
-    $$L(\theta) = \prod_{i=1}^N P(x_i | \theta)$$
-    Because products of small probabilities cause floating-point underflow, we maximize the <strong>Log-Likelihood</strong>:
-    $$\log L(\theta) = \sum_{i=1}^N \log P(x_i | \theta)$$
-    Maximizing log-likelihood is mathematically equivalent to minimizing negative log-likelihood (Cross-Entropy Loss!).</p>
+    <h4>Maximum Likelihood Estimation (MLE)</h4>
+    <p>Assuming training samples are independent and identically distributed (i.i.d.), the likelihood of observing dataset $\mathcal{D} = \{(\mathbf{x}_i, y_i)\}_{i=1}^N$ is the product of individual probabilities:
+    $$L(\mathbf{w}) = \prod_{i=1}^N P(y_i \mid \mathbf{x}_i; \mathbf{w})$$
+    Multiplying millions of probabilities leads to floating-point underflow. We take the natural logarithm, converting the product into a numerically stable sum called the <strong>Log-Likelihood</strong>:
+    $$\ell(\mathbf{w}) = \ln L(\mathbf{w}) = \sum_{i=1}^N \ln P(y_i \mid \mathbf{x}_i; \mathbf{w})$$
+    Maximizing log-likelihood is identical to minimizing the <strong>Negative Log-Likelihood (NLL)</strong>:
+    $$\hat{\mathbf{w}}_{\text{MLE}} = \arg\min_{\mathbf{w}} \left[ -\sum_{i=1}^N \ln P(y_i \mid \mathbf{x}_i; \mathbf{w}) \right]$$</p>
 
-    <div class="code-lab">
-      <div class="code-lab-header">Code Lab 1.3 — Bayesian Diagnosis & Gaussian MLE</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch13_probability_statistics/solutions.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch13_probability_statistics/solutions.py</a></p>
-<pre><code>import numpy as np
-
-def bayes_inference(p_prior, p_likelihood, p_marginal):
-    return (p_likelihood * p_prior) / p_marginal
-
-def gaussian_mle(samples):
-    """Analytically derives mu_hat and sigma2_hat."""
-    n = len(samples)
-    mu_hat = np.sum(samples) / n
-    sigma2_hat = np.sum((samples - mu_hat)**2) / n
-    return mu_hat, sigma2_hat</code></pre>
+    <div class="key-insight">
+      <p><strong>The Great Mathematical Bridge of AI:</strong></p>
+      <ul>
+        <li>If you assume regression errors follow a Gaussian distribution $\epsilon \sim \mathcal{N}(0, \sigma^2)$, MLE <strong>derives Mean Squared Error (MSE) loss</strong>!</li>
+        <li>If you assume binary classification labels follow a Bernoulli distribution, MLE <strong>derives Binary Cross-Entropy (BCE) loss</strong>!</li>
+        <li>If you place a zero-mean Gaussian prior on weights $P(\mathbf{w}) \sim \mathcal{N}(0, \sigma_w^2)$, Maximum A Posteriori (MAP) <strong>derives $L_2$ Weight Decay Regularization</strong>!</li>
+        <li>If you place a Laplace prior on weights $P(\mathbf{w}) \sim \text{Laplace}(0, b)$, MAP <strong>derives $L_1$ Lasso Regularization</strong>!</li>
+      </ul>
+      <em>Loss functions are not arbitrary heuristics invented by engineers; they are the direct mathematical consequence of probabilistic likelihoods!</em>
     </div>
 
-    <h3>FAANG Interview Problems — Probability & Statistics</h3>
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Probability &amp; Estimation</h3>
 
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 1.3.1</span>
         <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google</span>
         <span class="company-tag company-meta">Meta</span>
-        <span class="company-tag company-amazon">Amazon</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Rigorously prove that for a sample of $N$ independent observations drawn from a Gaussian distribution $\mathcal{N}(\mu, \sigma^2)$, the Maximum Likelihood Estimator (MLE) for the mean $\hat{\mu}_{\text{MLE}}$ is the sample mean $\frac{1}{N}\sum x_i$.</p>
+        <p><strong>QUESTION:</strong> A rare medical condition affects $0.1\%$ of the population ($P(D) = 0.001$). A diagnostic AI model achieves a $99\%$ True Positive Rate (Sensitivity $P(+ \mid D) = 0.99$) and has a $5\%$ False Positive Rate ($P(+ \mid \neg D) = 0.05$).</p>
+        <ol>
+          <li>A patient tests positive. What is the exact probability that the patient actually has the disease?</li>
+          <li>Explain why intuition fails here (The Base Rate Fallacy) and how this dictates the design of production fraud-detection and spam systems.</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Solution</div>
-        <p class="step"><strong>Step 1: Probability Density Function of Gaussian:</strong>
-        $$P(x_i | \mu, \sigma^2) = \frac{1}{\sqrt{2\pi\sigma^2}} \exp\left( -\frac{(x_i - \mu)^2}{2\sigma^2} \right)$$</p>
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
 
-        <p class="step"><strong>Step 2: Formulate the Log-Likelihood Function:</strong>
-        $$\log L(\mu, \sigma^2) = \sum_{i=1}^N \left[ -\frac{1}{2}\log(2\pi\sigma^2) - \frac{(x_i - \mu)^2}{2\sigma^2} \right] = -\frac{N}{2}\log(2\pi\sigma^2) - \frac{1}{2\sigma^2}\sum_{i=1}^N (x_i - \mu)^2$$</p>
+        <p class="step"><strong>Step 1: Apply Bayes' Theorem:</strong>
+        $$P(D \mid +) = \frac{P(+ \mid D) P(D)}{P(+)}$$
+        By the Law of Total Probability, expand the denominator $P(+)$ across disease and non-disease populations:
+        $$P(+) = P(+ \mid D) P(D) + P(+ \mid \neg D) P(\neg D)$$
+        Substitute given values ($P(D) = 0.001$, $P(\neg D) = 0.999$):
+        $$P(+) = (0.99 \times 0.001) + (0.05 \times 0.999)$$
+        $$P(+) = 0.00099 + 0.04995 = 0.05094$$</p>
 
-        <p class="step"><strong>Step 3: Take Partial Derivative with Respect to $\mu$:</strong>
-        $$\frac{\partial \log L}{\partial \mu} = -\frac{1}{2\sigma^2} \sum_{i=1}^N 2(x_i - \mu)(-1) = \frac{1}{\sigma^2}\sum_{i=1}^N (x_i - \mu)$$</p>
+        <p class="step"><strong>Step 2: Calculate Posterior Probability:</strong>
+        $$P(D \mid +) = \frac{0.00099}{0.05094} \approx 0.01943 = 1.94\%$$
+        <strong>Result: Despite a 99% accurate test, a patient who tests positive has only a 1.94% chance of actually having the disease!</strong></p>
 
-        <p class="step"><strong>Step 4: Set Derivative to Zero and Solve:</strong>
-        $$\frac{1}{\sigma^2}\sum_{i=1}^N (x_i - \hat{\mu}) = 0 \implies \sum_{i=1}^N x_i - N\hat{\mu} = 0 \implies \hat{\mu}_{\text{MLE}} = \frac{1}{N}\sum_{i=1}^N x_i$$
-        The second derivative $\frac{\partial^2 \log L}{\partial \mu^2} = -\frac{N}{\sigma^2} < 0$, confirming a strict maximum. $\blacksquare$</p>
+        <p class="step"><strong>Step 3: Engineering Implications (The Base Rate Fallacy):</strong><br>
+        Why did this happen? Because the disease is exceedingly rare ($1$ in $1,000$). In a cohort of $100,000$ people:
+        <ul>
+          <li>$100$ people have the disease $\to 99$ test positive.</li>
+          <li>$99,900$ people are healthy $\to 5\%$ of them ($4,995$ people) test false positive!</li>
+        </ul>
+        Out of $99 + 4,995 = 5,094$ total positive tests, only $99$ are true positives ($99 / 5,094 \approx 1.94\%$).<br>
+        <em>AI Production Lesson:</em> In ad click prediction, credit card fraud detection, or cyberattack detection, the target event is rare ($&lt; 0.1\%$). Even a model with a 99% true positive rate will generate 50 times more false alarms than real detections if the false positive rate is 5%! Production AI systems must optimize for <strong>Precision-Recall AUC and calibration</strong>, never raw accuracy.</p>
+      </div>
+    </div>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 1.3.2</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-amazon">Amazon</span>
+        <span class="company-tag company-google">Google DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove mathematically from first principles that maximizing the Log-Likelihood of a linear regression model with Gaussian additive noise $y_i = \mathbf{w}^T \mathbf{x}_i + \epsilon_i$ where $\epsilon_i \sim \mathcal{N}(0, \sigma^2)$ is mathematically identical to minimizing the Mean Squared Error (MSE) loss function.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Write the Conditional Probability Density:</strong><br>
+        Since $\epsilon_i = y_i - \mathbf{w}^T \mathbf{x}_i \sim \mathcal{N}(0, \sigma^2)$, the conditional distribution of target $y_i$ given input $\mathbf{x}_i$ is Gaussian with mean $\mathbf{w}^T \mathbf{x}_i$ and variance $\sigma^2$:
+        $$P(y_i \mid \mathbf{x}_i; \mathbf{w}, \sigma^2) = \frac{1}{\sqrt{2\pi\sigma^2}} \exp\left( -\frac{(y_i - \mathbf{w}^T \mathbf{x}_i)^2}{2\sigma^2} \right)$$</p>
+
+        <p class="step"><strong>Step 2: Construct the Total Log-Likelihood over $N$ i.i.d. Samples:</strong>
+        $$\ell(\mathbf{w}) = \sum_{i=1}^N \ln P(y_i \mid \mathbf{x}_i; \mathbf{w}, \sigma^2)$$
+        Substitute the Gaussian density into the logarithm:
+        $$\ell(\mathbf{w}) = \sum_{i=1}^N \left[ \ln\left(\frac{1}{\sqrt{2\pi\sigma^2}}\right) - \frac{(y_i - \mathbf{w}^T \mathbf{x}_i)^2}{2\sigma^2} \right]$$
+        Expand the summation:
+        $$\ell(\mathbf{w}) = -N \ln(\sqrt{2\pi\sigma^2}) - \frac{1}{2\sigma^2} \sum_{i=1}^N (y_i - \mathbf{w}^T \mathbf{x}_i)^2$$</p>
+
+        <p class="step"><strong>Step 3: Maximize Log-Likelihood with Respect to $\mathbf{w}$:</strong><br>
+        Notice that the first term $-N \ln(\sqrt{2\pi\sigma^2})$ is a constant with respect to $\mathbf{w}$. Furthermore, the factor $\frac{1}{2\sigma^2}$ is a strictly positive constant.<br>
+        Therefore:
+        $$\arg\max_{\mathbf{w}} \ell(\mathbf{w}) = \arg\max_{\mathbf{w}} \left[ -\frac{1}{2\sigma^2} \sum_{i=1}^N (y_i - \mathbf{w}^T \mathbf{x}_i)^2 \right]$$
+        Multiplying by the negative constant $-2\sigma^2$ flips the maximization into a minimization:
+        $$\arg\max_{\mathbf{w}} \ell(\mathbf{w}) = \arg\min_{\mathbf{w}} \sum_{i=1}^N (y_i - \mathbf{w}^T \mathbf{x}_i)^2$$
+        Dividing by $N$ produces the exact definition of <strong>Mean Squared Error (MSE)</strong>:
+        $$\hat{\mathbf{w}}_{\text{MLE}} = \arg\min_{\mathbf{w}} \frac{1}{N} \sum_{i=1}^N (y_i - \mathbf{w}^T \mathbf{x}_i)^2 = \arg\min_{\mathbf{w}} \text{MSE}(\mathbf{w})$$
+        <strong>Q.E.D. Mean Squared Error is the maximum likelihood estimator under Gaussian noise!</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 1.3: Monte Carlo Probability &amp; Bayesian Updating</h3>
+    <p>Below is a Python simulation verifying the Law of Large Numbers, empirical convergence to theoretical priors, and Bayesian belief updates under streaming evidence.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 1.3 — Bayesian Updating &amp; Monte Carlo Engine</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch13_probability_statistics/bayesian_updating.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch13_probability_statistics/bayesian_updating.py</a></p>
+<pre><code>import numpy as np
+
+def simulate_bayesian_coin(true_bias=0.7, n_flips=1000):
+    """
+    Demonstrates Beta-Binomial conjugate Bayesian belief updating.
+    Prior: Beta(alpha=1, beta=1) (Uniform prior)
+    """
+    np.random.seed(42)
+    flips = np.random.binomial(n=1, p=true_bias, size=n_flips)
+
+    alpha_prior, beta_prior = 1.0, 1.0 # Prior: completely uninformative
+    
+    # Observe flips sequentially
+    heads = np.sum(flips)
+    tails = n_flips - heads
+
+    alpha_posterior = alpha_prior + heads
+    beta_posterior = beta_prior + tails
+
+    # Posterior Mean Estimate: E[theta] = alpha / (alpha + beta)
+    estimated_bias = alpha_posterior / (alpha_posterior + beta_posterior)
+    mle_bias = heads / n_flips
+
+    print(f"True Probability   : {true_bias:.4f}")
+    print(f"Observed Flips     : {n_flips} ({heads} Heads, {tails} Tails)")
+    print(f"MLE Estimate       : {mle_bias:.4f}")
+    print(f"Bayesian Posterior : {estimated_bias:.4f}")
+
+if __name__ == "__main__":
+    simulate_bayesian_coin(true_bias=0.7, n_flips=5000)</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 1.3 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 1.3: Real-Time Bayesian Anomaly &amp; Fraud Detection Engine</h3>
+        <p class="project-desc">Architect and implement a streaming Bayesian anomaly detector that tracks online transaction distributions, updates posterior fraud probabilities in real time, and prevents false alarm cascades under extreme class imbalance.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch13_probability_statistics/bayesian_updating.py" target="_blank">🔗 Full Project Code: part1_mathematics/ch13_probability_statistics/bayesian_updating.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In financial payment processing (Stripe, PayPal), transactions occur at thousands of events per second with an authentic fraud prevalence of under 0.05%. In this project, you build an online Bayesian classifier that updates Beta-Binomial user risk priors on every transaction, calibrates prediction probabilities, and triggers automated multi-factor authentication triggers only when posterior risk exceeds mathematically optimal thresholds.</p>
       </div>
     </div>
   </div>
@@ -294,103 +671,361 @@ def gaussian_mle(samples):
 <!-- ======================================================================
      CHAPTER 1.4 — INFORMATION THEORY
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-1-4">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 1.4</span>
     <h2 class="chapter-title">Information Theory</h2>
-    <span class="chapter-subtitle">Entropy, Cross-Entropy &amp; KL Divergence</span>
+    <span class="chapter-subtitle">Surprise, Shannon Entropy, Cross-Entropy &amp; KL Divergence</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
     <p>"Information is the resolution of uncertainty."</p>
-    <p class="attribution">— Claude Shannon</p>
+    <p class="attribution">— Claude Shannon, 1948</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>In 1948, Claude Shannon founded information theory, introducing mathematical measures for uncertainty, surprise, and data transmission. In modern machine learning, information theory is not a tangent—it is the foundational language of loss functions. Cross-entropy loss trains language models, KL divergence regularizes variational autoencoders, and mutual information guides feature selection.</p>
+    <!-- SECTION 1: SURPRISE AND SHANNON ENTROPY -->
+    <h3>1. Quantifying Uncertainty: Surprise &amp; Entropy</h3>
+    <p>Before Claude Shannon published <em>A Mathematical Theory of Communication</em> in 1948, the concept of "information" was vague and unquantifiable. Shannon formalized information mathematically through the concept of <strong>Surprise (Self-Information)</strong>.</p>
 
-    <div class="real-world-box">
-      <h4>🏢 Real-World Problem Mapping: Why LLMs Train on Cross-Entropy, Not MSE</h4>
-      <p>Why do we never train language models or classification networks using Mean Squared Error (MSE)? Under MSE, when a model is confidently wrong (e.g. predicts probability $p = 0.001$ for the correct class), the derivative of the sigmoid/softmax saturates to near zero: $\sigma'(z) \approx 0$. The gradient vanishes, and the model ceases learning. Under <strong>Cross-Entropy Loss</strong>, the logarithm cancels out the exponential saturation: $\frac{\partial \mathcal{L}}{\partial z} = p - y$. The steeper the error, the stronger the gradient driving recovery!</p>
-    </div>
+    <h4>The Mathematical Definition of Surprise</h4>
+    <p>If someone tells you that the sun will rise in the east tomorrow, they convey virtually zero information because the event has probability $P(x) \approx 1$. However, if someone tells you that snow is falling in the Sahara Desert ($P(x) = 0.00001$), they convey a massive amount of information. Hence, information must be inversely related to probability.</p>
+    <p>Furthermore, if two independent events occur ($P(x, y) = P(x)P(y)$), our intuitive information measure should be additive: $I(x, y) = I(x) + I(y)$. The only continuous mathematical function satisfying $f(x \cdot y) = f(x) + f(y)$ is the logarithm:</p>
+    $$I(x) = -\log_2 P(x) \quad (\text{measured in bits})$$
+    $$I(x) = -\ln P(x) \quad (\text{measured in nats})$$
 
-    <h3>1. Shannon Entropy: Quantifying Uncertainty</h3>
-    <p>The surprise of an event $x$ with probability $P(x)$ is $I(x) = -\log_2 P(x)$. If an impossible event occurs, surprise is infinite; if a certain event occurs ($P=1$), surprise is zero. <strong>Shannon Entropy</strong> $H(P)$ is the expected surprise across an entire distribution:
-    $$H(P) = -\sum_{i=1}^k P(x_i) \log_2 P(x_i)$$</p>
+    <h4>Shannon Entropy</h4>
+    <p>The <strong>Shannon Entropy</strong> $H(P)$ is the <em>expected value</em> of surprise across an entire probability distribution $P$:</p>
+    $$H(P) = \mathbb{E}_{x \sim P}[I(x)] = -\sum_{x \in \mathcal{X}} P(x) \log_2 P(x)$$
+    <p>Entropy measures the fundamental unpredictability of a random variable:</p>
+    <ul>
+      <li><strong>Deterministic Distribution ($P(x_1) = 1, P(x_i) = 0$):</strong> $H(P) = -1 \log_2(1) = 0 \text{ bits}$ (Zero uncertainty).</li>
+      <li><strong>Uniform Distribution over $K$ outcomes ($P(x_i) = 1/K$):</strong> $H(P) = -\sum_{i=1}^K \frac{1}{K} \log_2\left(\frac{1}{K}\right) = \log_2(K)$ (Maximum possible uncertainty).</li>
+    </ul>
 
-    <h3>2. Cross-Entropy & Kullback-Leibler (KL) Divergence</h3>
-    <p>When the true distribution is $P$, but our model predicts distribution $Q$, the average number of bits required to encode outcomes is the <strong>Cross-Entropy</strong> $H(P, Q)$:
-    $$H(P, Q) = -\sum_{i=1}^k P(x_i) \log Q(x_i)$$</p>
-    <p>The <strong>KL Divergence</strong> (Relative Entropy) $D_{\text{KL}}(P \parallel Q)$ measures the statistical distance or information penalty of approximating $P$ with $Q$:
-    $$D_{\text{KL}}(P \parallel Q) = \sum_{i=1}^k P(x_i) \log\left(\frac{P(x_i)}{Q(x_i)}\right)$$</p>
+    <!-- SECTION 2: CROSS ENTROPY & KL DIVERGENCE -->
+    <h3>2. Cross-Entropy &amp; Kullback-Leibler (KL) Divergence</h3>
+    <p>In machine learning, we have a true ground-truth distribution $P$ (e.g., empirical labels) and a model's predicted distribution $Q_\theta$ (e.g., softmax outputs). How do we measure the mathematical discrepancy between these two distributions?</p>
+
+    <h4>Kullback-Leibler (KL) Divergence (Relative Entropy)</h4>
+    <p>The <strong>KL Divergence</strong> $D_{\text{KL}}(P \parallel Q)$ measures the excess surprise incurred when encoding events from true distribution $P$ using an optimal code designed for model distribution $Q$:</p>
+    $$D_{\text{KL}}(P \parallel Q) = \sum_{x \in \mathcal{X}} P(x) \log\left(\frac{P(x)}{Q(x)}\right) = \sum_{x \in \mathcal{X}} P(x) \log P(x) - \sum_{x \in \mathcal{X}} P(x) \log Q(x)$$
+    <p>Notice that the first term is negative entropy $-H(P)$, and the second term is <strong>Cross-Entropy</strong> $H(P, Q)$:</p>
+    $$D_{\text{KL}}(P \parallel Q) = H(P, Q) - H(P)$$
+    $$\implies H(P, Q) = H(P) + D_{\text{KL}}(P \parallel Q)$$
+
     <div class="key-insight">
-      <p><strong>The Universal Decomposition Identity:</strong>
-      $$H(P, Q) = H(P) + D_{\text{KL}}(P \parallel Q)$$
-      Because the true data entropy $H(P)$ is a constant, minimizing Cross-Entropy during training is mathematically identical to minimizing the KL divergence between true labels and model predictions!</p>
+      <p><strong>Why Minimizing Cross-Entropy Trains Neural Networks:</strong><br>
+      In supervised learning, true label distribution $P$ comes from the training dataset and is completely fixed with respect to model parameters $\theta$ ($H(P) = \text{constant}$). Therefore:</p>
+      $$\arg\min_\theta H(P, Q_\theta) \equiv \arg\min_\theta \left[ H(P) + D_{\text{KL}}(P \parallel Q_\theta) \right] \equiv \arg\min_\theta D_{\text{KL}}(P \parallel Q_\theta)$$
+      <p><em>Minimizing cross-entropy loss is mathematically identical to minimizing the statistical divergence between your model and reality!</em></p>
     </div>
 
-    <div class="code-lab">
-      <div class="code-lab-header">Code Lab 1.4 — Entropy & KL Divergence Calculations</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch14_information_theory/solutions.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch14_information_theory/solutions.py</a></p>
-<pre><code>import numpy as np
+    <h4>The Asymmetry of KL Divergence: Forward vs. Reverse KL</h4>
+    <p>KL Divergence is <strong>not a true distance metric</strong> because it is asymmetric: $D_{\text{KL}}(P \parallel Q) \neq D_{\text{KL}}(Q \parallel P)$.</p>
+    <ul>
+      <li><strong>Forward KL: $D_{\text{KL}}(P \parallel Q) = \sum P \log(P/Q)$ (Zero-Avoiding / Mode-Covering):</strong> If $P(x) &gt; 0$ anywhere, $Q(x)$ <em>must</em> be non-zero to avoid infinite penalty $\log(P/0) \to \infty$. $Q$ is forced to stretch and cover all modes of $P$. Used in maximum likelihood and classification.</li>
+      <li><strong>Reverse KL: $D_{\text{KL}}(Q \parallel P) = \sum Q \log(Q/P)$ (Zero-Forcing / Mode-Seeking):</strong> If $P(x) = 0$, $Q(x)$ must be zero to avoid penalty. $Q$ prefers to collapse onto a single mode of $P$ where it is confident. Used in Variational Autoencoders (VAEs), generative diffusion models, and RLHF policy optimization!</li>
+    </ul>
 
-def shannon_entropy(p, eps=1e-12):
-    p = np.clip(p, eps, 1.0)
-    return -np.sum(p * np.log2(p))
-
-def kl_divergence(p, q, eps=1e-12):
-    p, q = np.clip(p, eps, 1.0), np.clip(q, eps, 1.0)
-    return np.sum(p * np.log(p / q))</code></pre>
-    </div>
-
-    <h3>FAANG Interview Problems — Information Theory</h3>
+    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Information Theory</h3>
 
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 1.4.1</span>
         <span class="difficulty difficulty-hard">Hard</span>
-        <span class="company-tag company-deepmind">DeepMind</span>
         <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-openai">OpenAI</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Prove Gibbs' Inequality: $D_{\text{KL}}(P \parallel Q) \ge 0$ for any discrete probability distributions $P$ and $Q$, with equality if and only if $P = Q$. Use Jensen's Inequality and the concavity of the logarithm.</p>
+        <p><strong>QUESTION:</strong> Prove <strong>Gibbs' Inequality</strong> from first principles: prove that for any two discrete probability distributions $P$ and $Q$ over the same support $\mathcal{X}$, the KL Divergence is strictly non-negative:
+        $$D_{\text{KL}}(P \parallel Q) \ge 0$$
+        with equality $D_{\text{KL}}(P \parallel Q) = 0$ if and only if $P(x) = Q(x)$ for all $x$.</p>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Solution</div>
-        <p class="step"><strong>Step 1: Express Negative KL Divergence:</strong>
-        $$-D_{\text{KL}}(P \parallel Q) = -\sum_{i} P(x_i) \log\left(\frac{P(x_i)}{Q(x_i)}\right) = \sum_{i} P(x_i) \log\left(\frac{Q(x_i)}{P(x_i)}\right)$$</p>
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
 
-        <p class="step"><strong>Step 2: Apply Jensen's Inequality:</strong>
-        Recall that $f(t) = \log(t)$ is a strictly concave function ($\frac{d^2 \log t}{dt^2} = -\frac{1}{t^2} < 0$). By Jensen's inequality for a concave function:
-        $$\mathbb{E}[f(X)] \le f(\mathbb{E}[X])$$</p>
+        <p class="step"><strong>Step 1: Express KL Divergence as an Expectation:</strong>
+        $$D_{\text{KL}}(P \parallel Q) = \sum_{x \in \mathcal{X}} P(x) \ln\left(\frac{P(x)}{Q(x)}\right) = -\sum_{x \in \mathcal{X}} P(x) \ln\left(\frac{Q(x)}{P(x)}\right)$$
+        In expectation notation:
+        $$D_{\text{KL}}(P \parallel Q) = \mathbb{E}_{x \sim P}\left[ -\ln\left(\frac{Q(x)}{P(x)}\right) \right]$$</p>
 
-        <p class="step"><strong>Step 3: Evaluate Expectation:</strong>
-        Here the expectation is with respect to distribution $P$:
-        $$\sum_{i} P(x_i) \log\left(\frac{Q(x_i)}{P(x_i)}\right) \le \log\left( \sum_i P(x_i) \frac{Q(x_i)}{P(x_i)} \right) = \log\left(\sum_i Q(x_i)\right)$$</p>
+        <p class="step"><strong>Step 2: Apply Jensen's Inequality:</strong><br>
+        Recall Jensen's Inequality: for any strictly convex function $f(t)$ and random variable $T$:
+        $$\mathbb{E}[f(T)] \ge f(\mathbb{E}[T])$$
+        The negative logarithm function $f(t) = -\ln(t)$ is strictly convex on $(0, \infty)$ because its second derivative is strictly positive: $f''(t) = \frac{1}{t^2} &gt; 0$.<br>
+        Applying Jensen's inequality with $T = \frac{Q(x)}{P(x)}$:
+        $$\mathbb{E}_{x \sim P}\left[ -\ln\left(\frac{Q(x)}{P(x)}\right) \right] \ge -\ln\left( \mathbb{E}_{x \sim P}\left[\frac{Q(x)}{P(x)}\right] \right)$$</p>
 
-        <p class="step"><strong>Step 4: Conclude:</strong>
-        Since $Q$ is a valid probability distribution, $\sum_i Q(x_i) = 1$. Therefore:
-        $$-D_{\text{KL}}(P \parallel Q) \le \log(1) = 0 \implies D_{\text{KL}}(P \parallel Q) \ge 0$$
-        Because the logarithm is strictly concave, equality holds if and only if $\frac{Q(x_i)}{P(x_i)} = 1$ for all $i$, which means $P = Q$. $\blacksquare$</p>
+        <p class="step"><strong>Step 3: Evaluate the Expectation Inside the Logarithm:</strong>
+        $$\mathbb{E}_{x \sim P}\left[\frac{Q(x)}{P(x)}\right] = \sum_{x \in \mathcal{X}} P(x) \frac{Q(x)}{P(x)} = \sum_{x \in \mathcal{X}} Q(x)$$
+        Since $Q$ is a valid probability distribution, $\sum_{x \in \mathcal{X}} Q(x) = 1$.<br>
+        Therefore:
+        $$D_{\text{KL}}(P \parallel Q) \ge -\ln(1) = 0$$</p>
+
+        <p class="step"><strong>Step 4: Strict Equality Condition:</strong><br>
+        Because $f(t) = -\ln(t)$ is <em>strictly</em> convex, equality in Jensen's inequality holds if and only if $T$ is constant almost everywhere:
+        $$\frac{Q(x)}{P(x)} = c \implies Q(x) = c P(x)$$
+        Since both sum to 1 ($\sum Q(x) = c \sum P(x) \implies 1 = c(1)$), we have $c = 1$, which proves that equality holds if and only if $P(x) = Q(x)$ for all $x \in \mathcal{X}$.<br>
+        <strong>Q.E.D. KL Divergence is strictly non-negative and reaches zero only when distributions are identical!</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 4: CODE LAB -->
+    <h3>3. Production Code Lab 1.4: Information Theory Engine</h3>
+    <p>Below is a production-grade information-theoretic computation suite with numerical guards against $\log(0)$ underflow.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 1.4 — Entropy, Cross-Entropy &amp; KL Divergence Calculator</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch14_information_theory/entropy_calculator.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch14_information_theory/entropy_calculator.py</a></p>
+<pre><code>import numpy as np
+
+def compute_information_metrics(p: np.ndarray, q: np.ndarray, eps=1e-12):
+    """
+    Computes Shannon Entropy H(P), Cross-Entropy H(P, Q), and KL Divergence D_KL(P || Q).
+    """
+    p = np.clip(p / np.sum(p), eps, 1.0)
+    q = np.clip(q / np.sum(q), eps, 1.0)
+
+    # 1. Shannon Entropy: H(P) = -sum(P * log2(P))
+    h_p = -np.sum(p * np.log2(p))
+
+    # 2. Cross-Entropy: H(P, Q) = -sum(P * log2(Q))
+    h_pq = -np.sum(p * np.log2(q))
+
+    # 3. KL Divergence: D_KL(P || Q) = sum(P * log2(P / Q))
+    kl_div = np.sum(p * np.log2(p / q))
+
+    # 4. Symmetrized Jensen-Shannon Divergence: JSD = 0.5 * (KL(P||M) + KL(Q||M))
+    m = 0.5 * (p + q)
+    jsd = 0.5 * (np.sum(p * np.log2(p / m)) + np.sum(q * np.log2(q / m)))
+
+    return {
+        "H(P)": float(h_p),
+        "H(P, Q)": float(h_pq),
+        "D_KL(P || Q)": float(kl_div),
+        "JSD(P, Q)": float(jsd),
+        "Identity_Check": bool(np.isclose(h_pq, h_p + kl_div))
+    }
+
+if __name__ == "__main__":
+    P = np.array([0.7, 0.2, 0.1])
+    Q = np.array([0.5, 0.3, 0.2])
+    metrics = compute_information_metrics(P, Q)
+    print("Information Metrics:")
+    for k, v in metrics.items():
+        print(f"  {k:15s} : {v}")</code></pre>
+    </div>
+
+    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 1.4 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 1.4: Information-Theoretic Feature Selection &amp; LLM Perplexity Engine</h3>
+        <p class="project-desc">Build a production feature evaluation tool that calculates Mutual Information $I(X; Y)$ to select the top-k predictive features for high-scale ranking, and evaluate LLM next-token probability distributions using Shannon Perplexity $2^{H(P, Q)}$.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch14_information_theory/entropy_calculator.py" target="_blank">🔗 Full Project Code: part1_mathematics/ch14_information_theory/entropy_calculator.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In large language modeling, raw training loss is hard to interpret across different vocabulary sizes. Production teams measure <strong>Perplexity</strong> ($\text{PPL} = e^{\mathcal{L}}$), which represents the effective branching factor: how many plausible tokens the model is choosing among at each step. In this project, you construct a perplexity evaluation harness that profiles token distribution entropy and detects catastrophic forgetting during fine-tuning.</p>
       </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     PROJECT 1 — IMAGE TRANSFORMATION & SVD COMPRESSION
+     CHAPTER 1.5 — CONVEX OPTIMIZATION & DUALITY
+     ====================================================================== -->
+<div class="chapter" id="chapter-1-5">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 1.5</span>
+    <h2 class="chapter-title">Convex Optimization &amp; Duality</h2>
+    <span class="chapter-subtitle">Convex Sets, The Lagrangian, KKT Conditions &amp; The Dual Problem</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"The great watershed in optimization isn't between linearity and nonlinearity, but between convexity and nonconvexity."</p>
+    <p class="attribution">— R. Tyrrell Rockafellar, 1993</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: CONVEXITY -->
+    <h3>1. The Geometry of Convexity</h3>
+    <p>In general non-convex optimization, finding a global minimum is NP-hard: algorithms easily get trapped in poor local minima or stranded on high-dimensional saddle points. However, in <strong>Convex Optimization</strong>, any local minimum is guaranteed to be a <strong>Global Minimum</strong>. Support Vector Machines, Logistic Regression, Lasso, and Ridge Regression are all convex optimization problems.</p>
+
+    <h4>Convex Sets &amp; Convex Functions</h4>
+    <p>A set $C \subseteq \mathbb{R}^d$ is <strong>convex</strong> if the line segment connecting any two points in $C$ lies entirely within $C$:
+    $$\forall \mathbf{x}, \mathbf{y} \in C, \ \alpha \in [0, 1] \implies \alpha \mathbf{x} + (1 - \alpha) \mathbf{y} \in C$$</p>
+
+    <p>A function $f: C \to \mathbb{R}$ is <strong>convex</strong> if its epigraph (the region on or above its graph) is a convex set:
+    $$f(\alpha \mathbf{x} + (1 - \alpha) \mathbf{y}) \le \alpha f(\mathbf{x}) + (1 - \alpha) f(\mathbf{y}), \quad \forall \alpha \in [0, 1]$$</p>
+
+    <div class="key-insight">
+      <p><strong>First-Order Characterization of Convexity:</strong><br>
+      A differentiable function $f$ is convex if and only if its first-order Taylor approximation is a global lower bound:</p>
+      $$f(\mathbf{y}) \ge f(\mathbf{x}) + \nabla f(\mathbf{x})^T (\mathbf{y} - \mathbf{x}), \quad \forall \mathbf{x}, \mathbf{y}$$
+      <p><em>Geometric Meaning:</em> The tangent hyperplane to a convex function always lies completely below the function!</p>
+    </div>
+
+    <!-- SECTION 2: CONSTRAINED OPTIMIZATION & KKT -->
+    <h3>2. Constrained Optimization &amp; The Karush-Kuhn-Tucker (KKT) Conditions</h3>
+    <p>In engineering, we rarely optimize without constraints (e.g. latency must be under 20ms, budget must not exceed $10,000, weights must sum to 1). A standard mathematical optimization problem is formulated as:</p>
+    $$\min_{\mathbf{x}} f_0(\mathbf{x}) \quad \text{subject to } f_i(\mathbf{x}) \le 0 \ (i=1,\dots,m), \quad h_j(\mathbf{x}) = 0 \ (j=1,\dots,p)$$
+
+    <h4>The Lagrangian Function</h4>
+    <p>We convert the constrained problem into an unconstrained objective by introducing Lagrange multiplier vectors $\boldsymbol{\lambda} \in \mathbb{R}^m$ (with $\lambda_i \ge 0$) and $\boldsymbol{\nu} \in \mathbb{R}^p$:</p>
+    $$\mathcal{L}(\mathbf{x}, \boldsymbol{\lambda}, \boldsymbol{\nu}) = f_0(\mathbf{x}) + \sum_{i=1}^m \lambda_i f_i(\mathbf{x}) + \sum_{j=1}^p \nu_j h_j(\mathbf{x})$$
+
+    <div class="real-world-box">
+      <h4>🏆 The Karush-Kuhn-Tucker (KKT) Conditions</h4>
+      <p>For any optimization problem with differentiable objective and constraint functions, if strong duality holds, the optimal primal point $\mathbf{x}^*$ and dual points $(\boldsymbol{\lambda}^*, \boldsymbol{\nu}^*)$ must satisfy four conditions:</p>
+      <ol>
+        <li><strong>Stationarity:</strong> $\nabla_{\mathbf{x}} \mathcal{L}(\mathbf{x}^*, \boldsymbol{\lambda}^*, \boldsymbol{\nu}^*) = \nabla f_0(\mathbf{x}^*) + \sum_{i=1}^m \lambda_i^* \nabla f_i(\mathbf{x}^*) + \sum_{j=1}^p \nu_j^* \nabla h_j(\mathbf{x}^*) = \mathbf{0}$.</li>
+        <li><strong>Primal Feasibility:</strong> $f_i(\mathbf{x}^*) \le 0 \ (\forall i)$, and $h_j(\mathbf{x}^*) = 0 \ (\forall j)$.</li>
+        <li><strong>Dual Feasibility:</strong> $\lambda_i^* \ge 0 \ (\forall i)$.</li>
+        <li><strong>Complementary Slackness:</strong> $\lambda_i^* f_i(\mathbf{x}^*) = 0 \ (\forall i)$.</li>
+      </ol>
+    </div>
+
+    <p><strong>The Magic of Complementary Slackness:</strong> Condition 4 asserts that for every inequality constraint $i$, either $\lambda_i^* = 0$ OR $f_i(\mathbf{x}^*) = 0$:</p>
+    <ul>
+      <li>If the constraint is <em>inactive</em> at the optimum ($f_i(\mathbf{x}^*) &lt; 0$), then its multiplier <strong>must be zero</strong> ($\lambda_i^* = 0$). It exerts zero influence on the solution.</li>
+      <li>If $\lambda_i^* &gt; 0$, the constraint is <em>active</em> on the boundary ($f_i(\mathbf{x}^*) = 0$).</li>
+    </ul>
+    <p>This is the exact mathematical reason why Support Vector Machines (SVMs) ignore 99% of training data: only the data points lying directly on the margin boundary have $\lambda_i^* &gt; 0$ (the Support Vectors)!</p>
+
+    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Optimization &amp; KKT</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 1.5.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In a Hard-Margin Support Vector Machine, we seek a hyperplane $(\mathbf{w}, b)$ that separates two classes with maximum geometric margin $\frac{2}{\|\mathbf{w}\|_2}$. This is formulated as the convex primal problem:
+        $$\min_{\mathbf{w}, b} \frac{1}{2} \|\mathbf{w}\|_2^2 \quad \text{subject to } 1 - y_i (\mathbf{w}^T \mathbf{x}_i + b) \le 0, \quad \forall i=1,\dots,N$$
+        Apply the KKT conditions to derive the exact dual optimization problem in terms of multipliers $\alpha_i \ge 0$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
+
+        <p class="step"><strong>Step 1: Construct the Lagrangian:</strong><br>
+        Introduce dual variables $\alpha_i \ge 0$ for each of the $N$ constraints:
+        $$\mathcal{L}(\mathbf{w}, b, \boldsymbol{\alpha}) = \frac{1}{2} \|\mathbf{w}\|_2^2 + \sum_{i=1}^N \alpha_i \left[ 1 - y_i (\mathbf{w}^T \mathbf{x}_i + b) \right]$$
+        $$\mathcal{L}(\mathbf{w}, b, \boldsymbol{\alpha}) = \frac{1}{2} \mathbf{w}^T \mathbf{w} + \sum_{i=1}^N \alpha_i - \sum_{i=1}^N \alpha_i y_i \mathbf{w}^T \mathbf{x}_i - b \sum_{i=1}^N \alpha_i y_i$$</p>
+
+        <p class="step"><strong>Step 2: Apply KKT Stationarity Conditions:</strong><br>
+        Differentiate $\mathcal{L}$ with respect to primal variables $\mathbf{w}$ and $b$ and set to zero:
+        $$\nabla_{\mathbf{w}} \mathcal{L} = \mathbf{w} - \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i = \mathbf{0} \implies \mathbf{w}^* = \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i$$
+        $$\frac{\partial \mathcal{L}}{\partial b} = -\sum_{i=1}^N \alpha_i y_i = 0 \implies \sum_{i=1}^N \alpha_i y_i = 0$$</p>
+
+        <p class="step"><strong>Step 3: Substitute Back to Form the Dual Objective:</strong><br>
+        Substitute $\mathbf{w}^* = \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i$ and $\sum_{i=1}^N \alpha_i y_i = 0$ into $\mathcal{L}$:</p>
+        <ul>
+          <li>The term $-b \sum_{i=1}^N \alpha_i y_i = -b(0) = 0$ vanishes completely!</li>
+          <li>$\frac{1}{2} \|\mathbf{w}^*\|_2^2 = \frac{1}{2} \sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i^T \mathbf{x}_j)$.</li>
+          <li>$-\sum_{i=1}^N \alpha_i y_i (\mathbf{w}^{*T} \mathbf{x}_i) = -\sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i^T \mathbf{x}_j)$.</li>
+        </ul>
+        Combining these terms yields the famous <strong>SVM Dual Optimization Problem</strong>:
+        $$\max_{\boldsymbol{\alpha}} \left[ \sum_{i=1}^N \alpha_i - \frac{1}{2} \sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i \cdot \mathbf{x}_j) \right]$$
+        $$\text{subject to } \alpha_i \ge 0, \quad \sum_{i=1}^N \alpha_i y_i = 0$$
+        <em>The Kernel Trick Revealed:</em> Notice that features appear <strong>only as inner products $\mathbf{x}_i \cdot \mathbf{x}_j$</strong>! This allows us to replace $\mathbf{x}_i \cdot \mathbf{x}_j$ with a non-linear Kernel function $K(\mathbf{x}_i, \mathbf{x}_j)$, lifting data into infinite-dimensional Hilbert spaces without ever computing the high-dimensional coordinates!</p>
+      </div>
+    </div>
+
+    <!-- SECTION 4: CODE LAB -->
+    <h3>3. Production Code Lab 1.5: Constrained Optimization with Projected Gradient Descent</h3>
+    <p>Below is a Python implementation of Projected Gradient Descent solving a constrained resource allocation problem under simplex constraints.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 1.5 — Projected Gradient Descent on the Probability Simplex</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch15_convex_optimization/projected_gradient_descent.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch15_convex_optimization/projected_gradient_descent.py</a></p>
+<pre><code>import numpy as np
+
+def project_onto_simplex(v, z=1.0):
+    """
+    Exact Euclidean projection of vector v onto the simplex sum(w) = z, w >= 0.
+    O(d log d) algorithm via sorted thresholding.
+    """
+    d = len(v)
+    u = np.sort(v)[::-1]
+    cssv = np.cumsum(u) - z
+    ind = np.arange(1, d + 1)
+    cond = u - cssv / ind > 0
+    rho = ind[cond][-1]
+    theta = cssv[cond][-1] / float(rho)
+    return np.maximum(v - theta, 0)
+
+def solve_constrained_allocation(returns, cov_matrix, lr=0.01, steps=200):
+    """
+    Minimizes risk: w^T Cov w subject to sum(w) = 1, w >= 0 (Markowitz Simplex).
+    """
+    d = len(returns)
+    w = np.ones(d) / d # Uniform initial allocation
+
+    for step in range(steps):
+        # Gradient of w^T Cov w with respect to w is: 2 * Cov * w
+        grad = 2.0 * np.dot(cov_matrix, w)
+        
+        # Gradient step
+        w_step = w - lr * grad
+        
+        # Euclidean projection onto simplex constraint
+        w = project_onto_simplex(w_step, z=1.0)
+
+    variance = float(np.dot(w.T, np.dot(cov_matrix, w)))
+    return {"weights": w, "portfolio_variance": variance}
+
+if __name__ == "__main__":
+    Cov = np.array([[0.04, 0.01, 0.02],
+                    [0.01, 0.09, 0.03],
+                    [0.02, 0.03, 0.16]])
+    res = solve_constrained_allocation(None, Cov)
+    print("Optimal Simplex Allocation Weights:", np.round(res['weights'], 4))
+    print(f"Minimized Portfolio Variance       : {res['portfolio_variance']:.6f}")</code></pre>
+    </div>
+
+    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 1.5 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 1.5: Quadratic Programming Solver &amp; Resource Allocation Engine</h3>
+        <p class="project-desc">Architect and implement a primal-dual interior point solver for convex quadratic programs ($ \min \frac{1}{2} \mathbf{x}^T P \mathbf{x} + \mathbf{q}^T \mathbf{x} $ subject to $A \mathbf{x} \le \mathbf{b}$), enforcing KKT conditions at each iteration.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch15_convex_optimization/projected_gradient_descent.py" target="_blank">🔗 Full Project Code: part1_mathematics/ch15_convex_optimization/projected_gradient_descent.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In high-frequency advertising auctions (Google Ads, Meta Ads) and cloud computing spot-pricing clusters, platforms solve millions of constrained convex optimization problems per minute to dynamically allocate budgets across advertisers while strictly respecting budget caps and bid constraints. In this project, you construct a high-speed projected gradient optimizer that computes optimal resource distributions in sub-millisecond execution time.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     HANDS-ON PROJECT 1 — DIMENSIONALITY REDUCTION & SVD ENGINE
      ====================================================================== -->
 <div class="project-section">
   <div class="project-header">
-    <span class="project-tag">Hands-On Project 1</span>
-    <h3 class="project-title">Image Transformation Engine & SVD Compression</h3>
-    <p class="project-desc">Build an image processing pipeline from pure linear algebra that performs affine transformations, PCA color quantization, and SVD rank-k compression.</p>
-    <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch11_linear_algebra/solutions.py" target="_blank">🔗 Full Project Code: part1_mathematics/ch11_linear_algebra/solutions.py</a></p>
+    <span class="project-tag">Hands-On Capstone Project 1</span>
+    <h3 class="project-title">High-Dimensional Manifold Projection &amp; Image SVD Compression Engine</h3>
+    <p class="project-desc">Synthesize singular value decomposition, reverse-mode automatic differentiation, and convex projection algebra to build an end-to-end mathematical engine that factorizes high-dimensional datasets and compresses visual tensors with rigorous error bounds.</p>
+    <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/project1_svd_engine/image_compressor.py" target="_blank">🔗 Full Project Code: part1_mathematics/project1_svd_engine/image_compressor.py</a></p>
   </div>
   <div class="project-body">
-    <p><strong>Architecture Overview:</strong> You will treat RGB image channels as 2D numerical matrices, compute their singular value spectrum, and observe how compressing a 4096x4096 image to rank-30 retains over 95% of perceptual visual fidelity while dropping memory consumption by 85%.</p>
+    <p><strong>Architecture &amp; Mathematical Workflow:</strong> In this capstone project, you implement an industrial-grade mathematical library from first principles:</p>
+    <ul>
+      <li><strong>SVD Factorization Module:</strong> Decomposes arbitrary rank-$r$ matrices into orthogonal bases $U, V$ and singular spectra $\Sigma$, validating the Eckart-Young optimal approximation theorem.</li>
+      <li><strong>Autograd Gradient Checker:</strong> Implements finite-difference numerical gradient checking to verify analytical backpropagation derivatives against machine precision ($\epsilon = 10^{-7}$).</li>
+      <li><strong>Convex Simplex Projector:</strong> Solves optimal Markowitz portfolio and attention weight projections under non-negative and unity constraints.</li>
+      <li><strong>Compression Visualizer:</strong> Reconstructs images across varying rank cutoffs ($k=5, 20, 50$), plotting energy preservation curves and Frobenius norm decay.</li>
+    </ul>
   </div>
 </div>

@@ -1,0 +1,167 @@
+<!-- ======================================================================
+     CHAPTER 1.4 — INFORMATION THEORY
+     ====================================================================== -->
+<div class="chapter" id="chapter-1-4">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 1.4</span>
+    <h2 class="chapter-title">Information Theory</h2>
+    <span class="chapter-subtitle">Surprise, Shannon Entropy, Cross-Entropy &amp; KL Divergence</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Information is the resolution of uncertainty."</p>
+    <p class="attribution">— Claude Shannon, 1948</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: SURPRISE AND SHANNON ENTROPY -->
+    <h3>1. Quantifying Uncertainty: Surprise &amp; Entropy</h3>
+    <p>Before Claude Shannon published <em>A Mathematical Theory of Communication</em> in 1948, the concept of "information" was vague and unquantifiable. Shannon formalized information mathematically through the concept of <strong>Surprise (Self-Information)</strong>.</p>
+
+    <h4>The Mathematical Definition of Surprise</h4>
+    <p>If someone tells you that the sun will rise in the east tomorrow, they convey virtually zero information because the event has probability $P(x) \approx 1$. However, if someone tells you that snow is falling in the Sahara Desert ($P(x) = 0.00001$), they convey a massive amount of information. Hence, information must be inversely related to probability.</p>
+    <p>Furthermore, if two independent events occur ($P(x, y) = P(x)P(y)$), our intuitive information measure should be additive: $I(x, y) = I(x) + I(y)$. The only continuous mathematical function satisfying $f(x \cdot y) = f(x) + f(y)$ is the logarithm:</p>
+    $$I(x) = -\log_2 P(x) \quad (\text{measured in bits})$$
+    $$I(x) = -\ln P(x) \quad (\text{measured in nats})$$
+
+    <h4>Shannon Entropy</h4>
+    <p>The <strong>Shannon Entropy</strong> $H(P)$ is the <em>expected value</em> of surprise across an entire probability distribution $P$:</p>
+    $$H(P) = \mathbb{E}_{x \sim P}[I(x)] = -\sum_{x \in \mathcal{X}} P(x) \log_2 P(x)$$
+    <p>Entropy measures the fundamental unpredictability of a random variable:</p>
+    <ul>
+      <li><strong>Deterministic Distribution ($P(x_1) = 1, P(x_i) = 0$):</strong> $H(P) = -1 \log_2(1) = 0 \text{ bits}$ (Zero uncertainty).</li>
+      <li><strong>Uniform Distribution over $K$ outcomes ($P(x_i) = 1/K$):</strong> $H(P) = -\sum_{i=1}^K \frac{1}{K} \log_2\left(\frac{1}{K}\right) = \log_2(K)$ (Maximum possible uncertainty).</li>
+    </ul>
+
+    <!-- SECTION 2: CROSS ENTROPY & KL DIVERGENCE -->
+    <h3>2. Cross-Entropy &amp; Kullback-Leibler (KL) Divergence</h3>
+    <p>In machine learning, we have a true ground-truth distribution $P$ (e.g., empirical labels) and a model's predicted distribution $Q_\theta$ (e.g., softmax outputs). How do we measure the mathematical discrepancy between these two distributions?</p>
+
+    <h4>Kullback-Leibler (KL) Divergence (Relative Entropy)</h4>
+    <p>The <strong>KL Divergence</strong> $D_{\text{KL}}(P \parallel Q)$ measures the excess surprise incurred when encoding events from true distribution $P$ using an optimal code designed for model distribution $Q$:</p>
+    $$D_{\text{KL}}(P \parallel Q) = \sum_{x \in \mathcal{X}} P(x) \log\left(\frac{P(x)}{Q(x)}\right) = \sum_{x \in \mathcal{X}} P(x) \log P(x) - \sum_{x \in \mathcal{X}} P(x) \log Q(x)$$
+    <p>Notice that the first term is negative entropy $-H(P)$, and the second term is <strong>Cross-Entropy</strong> $H(P, Q)$:</p>
+    $$D_{\text{KL}}(P \parallel Q) = H(P, Q) - H(P)$$
+    $$\implies H(P, Q) = H(P) + D_{\text{KL}}(P \parallel Q)$$
+
+    <div class="key-insight">
+      <p><strong>Why Minimizing Cross-Entropy Trains Neural Networks:</strong><br>
+      In supervised learning, true label distribution $P$ comes from the training dataset and is completely fixed with respect to model parameters $\theta$ ($H(P) = \text{constant}$). Therefore:</p>
+      $$\arg\min_\theta H(P, Q_\theta) \equiv \arg\min_\theta \left[ H(P) + D_{\text{KL}}(P \parallel Q_\theta) \right] \equiv \arg\min_\theta D_{\text{KL}}(P \parallel Q_\theta)$$
+      <p><em>Minimizing cross-entropy loss is mathematically identical to minimizing the statistical divergence between your model and reality!</em></p>
+    </div>
+
+    <h4>The Asymmetry of KL Divergence: Forward vs. Reverse KL</h4>
+    <p>KL Divergence is <strong>not a true distance metric</strong> because it is asymmetric: $D_{\text{KL}}(P \parallel Q) \neq D_{\text{KL}}(Q \parallel P)$.</p>
+    <ul>
+      <li><strong>Forward KL: $D_{\text{KL}}(P \parallel Q) = \sum P \log(P/Q)$ (Zero-Avoiding / Mode-Covering):</strong> If $P(x) &gt; 0$ anywhere, $Q(x)$ <em>must</em> be non-zero to avoid infinite penalty $\log(P/0) \to \infty$. $Q$ is forced to stretch and cover all modes of $P$. Used in maximum likelihood and classification.</li>
+      <li><strong>Reverse KL: $D_{\text{KL}}(Q \parallel P) = \sum Q \log(Q/P)$ (Zero-Forcing / Mode-Seeking):</strong> If $P(x) = 0$, $Q(x)$ must be zero to avoid penalty. $Q$ prefers to collapse onto a single mode of $P$ where it is confident. Used in Variational Autoencoders (VAEs), generative diffusion models, and RLHF policy optimization!</li>
+    </ul>
+
+    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Information Theory</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 1.4.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-openai">OpenAI</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove <strong>Gibbs' Inequality</strong> from first principles: prove that for any two discrete probability distributions $P$ and $Q$ over the same support $\mathcal{X}$, the KL Divergence is strictly non-negative:
+        $$D_{\text{KL}}(P \parallel Q) \ge 0$$
+        with equality $D_{\text{KL}}(P \parallel Q) = 0$ if and only if $P(x) = Q(x)$ for all $x$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Express KL Divergence as an Expectation:</strong>
+        $$D_{\text{KL}}(P \parallel Q) = \sum_{x \in \mathcal{X}} P(x) \ln\left(\frac{P(x)}{Q(x)}\right) = -\sum_{x \in \mathcal{X}} P(x) \ln\left(\frac{Q(x)}{P(x)}\right)$$
+        In expectation notation:
+        $$D_{\text{KL}}(P \parallel Q) = \mathbb{E}_{x \sim P}\left[ -\ln\left(\frac{Q(x)}{P(x)}\right) \right]$$</p>
+
+        <p class="step"><strong>Step 2: Apply Jensen's Inequality:</strong><br>
+        Recall Jensen's Inequality: for any strictly convex function $f(t)$ and random variable $T$:
+        $$\mathbb{E}[f(T)] \ge f(\mathbb{E}[T])$$
+        The negative logarithm function $f(t) = -\ln(t)$ is strictly convex on $(0, \infty)$ because its second derivative is strictly positive: $f''(t) = \frac{1}{t^2} &gt; 0$.<br>
+        Applying Jensen's inequality with $T = \frac{Q(x)}{P(x)}$:
+        $$\mathbb{E}_{x \sim P}\left[ -\ln\left(\frac{Q(x)}{P(x)}\right) \right] \ge -\ln\left( \mathbb{E}_{x \sim P}\left[\frac{Q(x)}{P(x)}\right] \right)$$</p>
+
+        <p class="step"><strong>Step 3: Evaluate the Expectation Inside the Logarithm:</strong>
+        $$\mathbb{E}_{x \sim P}\left[\frac{Q(x)}{P(x)}\right] = \sum_{x \in \mathcal{X}} P(x) \frac{Q(x)}{P(x)} = \sum_{x \in \mathcal{X}} Q(x)$$
+        Since $Q$ is a valid probability distribution, $\sum_{x \in \mathcal{X}} Q(x) = 1$.<br>
+        Therefore:
+        $$D_{\text{KL}}(P \parallel Q) \ge -\ln(1) = 0$$</p>
+
+        <p class="step"><strong>Step 4: Strict Equality Condition:</strong><br>
+        Because $f(t) = -\ln(t)$ is <em>strictly</em> convex, equality in Jensen's inequality holds if and only if $T$ is constant almost everywhere:
+        $$\frac{Q(x)}{P(x)} = c \implies Q(x) = c P(x)$$
+        Since both sum to 1 ($\sum Q(x) = c \sum P(x) \implies 1 = c(1)$), we have $c = 1$, which proves that equality holds if and only if $P(x) = Q(x)$ for all $x \in \mathcal{X}$.<br>
+        <strong>Q.E.D. KL Divergence is strictly non-negative and reaches zero only when distributions are identical!</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 4: CODE LAB -->
+    <h3>3. Production Code Lab 1.4: Information Theory Engine</h3>
+    <p>Below is a production-grade information-theoretic computation suite with numerical guards against $\log(0)$ underflow.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 1.4 — Entropy, Cross-Entropy &amp; KL Divergence Calculator</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch14_information_theory/entropy_calculator.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch14_information_theory/entropy_calculator.py</a></p>
+<pre><code>import numpy as np
+
+def compute_information_metrics(p: np.ndarray, q: np.ndarray, eps=1e-12):
+    """
+    Computes Shannon Entropy H(P), Cross-Entropy H(P, Q), and KL Divergence D_KL(P || Q).
+    """
+    p = np.clip(p / np.sum(p), eps, 1.0)
+    q = np.clip(q / np.sum(q), eps, 1.0)
+
+    # 1. Shannon Entropy: H(P) = -sum(P * log2(P))
+    h_p = -np.sum(p * np.log2(p))
+
+    # 2. Cross-Entropy: H(P, Q) = -sum(P * log2(Q))
+    h_pq = -np.sum(p * np.log2(q))
+
+    # 3. KL Divergence: D_KL(P || Q) = sum(P * log2(P / Q))
+    kl_div = np.sum(p * np.log2(p / q))
+
+    # 4. Symmetrized Jensen-Shannon Divergence: JSD = 0.5 * (KL(P||M) + KL(Q||M))
+    m = 0.5 * (p + q)
+    jsd = 0.5 * (np.sum(p * np.log2(p / m)) + np.sum(q * np.log2(q / m)))
+
+    return {
+        "H(P)": float(h_p),
+        "H(P, Q)": float(h_pq),
+        "D_KL(P || Q)": float(kl_div),
+        "JSD(P, Q)": float(jsd),
+        "Identity_Check": bool(np.isclose(h_pq, h_p + kl_div))
+    }
+
+if __name__ == "__main__":
+    P = np.array([0.7, 0.2, 0.1])
+    Q = np.array([0.5, 0.3, 0.2])
+    metrics = compute_information_metrics(P, Q)
+    print("Information Metrics:")
+    for k, v in metrics.items():
+        print(f"  {k:15s} : {v}")</code></pre>
+    </div>
+
+    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 1.4 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 1.4: Information-Theoretic Feature Selection &amp; LLM Perplexity Engine</h3>
+        <p class="project-desc">Build a production feature evaluation tool that calculates Mutual Information $I(X; Y)$ to select the top-k predictive features for high-scale ranking, and evaluate LLM next-token probability distributions using Shannon Perplexity $2^{H(P, Q)}$.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch14_information_theory/entropy_calculator.py" target="_blank">🔗 Full Project Code: part1_mathematics/ch14_information_theory/entropy_calculator.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In large language modeling, raw training loss is hard to interpret across different vocabulary sizes. Production teams measure <strong>Perplexity</strong> ($\text{PPL} = e^{\mathcal{L}}$), which represents the effective branching factor: how many plausible tokens the model is choosing among at each step. In this project, you construct a perplexity evaluation harness that profiles token distribution entropy and detects catastrophic forgetting during fine-tuning.</p>
+      </div>
+    </div>
+  </div>
+</div>
