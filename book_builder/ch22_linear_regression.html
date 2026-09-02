@@ -1,0 +1,195 @@
+<!-- ======================================================================
+     CHAPTER 2.2 — LINEAR REGRESSION: OLS & GRADIENT DESCENT
+     ====================================================================== -->
+<div class="chapter" id="chapter-2-2">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.2</span>
+    <h2 class="chapter-title">Linear Regression: Normal Equations &amp; SGD</h2>
+    <span class="chapter-subtitle">Ordinary Least Squares, Matrix Calculus, Ridge, Lasso &amp; Coordinate Descent</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Everything should be made as simple as possible, but not simpler."</p>
+    <p class="attribution">— Albert Einstein</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: OLS FORMULATION -->
+    <h3>1. The Ordinary Least Squares (OLS) Formulation</h3>
+    <p>Linear regression models the relationship between continuous target $y \in \mathbb{R}$ and feature vector $\mathbf{x} \in \mathbb{R}^d$ via a linear combination plus bias:</p>
+    $$\hat{y} = w_1 x_1 + w_2 x_2 + \dots + w_d x_d + b = \mathbf{w}^T \mathbf{x} + b$$
+    <p>To express this compactly for $N$ observations, we augment feature matrix $X \in \mathbb{R}^{N \times (d+1)}$ with a leading column of ones ($x_0 = 1$) to absorb bias $b$ into weight vector $\mathbf{w} \in \mathbb{R}^{d+1}$:</p>
+    $$\hat{\mathbf{y}} = X \mathbf{w}, \quad \text{where } X = \begin{bmatrix} 1 & x_{11} & \cdots & x_{1d} \\ \vdots & \vdots & \ddots & \vdots \\ 1 & x_{N1} & \cdots & x_{Nd} \end{bmatrix}, \quad \mathbf{w} = \begin{bmatrix} b \\ w_1 \\ \vdots \\ w_d \end{bmatrix}$$
+    <p>The objective is to minimize the residual sum of squared errors (MSE loss):</p>
+    $$\mathcal{L}(\mathbf{w}) = \frac{1}{2N} \|\hat{\mathbf{y}} - \mathbf{y}\|_2^2 = \frac{1}{2N} (X \mathbf{w} - \mathbf{y})^T (X \mathbf{w} - \mathbf{y})$$
+
+    <!-- SECTION 2: DERIVATION OF NORMAL EQUATIONS -->
+    <h3>2. Analytical Solution: The Normal Equations</h3>
+    <p>Expanding the matrix quadratic loss function:</p>
+    $$\mathcal{L}(\mathbf{w}) = \frac{1}{2N} \left[ \mathbf{w}^T X^T X \mathbf{w} - \mathbf{w}^T X^T \mathbf{y} - \mathbf{y}^T X \mathbf{w} + \mathbf{y}^T \mathbf{y} \right]$$
+    <p>Notice that $\mathbf{w}^T X^T \mathbf{y}$ is a $1 \times 1$ scalar, equal to its transpose $\mathbf{y}^T X \mathbf{w}$. Thus:</p>
+    $$\mathcal{L}(\mathbf{w}) = \frac{1}{2N} \left[ \mathbf{w}^T (X^T X) \mathbf{w} - 2 \mathbf{w}^T (X^T \mathbf{y}) + \mathbf{y}^T \mathbf{y} \right]$$
+    <p>Applying the matrix calculus identities $\nabla_{\mathbf{w}} (\mathbf{w}^T A \mathbf{w}) = 2 A \mathbf{w}$ (for symmetric $A$) and $\nabla_{\mathbf{w}} (\mathbf{w}^T \mathbf{b}) = \mathbf{b}$:</p>
+    $$\nabla_{\mathbf{w}} \mathcal{L}(\mathbf{w}) = \frac{1}{N} \left[ X^T X \mathbf{w} - X^T \mathbf{y} \right]$$
+    <p>Setting the gradient to zero yields the celebrated <strong>Normal Equations</strong>:</p>
+    $$X^T X \mathbf{w}^* = X^T \mathbf{y} \implies \mathbf{w}^* = (X^T X)^{-1} X^T \mathbf{y}$$
+
+    <div class="key-insight">
+      <p><strong>When Does the Normal Equation Fail?</strong></p>
+      <ul>
+        <li><strong>Computational Collapse ($d &gt; 10,000$):</strong> Computing $(X^T X)^{-1}$ requires $O(d^3)$ arithmetic operations. When $d = 100,000$, inverting a $100,000 \times 100,000$ matrix requires $10^{15}$ FLOPs, freezing any server!</li>
+        <li><strong>Collinearity &amp; Non-Invertibility:</strong> If two features are highly correlated (e.g. temperature in Celsius and Fahrenheit), the columns of $X$ are linearly dependent, $\det(X^T X) = 0$, and $(X^T X)^{-1}$ does not exist!</li>
+      </ul>
+      <em>This is why iterative Gradient Descent and Regularization are mandatory.</em>
+    </div>
+
+    <!-- SECTION 3: REGULARIZATION: RIDGE VS LASSO -->
+    <h3>3. Regularization: Ridge ($L_2$) vs. Lasso ($L_1$)</h3>
+
+    <h4>Ridge Regression ($L_2$ Regularization)</h4>
+    <p>Ridge regression adds an $L_2$ penalty on weight magnitudes to prevent explosive coefficients caused by multicollinearity:</p>
+    $$\mathcal{L}_{\text{Ridge}}(\mathbf{w}) = \frac{1}{2N} \|X \mathbf{w} - \mathbf{y}\|_2^2 + \frac{\lambda}{2} \|\mathbf{w}\|_2^2$$
+    <p>Setting the gradient $\frac{1}{N} (X^T X \mathbf{w} - X^T \mathbf{y}) + \lambda \mathbf{w} = \mathbf{0}$ yields the analytical solution:</p>
+    $$\mathbf{w}^*_{\text{Ridge}} = (X^T X + N \lambda I)^{-1} X^T \mathbf{y}$$
+    <p><em>Why Ridge Guarantees Invertibility:</em> Even if $X^T X$ has zero eigenvalues, adding $\lambda I$ shifts every eigenvalue upward by $\lambda &gt; 0$: $\lambda_i(X^T X + \lambda I) = \lambda_i(X^T X) + \lambda \ge \lambda &gt; 0$. The matrix is strictly positive definite and always invertible!</p>
+
+    <h4>Lasso Regression ($L_1$ Regularization &amp; Exact Sparsity)</h4>
+    <p>Lasso penalizes the sum of absolute values:</p>
+    $$\mathcal{L}_{\text{Lasso}}(\mathbf{w}) = \frac{1}{2N} \|X \mathbf{w} - \mathbf{y}\|_2^2 + \lambda \|\mathbf{w}\|_1 = \frac{1}{2N} \|X \mathbf{w} - \mathbf{y}\|_2^2 + \lambda \sum_{j=1}^d |w_j|$$
+    <p>Because the absolute value function $|w_j|$ has a sharp corner at $w_j = 0$, its derivative is undefined at zero. The subdifferential is:</p>
+    $$\partial |w| = \begin{cases} \{1\} & \text{if } w > 0 \\ \{-1\} & \text{if } w < 0 \\ [-1, 1] & \text{if } w = 0 \end{cases}$$
+    <p>The coordinate descent update rule applies the <strong>Soft-Thresholding Operator</strong>:</p>
+    $$w_j^* = S_\lambda(\rho_j) = \text{sign}(\rho_j) \max(|\rho_j| - \lambda, 0)$$
+    <p>If the correlation $\rho_j$ between feature $j$ and the residual is less than $\lambda$, $w_j$ is set to <strong>exact zero</strong>! Lasso acts as automatic, embedded feature selection.</p>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Linear Models</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.2.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In high-dimensional linear regression where the number of features exceeds observations ($d &gt; N$):</p>
+        <ol>
+          <li>Prove that the sample covariance matrix $X^T X \in \mathbb{R}^{d \times d}$ is non-invertible.</li>
+          <li>Prove that for any $\lambda &gt; 0$, the Ridge matrix $A = (X^T X + \lambda I)$ is strictly positive definite and invertible.</li>
+          <li>Calculate the condition number $\kappa(A) = \frac{\sigma_{\max}}{\sigma_{\min}}$ as a function of $\lambda$ and explain how Ridge stabilization prevents numerical rounding catastrophes on 32-bit hardware.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+
+        <p class="step"><strong>Step 1: Rank of $X^T X$ when $d &gt; N$:</strong><br>
+        By the Rank-Nullity Theorem, the rank of a matrix product is bounded by the rank of its factors:
+        $$\text{rank}(X^T X) = \text{rank}(X) \le \min(N, d) = N &lt; d$$
+        Since $X^T X \in \mathbb{R}^{d \times d}$ has rank at most $N &lt; d$, it has at least $d - N$ zero eigenvalues ($\lambda_i = 0$).<br>
+        Because $\det(X^T X) = \prod_{i=1}^d \lambda_i = 0$, $X^T X$ is strictly non-invertible.</p>
+
+        <p class="step"><strong>Step 2: Proof of Invertibility for $X^T X + \lambda I$:</strong><br>
+        A matrix $A$ is strictly positive definite if $\mathbf{z}^T A \mathbf{z} &gt; 0$ for all non-zero vectors $\mathbf{z} \neq \mathbf{0}$.<br>
+        Let $\mathbf{z} \in \mathbb{R}^d \setminus \{\mathbf{0}\}$:
+        $$\mathbf{z}^T (X^T X + \lambda I) \mathbf{z} = \mathbf{z}^T X^T X \mathbf{z} + \lambda \mathbf{z}^T I \mathbf{z} = \|X \mathbf{z}\|_2^2 + \lambda \|\mathbf{z}\|_2^2$$
+        Notice that $\|X \mathbf{z}\|_2^2 \ge 0$ (norm is non-negative).<br>
+        Since $\mathbf{z} \neq \mathbf{0}$, its norm $\|\mathbf{z}\|_2^2 &gt; 0$. Because $\lambda &gt; 0$:
+        $$\lambda \|\mathbf{z}\|_2^2 &gt; 0 \implies \mathbf{z}^T (X^T X + \lambda I) \mathbf{z} \ge 0 + \lambda \|\mathbf{z}\|_2^2 &gt; 0$$
+        Since the quadratic form is strictly positive for all non-zero $\mathbf{z}$, $A = (X^T X + \lambda I)$ is strictly positive definite. All its eigenvalues are strictly positive ($\lambda_i(A) \ge \lambda &gt; 0$), guaranteeing that $\det(A) &gt; 0$ and $A^{-1}$ exists uniquely!</p>
+
+        <p class="step"><strong>Step 3: Condition Number Analysis:</strong><br>
+        Let the eigenvalues of $X^T X$ be $\sigma_1 \ge \sigma_2 \ge \dots \ge \sigma_N \ge 0 \dots 0$.<br>
+        The eigenvalues of $X^T X + \lambda I$ are $\sigma_i + \lambda$. The condition number is:
+        $$\kappa(A) = \frac{\lambda_{\max}(A)}{\lambda_{\min}(A)} = \frac{\sigma_1 + \lambda}{0 + \lambda} = 1 + \frac{\sigma_1}{\lambda}$$
+        Without regularization ($\lambda = 0$), $\kappa = \frac{\sigma_1}{0} = \infty$ (completely ill-conditioned).<br>
+        By introducing $\lambda &gt; 0$, we bound the condition number. In floating-point numerical arithmetic, if $\kappa(A) &gt; 10^{7}$, standard 32-bit floating point arithmetic loses all significant digits due to catastrophic cancellation! Choosing $\lambda$ such that $\kappa(A) &lt; 10^4$ guarantees total numerical stability.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.2: OLS vs. Mini-Batch SGD from Scratch</h3>
+    <p>Below is a production Python implementation comparing the exact analytical OLS Normal Equation against iterative Mini-Batch SGD with condition number tracking.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.2 — OLS Normal Equations vs. Mini-Batch SGD</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch22_linear_regression/linear_regression_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch22_linear_regression/linear_regression_scratch.py</a></p>
+<pre><code>import numpy as np
+
+class LinearRegressionScratch:
+    def __init__(self, lr=0.01, batch_size=32, epochs=50, l2_reg=1e-4):
+        self.lr = lr
+        self.batch_size = batch_size
+        self.epochs = epochs
+        self.l2_reg = l2_reg
+        self.w = None
+
+    def fit_normal_equation(self, X, y):
+        """Analytical Ridge OLS solution: w = (X^T X + lambda I)^-1 X^T y"""
+        X_b = np.c_[np.ones((X.shape[0], 1)), X] # Add bias column
+        d = X_b.shape[1]
+        I = np.eye(d)
+        I[0, 0] = 0.0 # Do not regularize bias!
+        self.w = np.linalg.solve(X_b.T @ X_b + self.l2_reg * I, X_b.T @ y)
+
+    def fit_sgd(self, X, y):
+        """Mini-Batch Stochastic Gradient Descent"""
+        N, d = X.shape
+        X_b = np.c_[np.ones((N, 1)), X]
+        self.w = np.zeros(d + 1)
+
+        for epoch in range(self.epochs):
+            indices = np.random.permutation(N)
+            for start_idx in range(0, N, self.batch_size):
+                batch_idx = indices[start_idx:start_idx + self.batch_size]
+                X_batch = X_b[batch_idx]
+                y_batch = y[batch_idx]
+
+                # Prediction & Error
+                preds = X_batch @ self.w
+                errors = preds - y_batch
+
+                # Gradient: (1/B) * X^T (Xw - y) + lambda * w
+                grad = (X_batch.T @ errors) / len(batch_idx)
+                grad[1:] += self.l2_reg * self.w[1:] # Regularize weights only
+
+                self.w -= self.lr * grad
+
+    def predict(self, X):
+        X_b = np.c_[np.ones((X.shape[0], 1)), X]
+        return X_b @ self.w
+
+if __name__ == "__main__":
+    np.random.seed(42)
+    X = np.random.randn(1000, 5)
+    true_w = np.array([2.5, 1.2, -3.4, 0.8, -1.5, 2.0]) # bias=2.5
+    y = np.c_[np.ones((1000, 1)), X] @ true_w + 0.1 * np.random.randn(1000)
+
+    model_exact = LinearRegressionScratch(l2_reg=1e-3)
+    model_exact.fit_normal_equation(X, y)
+
+    model_sgd = LinearRegressionScratch(lr=0.05, batch_size=32, epochs=40, l2_reg=1e-3)
+    model_sgd.fit_sgd(X, y)
+
+    print("True Weights    :", np.round(true_w, 3))
+    print("OLS Weights     :", np.round(model_exact.w, 3))
+    print("SGD Weights     :", np.round(model_sgd.w, 3))</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.2 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.2: Real-Time High-Scale ElasticNet Price Predictor</h3>
+        <p class="project-desc">Architect and implement a production real-estate and asset pricing engine with ElasticNet regularization, coordinate descent feature selection, and streaming mini-batch gradient descent updates capable of handling 50,000 requests/sec.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch22_linear_regression/linear_regression_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch22_linear_regression/linear_regression_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In high-frequency valuation platforms (e.g. Zillow Zestimate, Uber dynamic fare estimation), input features suffer from extreme correlation (square footage vs number of bedrooms vs neighborhood pricing). In this project, you construct a production ElasticNet regression service that automatically eliminates redundant collinear predictors, stabilizes condition numbers, and generates prediction intervals under strict sub-5ms latency SLAs.</p>
+      </div>
+    </div>
+  </div>
+</div>

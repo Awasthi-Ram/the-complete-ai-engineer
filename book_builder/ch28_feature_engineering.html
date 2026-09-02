@@ -1,0 +1,190 @@
+<!-- ======================================================================
+     CHAPTER 2.8 — FEATURE ENGINEERING & LEAKAGE PREVENTION
+     ====================================================================== -->
+<div class="chapter" id="chapter-2-8">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.8</span>
+    <h2 class="chapter-title">Feature Engineering &amp; Data Leakage Prevention</h2>
+    <span class="chapter-subtitle">Target Encoding, Robust Scaling, Outlier Geometry &amp; The Cardinal Sin of ML</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Coming up with features is difficult, time-consuming, and requires expert knowledge. Applied machine learning is basically feature engineering."</p>
+    <p class="attribution">— Andrew Ng</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE TAXONOMY OF ENCODINGS -->
+    <h3>1. Categorical Encoding Strategies</h3>
+    <p>Machine learning models are mathematical functions operating on vector spaces $\mathbb{R}^d$: they cannot directly ingest textual categories like <code>"device_iphone"</code> or <code>"zip_code_94103"</code>. How we translate discrete symbols into numbers determines whether our model succeeds or fails.</p>
+
+    <h4>The Spectrum of Encodings</h4>
+    <ul>
+      <li><strong>One-Hot Encoding:</strong> Creates $K$ binary indicator columns. While theoretically unconstrained, if a category has cardinality $K = 100,000$ (e.g. URL domains), one-hot encoding introduces $100,000$ sparse columns, destroying memory caches and causing the curse of dimensionality.</li>
+      <li><strong>Label (Ordinal) Encoding:</strong> Assigns integers $0, 1, 2, \dots, K-1$. This artificially imposes a false mathematical order: it implies that $\text{Category 2} &gt; \text{Category 1}$, and that $\text{Category 2} - \text{Category 1} = \text{Category 1} - \text{Category 0}$. In linear models and neural networks, this introduces catastrophic inductive bias errors!</li>
+      <li><strong>Smoothed Target Encoding (Empirical Bayes):</strong> Replaces each category $c$ with the expected value of target $y$ within that category, smoothed toward the global mean $\bar{y}_{\text{global}}$:
+      $$\hat{x}_c = \frac{n_c \bar{y}_c + m \cdot \bar{y}_{\text{global}}}{n_c + m}$$
+      Where $n_c$ is the frequency count of category $c$, and $m$ is the prior smoothing weight. For rare categories ($n_c \to 0$), the estimate shrinks to the global prior; for frequent categories ($n_c \gg m$), it relies on empirical category evidence!</li>
+    </ul>
+
+    <!-- SECTION 2: NUMERICAL SCALING -->
+    <h3>2. Numerical Normalization &amp; Outlier Geometry</h3>
+    <p>When features have drastically different numerical scales (e.g. Annual Income in $\$10,000$s vs. Age in years $[18, 80]$), the gradient descent loss surface becomes a severely elongated, ill-conditioned ravine. Optimization oscillates violently across the income dimension while making zero progress along the age dimension.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Scaler</th>
+          <th>Mathematical Formula</th>
+          <th>Sensitivity to Outliers</th>
+          <th>Best Use Case</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>StandardScaler (Z-score)</strong></td>
+          <td>$z = \frac{x - \mu}{\sigma}$</td>
+          <td>High (Mean and std are distorted by extreme spikes)</td>
+          <td>Normally distributed features without heavy tails.</td>
+        </tr>
+        <tr>
+          <td><strong>MinMaxScaler</strong></td>
+          <td>$x' = \frac{x - x_{\min}}{x_{\max} - x_{\min}}$</td>
+          <td>Extreme (A single outlier squashes all other data into a tiny band)</td>
+          <td>Bounding bounded image pixels $[0, 255] \to [0, 1]$.</td>
+        </tr>
+        <tr>
+          <td><strong>RobustScaler</strong></td>
+          <td>$x' = \frac{x - \text{median}(x)}{\text{IQR}(x)} = \frac{x - Q_2}{Q_3 - Q_1}$</td>
+          <td><strong>Immune</strong> (Median and Interquartile Range ignore outliers)</td>
+          <td><strong>Default choice for real-world tabular data</strong> with heavy tails.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- SECTION 3: DATA LEAKAGE -->
+    <h3>3. The Cardinal Sin of ML: Data Leakage</h3>
+    <p><strong>Data Leakage</strong> is the silent evaluation catastrophe where information from the test or target dataset contaminates the training feature pipeline. Models with data leakage show spectacular 99.8% metrics in development notebooks, but completely crash upon production deployment.</p>
+
+    <div class="real-world-box">
+      <h4>🚨 The Three Primary Vectors of Data Leakage</h4>
+      <ol>
+        <li><strong>Preprocessor Contamination (Fit-Before-Split):</strong> Fitting a scaler, imputer, or target encoder on the <em>entire dataset before splitting</em> into train/test:
+        $$\text{FATAL ANTI-PATTERN: } \quad \text{scaler.fit}(X_{\text{all}}) \implies \text{test samples pollute } \mu \text{ and } \sigma!$$
+        <em>Correct Protocol:</em> <code>scaler.fit(X_train)</code>, then <code>scaler.transform(X_test)</code>. The test set must be treated as completely unseen future data!</li>
+        <li><strong>Target Leakage:</strong> Including features that are direct consequences of the target variable. For example, in a churn prediction model, including the feature <code>days_since_cancellation_email</code> is target leakage—in production, that field is only populated <em>after</em> the user has already churned!</li>
+        <li><strong>Temporal (Lookahead) Leakage:</strong> In time-series and financial models, using future rolling statistics (e.g. 7-day future moving average) to predict current stock prices.</li>
+      </ol>
+    </div>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Feature Engineering</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.8.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In high-scale ad click prediction, why does naive Target Encoding cause massive overfitting? Explain how <strong>Out-of-Fold (OOF) Target Encoding</strong> mathematically prevents target leakage during model training.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+
+        <p class="step"><strong>Step 1: Why Naive Target Encoding Overfits:</strong><br>
+        Suppose an ad category appears only once in the dataset ($n_c = 1$), and that user clicked the ad ($y = 1$).<br>
+        Without out-of-fold partitioning, the target encoded feature for this sample will be $\approx 1.0$. The decision tree or linear model learns to memorize that $\text{Feature} \approx 1.0 \implies \text{Click}$, achieving 100% training accuracy. However, in production test data, this category was merely an accidental click; the model learned a spurious label leak rather than true category propensity.</p>
+
+        <p class="step"><strong>Step 2: The Out-of-Fold (OOF) Mathematical Solution:</strong><br>
+        To prevent a sample from leaking its own label into its feature value, we apply $K$-Fold partitioning exclusively within the training set:</p>
+        <ol>
+          <li>Divide the training set into $K$ disjoint folds: $D = D_1 \cup D_2 \cup \dots \cup D_K$.</li>
+          <li>To calculate the encoded feature for samples in fold $k$, we compute category statistics using <strong>only the remaining $K - 1$ folds</strong> ($D \setminus D_k$):
+          $$\hat{x}_i = \frac{n_{c,-k} \bar{y}_{c,-k} + m \bar{y}_{\text{global},-k}}{n_{c,-k} + m}, \quad \forall i \in D_k$$</li>
+          <li>Repeat this for all $K$ folds. Every training sample's feature is computed without its own label having any mathematical influence on the calculation!</li>
+        </ol>
+        <strong>Result: OOF encoding completely eradicates label leakage, ensuring training metrics match test generalization.</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.8: Leak-Free Feature Preprocessor Pipeline</h3>
+    <p>Below is a production-grade scikit-learn compatible transformer implementing Out-of-Fold Target Encoding and Robust Scaling with zero data leakage.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.8 — Out-of-Fold Target Encoder from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch28_feature_engineering/leak_free_pipeline.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch28_feature_engineering/leak_free_pipeline.py</a></p>
+<pre><code>import numpy as np
+from sklearn.model_selection import KFold
+
+class OutOfFoldTargetEncoder:
+    """
+    Computes smoothed out-of-fold target encodings preventing label leakage.
+    """
+    def __init__(self, n_splits=5, smoothing=10.0):
+        self.n_splits = n_splits
+        self.smoothing = smoothing
+        self.global_mean_ = None
+        self.mapping_ = {}
+
+    def fit_transform(self, categories, y):
+        self.global_mean_ = np.mean(y)
+        encoded = np.zeros(len(categories))
+        kf = KFold(n_splits=self.n_splits, shuffle=True, random_state=42)
+
+        # 1. Compute Out-of-Fold encodings for training
+        for train_idx, val_idx in kf.split(categories):
+            cat_train, y_train = categories[train_idx], y[train_idx]
+            cat_val = categories[val_idx]
+
+            # Compute stats on K-1 folds
+            unique_cats = np.unique(cat_train)
+            fold_map = {}
+            for c in unique_cats:
+                y_c = y_train[cat_train == c]
+                n_c = len(y_c)
+                smoothed = (np.sum(y_c) + self.smoothing * self.global_mean_) / (n_c + self.smoothing)
+                fold_map[c] = smoothed
+
+            # Apply to validation fold
+            encoded[val_idx] = np.array([fold_map.get(c, self.global_mean_) for c in cat_val])
+
+        # 2. Compute full training mappings for inference transform
+        unique_cats = np.unique(categories)
+        for c in unique_cats:
+            y_c = y[categories == c]
+            n_c = len(y_c)
+            self.mapping_[c] = (np.sum(y_c) + self.smoothing * self.global_mean_) / (n_c + self.smoothing)
+
+        return encoded
+
+    def transform(self, categories):
+        return np.array([self.mapping_.get(c, self.global_mean_) for c in categories])
+
+if __name__ == "__main__":
+    cats = np.array(["electronics", "clothing", "electronics", "home", "clothing", "electronics", "home", "books"])
+    labels = np.array([1, 0, 1, 0, 0, 0, 1, 0])
+    encoder = OutOfFoldTargetEncoder(n_splits=3, smoothing=5.0)
+    encoded_train = encoder.fit_transform(cats, labels)
+    print("Out-of-Fold Encoded Training Array:\n", np.round(encoded_train, 4))</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.8 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.8: Production Feature Store &amp; Automated Data Leakage Sentinel</h3>
+        <p class="project-desc">Architect and implement an enterprise feature preprocessing pipeline that automatically inspects tabular schemas, detects target correlation anomalies, isolates temporal boundaries, and halts training when data leakage is detected.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch28_feature_engineering/leak_free_pipeline.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch28_feature_engineering/leak_free_pipeline.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In large-scale financial platforms (Stripe, Robinhood), data engineers and ML scientists constantly write new feature extraction scripts. If a single junior engineer creates a feature that calculates average user spend over a window that accidentally includes the transaction timestamp, the entire model suffers fatal data leakage. In this project, you construct a continuous feature store sentinel that tests feature-to-target mutual information across time slices and raises automated build alerts on leakage contamination.</p>
+      </div>
+    </div>
+  </div>
+</div>

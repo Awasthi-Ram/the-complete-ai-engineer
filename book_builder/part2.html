@@ -5,436 +5,1679 @@
 <div class="part-page">
   <div class="part-number">Part 2</div>
   <div class="part-title">Classical Machine Learning</div>
-  <div class="part-subtitle">From Linear Foundations to Non-Linear Ensembles & Unsupervised Discovery</div>
+  <div class="part-subtitle">Regression, Classification, Ensembles, XGBoost, SVMs, Unsupervised Learning &amp; Evaluation</div>
   <div class="part-ornament">✦ ✦ ✦</div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 2.1 — WHAT IS MACHINE LEARNING?
+     CHAPTER 2.1 — THE ML PARADIGM & GENERALIZATION THEORY
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-2-1">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 2.1</span>
-    <h2 class="chapter-title">What Is Machine Learning?</h2>
-    <span class="chapter-subtitle">The Paradigm Shift from Explicit Rules to Data-Driven Optimization</span>
+    <h2 class="chapter-title">The ML Paradigm &amp; Generalization Theory</h2>
+    <span class="chapter-subtitle">Inductive Bias, The No Free Lunch Theorem &amp; The Bias-Variance Decomposition</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
     <p>"A computer program is said to learn from experience E with respect to some class of tasks T and performance measure P, if its performance at tasks in T, as measured by P, improves with experience E."</p>
-    <p class="attribution">— Tom M. Mitchell (1997)</p>
+    <p class="attribution">— Tom M. Mitchell, 1997</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>For sixty years of computing, programming followed a single paradigm: <strong>Rules + Data = Answers</strong>. A human software engineer conceived the logic, wrote nested `if-else` branches in code, compiled the binary, and fed inputs to receive outputs. This paradigm broke when computing collided with real-world perception. You cannot write enough `if-else` statements to detect a pedestrian in a foggy dashcam video or recognize a credit card fraud attempt among 100 million transactions.</p>
-    <p>Machine learning flips the arrow of causality: <strong>Data + Answers = Rules</strong>. We define a parameterized hypothesis class $f_\theta(\mathbf{x})$, specify an objective function $\mathcal{L}$, and let statistical optimization discover the parameters $\theta^*$ that best map inputs to targets.</p>
+    <!-- SECTION 1: THE PARADIGM SHIFT -->
+    <h3>1. The Fundamental Paradigm Shift</h3>
+    <p>For seventy years, classical computer science operated under a deterministic contract: human software engineers wrote explicit rules (algorithms, nested <code>if/else</code> statements, database schemas), and computers processed inputs according to those rules to produce answers:</p>
+    $$\text{Classical Programming: } \quad \text{Rules} + \text{Data} \xrightarrow{\text{Computer}} \text{Answers}$$
+    <p>This paradigm breaks down completely when applied to complex perceptual and high-dimensional tasks. How would you write explicit rules to detect a pedestrian in an image? Would you check if pixel $(14, 28)$ is flesh-toned? What if the pedestrian is wearing a coat? What if it is raining? What if the camera is tilted? The combinatorial explosion of physical reality defeats human rule-crafting.</p>
+
+    <p>Machine Learning inverts this equation: we feed the computer millions of examples of inputs paired with desired outputs, and the learning algorithm <strong>induces the mathematical mapping function $f: \mathcal{X} \to \mathcal{Y}$ automatically</strong>:</p>
+    $$\text{Machine Learning: } \quad \text{Data} + \text{Answers} \xrightarrow{\text{Learning Algorithm}} \text{Rules (Model)}$$
+
+    <h4>The No Free Lunch Theorem &amp; Inductive Bias</h4>
+    <p>In 1996, David Wolpert formulated the <strong>No Free Lunch (NFL) Theorem</strong>: averaged across all mathematically possible data-generating distributions, every machine learning algorithm has the exact same expected error rate—which is equal to random coin-flipping! There is no universally superior algorithm.</p>
+    <p>An algorithm can only learn efficiently if it makes prior assumptions about the geometry of the problem. This set of architectural assumptions is called the algorithm's <strong>Inductive Bias</strong>:</p>
+    <ul>
+      <li><strong>Linear Regression:</strong> Assumes the target is a linear combination of input features with additive noise.</li>
+      <li><strong>Decision Trees:</strong> Assumes the feature space can be recursively partitioned using axis-aligned orthogonal hyperplanes.</li>
+      <li><strong>Convolutional Neural Networks (CNNs):</strong> Assumes spatial translation invariance (a cat in the top-left corner is the same entity as a cat in the bottom-right corner) and local feature locality.</li>
+      <li><strong>Recurrent Neural Networks (RNNs):</strong> Assumes temporal invariance and Markovian sequential ordering.</li>
+      <li><strong>Transformers:</strong> Assumes permutation equivariance over sets, allowing all tokens to attend to all other tokens based on content-dependent similarity.</li>
+    </ul>
+
+    <!-- SECTION 2: BIAS-VARIANCE DECOMPOSITION -->
+    <h3>2. The Bias-Variance Decomposition</h3>
+    <p>Why do models fail to generalize? Any supervised learning error decomposes into three distinct physical components:</p>
 
     <div class="real-world-box">
-      <h4>🏢 Real-World Problem Mapping: Inductive Bias & The No Free Lunch Theorem</h4>
-      <p>The Wolpert No Free Lunch Theorem proves that no single machine learning algorithm outperforms all others when averaged across all possible data-generating distributions. In production, choosing between Linear Models, Decision Trees (XGBoost), or Deep Neural Networks depends entirely on your problem's <strong>inductive bias</strong>. Tabular business metrics with heterogeneous features dominate with Gradient Boosted Trees; spatial perception demands translation-invariant Convolutional Networks; sequence and reasoning tasks require Transformer attention.</p>
+      <h4>🏆 The Bias-Variance Identity</h4>
+      <p>Let $y = f(\mathbf{x}) + \epsilon$ be the true target with zero-mean noise $\epsilon \sim \mathcal{N}(0, \sigma^2)$. Let $\hat{f}(\mathbf{x})$ be the model trained on dataset $\mathcal{D}$. The expected out-of-sample Mean Squared Error at query point $\mathbf{x}$ decomposes into:</p>
+      $$\mathbb{E}_{\mathcal{D}} \left[ (y - \hat{f}(\mathbf{x}))^2 \right] = \underbrace{\left( f(\mathbf{x}) - \mathbb{E}[\hat{f}(\mathbf{x})] \right)^2}_{\text{Bias}^2} + \underbrace{\mathbb{E}\left[ (\hat{f}(\mathbf{x}) - \mathbb{E}[\hat{f}(\mathbf{x})])^2 \right]}_{\text{Variance}} + \underbrace{\sigma^2}_{\text{Irreducible Error}}$$
+      <ul>
+        <li><strong>$\text{Bias}^2$ (Underfitting):</strong> The error introduced by erroneous architectural assumptions. If the true relationship is quadratic but you fit a line, your bias is high. Increasing training data does not fix high bias!</li>
+        <li><strong>$\text{Variance}$ (Overfitting):</strong> The sensitivity of the model to fluctuations in the specific training sample $\mathcal{D}$. If training on a different 10,000 samples produces wildly different predictions, your variance is high.</li>
+        <li><strong>$\sigma^2$ (Irreducible Noise):</strong> Unobserved latent variables or intrinsic sensor measurement noise. No algorithm on Earth can beat this error floor.</li>
+      </ul>
     </div>
 
-    <h3>Deterministic Stratified Train-Validation-Test Splitting</h3>
-    <p>To evaluate whether a model has genuinely learned generalizable representations rather than memorized noise, we partition data into three strictly isolated sets:
-    <ul>
-      <li><strong>Training Set (70%):</strong> Observed by the optimization algorithm to update parameters $\theta$.</li>
-      <li><strong>Validation Set (15%):</strong> Used during development to tune hyperparameters (learning rate, tree depth, regularization strength) and detect early overfitting.</li>
-      <li><strong>Test Set (15%):</strong> Sealed in a black box until final deployment readiness audit. Touching the test set during model selection causes statistical data leakage.</li>
-    </ul></p>
+    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Generalization Theory</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.1.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove the <strong>Bias-Variance Decomposition</strong> from first principles. Starting from the expected squared generalization error $\mathbb{E}_{\mathcal{D}, \epsilon}[(y - \hat{f}(\mathbf{x}))^2]$, derive the three constituent terms ($\text{Bias}^2$, $\text{Variance}$, and $\sigma^2$), explicitly justifying why all cross-product terms vanish.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Set Up the Expectation:</strong><br>
+        Let $y = f + \epsilon$, where $f = f(\mathbf{x})$ is deterministic, $\mathbb{E}[\epsilon] = 0$, and $\mathbb{E}[\epsilon^2] = \sigma^2$.<br>
+        Let $\hat{f} = \hat{f}(\mathbf{x}; \mathcal{D})$ be the trained estimator. Let $\bar{f} = \mathbb{E}_{\mathcal{D}}[\hat{f}]$ denote the expected prediction across all possible training datasets.<br>
+        Notice that $\epsilon$ is independent of training dataset $\mathcal{D}$, so $\mathbb{E}[\epsilon \hat{f}] = \mathbb{E}[\epsilon] \mathbb{E}[\hat{f}] = 0$.<br>
+        The expected loss is:
+        $$\mathbb{E}[(y - \hat{f})^2] = \mathbb{E}[(f + \epsilon - \hat{f})^2] = \mathbb{E}[((f - \hat{f}) + \epsilon)^2]$$
+        Expand the square:
+        $$\mathbb{E}[(y - \hat{f})^2] = \mathbb{E}[(f - \hat{f})^2] + 2 \mathbb{E}[(f - \hat{f})\epsilon] + \mathbb{E}[\epsilon^2]$$
+        Since $\epsilon$ is independent with zero mean, $2 \mathbb{E}[(f - \hat{f})\epsilon] = 2(f - \bar{f})\mathbb{E}[\epsilon] = 0$.<br>
+        And $\mathbb{E}[\epsilon^2] = \sigma^2$. Therefore:
+        $$\mathbb{E}[(y - \hat{f})^2] = \mathbb{E}[(f - \hat{f})^2] + \sigma^2$$</p>
+
+        <p class="step"><strong>Step 2: Add and Subtract $\bar{f}$ Inside the First Term:</strong>
+        $$\mathbb{E}[(f - \hat{f})^2] = \mathbb{E}[((f - \bar{f}) + (\bar{f} - \hat{f}))^2]$$
+        Expand the square:
+        $$\mathbb{E}[(f - \hat{f})^2] = \mathbb{E}[(f - \bar{f})^2] + \mathbb{E}[(\bar{f} - \hat{f})^2] + 2 \mathbb{E}[(f - \bar{f})(\bar{f} - \hat{f})]$$</p>
+
+        <p class="step"><strong>Step 3: Analyze Each Term:</strong>
+        <ul>
+          <li>$(f - \bar{f})$ is a deterministic scalar (it does not depend on dataset $\mathcal{D}$). Thus:
+          $$\mathbb{E}[(f - \bar{f})^2] = (f - \bar{f})^2 = (f(\mathbf{x}) - \mathbb{E}[\hat{f}(\mathbf{x})])^2 = \mathbf{\text{Bias}}^2$$</li>
+          <li>$\mathbb{E}[(\bar{f} - \hat{f})^2] = \mathbb{E}[(\hat{f}(\mathbf{x}) - \mathbb{E}[\hat{f}(\mathbf{x})])^2] = \mathbf{\text{Variance}}$ (by definition of variance).</li>
+          <li>Evaluate the cross-product term:
+          $$2 \mathbb{E}[(f - \bar{f})(\bar{f} - \hat{f})] = 2 (f - \bar{f}) \mathbb{E}[\bar{f} - \hat{f}] = 2 (f - \bar{f}) (\bar{f} - \mathbb{E}[\hat{f}]) = 2 (f - \bar{f}) (\bar{f} - \bar{f}) = 0$$
+          The cross-product term vanishes identically!</li>
+        </ul>
+        Combining all terms:
+        $$\mathbb{E}[(y - \hat{f}(\mathbf{x}))^2] = \text{Bias}[\hat{f}(\mathbf{x})]^2 + \text{Var}[\hat{f}(\mathbf{x})] + \sigma^2$$
+        <strong>Q.E.D. The total expected prediction error is the exact sum of squared bias, variance, and irreducible noise!</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 4: CODE LAB -->
+    <h3>3. Production Code Lab 2.1: Purged &amp; Embargoed Cross-Validation</h3>
+    <p>In financial and temporal AI, standard $K$-Fold cross-validation leaks future information into past folds. Below is a production Purged &amp; Embargoed splitter preventing lookahead contamination.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 2.1 — Stratified Split from Scratch</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch21_what_is_ml/train_test_split_from_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch21_what_is_ml/train_test_split_from_scratch.py</a></p>
-<pre><code>import random
+      <div class="code-lab-header">Code Lab 2.1 — Purged &amp; Embargoed Time-Series Cross-Validator</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch21_ml_paradigm/purged_cv.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch21_ml_paradigm/purged_cv.py</a></p>
+<pre><code>import numpy as np
 
-def train_val_test_split(data, train=0.7, val=0.15, test=0.15, seed=42):
-    rng = random.Random(seed)
-    shuffled = list(data)
-    rng.shuffle(shuffled)
-    n = len(shuffled)
-    n_tr, n_va = int(n * train), int(n * val)
-    return shuffled[:n_tr], shuffled[n_tr : n_tr + n_va], shuffled[n_tr + n_va :]</code></pre>
+class PurgedGroupTimeSeriesSplit:
+    """
+    Purged & Embargoed Cross-Validator preventing temporal leakage in sequential AI.
+    """
+    def __init__(self, n_splits=5, purge_window=10, embargo_window=5):
+        self.n_splits = n_splits
+        self.purge_window = purge_window
+        self.embargo_window = embargo_window
+
+    def split(self, X, groups=None):
+        n_samples = len(X)
+        indices = np.arange(n_samples)
+        fold_size = n_samples // self.n_splits
+
+        for i in range(self.n_splits):
+            test_start = i * fold_size
+            test_end = (i + 1) * fold_size if i != self.n_splits - 1 else n_samples
+            test_indices = indices[test_start:test_end]
+
+            # Purge before test fold (eliminate overlapping labels)
+            train_left = indices[:max(0, test_start - self.purge_window)]
+
+            # Embargo after test fold (prevent auto-correlation leakage)
+            train_right = indices[min(n_samples, test_end + self.embargo_window):]
+
+            train_indices = np.concatenate([train_left, train_right])
+            yield train_indices, test_indices
+
+if __name__ == "__main__":
+    X = np.arange(100)
+    cv = PurgedGroupTimeSeriesSplit(n_splits=3, purge_window=5, embargo_window=5)
+    for fold, (train_idx, test_idx) in enumerate(cv.split(X)):
+        print(f"Fold {fold}: Train size = {len(train_idx)}, Test range = [{test_idx[0]}, {test_idx[-1]}]")</code></pre>
+    </div>
+
+    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.1 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.1: High-Frequency Temporal Generalization &amp; Leakage Audit Suite</h3>
+        <p class="project-desc">Build an automated cross-validation audit suite that runs synthetic distribution shift simulations, calculates empirical Bias-Variance curves across model complexities, and detects silent lookahead data leakage in temporal feature stores.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch21_ml_paradigm/purged_cv.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch21_ml_paradigm/purged_cv.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In quantitative hedge funds and algorithmic bidding engines, models evaluated with standard scikit-learn <code>KFold</code> exhibit phenomenal 98% $R^2$ scores in notebooks, yet produce catastrophic multi-million dollar losses upon production deployment. In this project, you build an automated validation harness that enforces strict temporal boundaries, computes empirical bias-variance frontiers, and guarantees zero future-data leakage.</p>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 2.2 — LINEAR REGRESSION
+     CHAPTER 2.2 — LINEAR REGRESSION: OLS & GRADIENT DESCENT
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-2-2">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 2.2</span>
-    <h2 class="chapter-title">Linear Regression</h2>
-    <span class="chapter-subtitle">Ordinary Least Squares &amp; Gradient Descent</span>
+    <h2 class="chapter-title">Linear Regression: Normal Equations &amp; SGD</h2>
+    <span class="chapter-subtitle">Ordinary Least Squares, Matrix Calculus, Ridge, Lasso &amp; Coordinate Descent</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"All models are wrong, but some are useful."</p>
-    <p class="attribution">— George E. P. Box</p>
+    <p>"Everything should be made as simple as possible, but not simpler."</p>
+    <p class="attribution">— Albert Einstein</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>Linear regression models the relationship between continuous scalar target $y$ and feature vector $\mathbf{x} \in \mathbb{R}^d$ via a linear combination of inputs plus an intercept bias:
-    $$\hat{y} = \mathbf{w}^T \mathbf{x} + b = \sum_{j=1}^d w_j x_j + b$$</p>
+    <!-- SECTION 1: OLS FORMULATION -->
+    <h3>1. The Ordinary Least Squares (OLS) Formulation</h3>
+    <p>Linear regression models the relationship between continuous target $y \in \mathbb{R}$ and feature vector $\mathbf{x} \in \mathbb{R}^d$ via a linear combination plus bias:</p>
+    $$\hat{y} = w_1 x_1 + w_2 x_2 + \dots + w_d x_d + b = \mathbf{w}^T \mathbf{x} + b$$
+    <p>To express this compactly for $N$ observations, we augment feature matrix $X \in \mathbb{R}^{N \times (d+1)}$ with a leading column of ones ($x_0 = 1$) to absorb bias $b$ into weight vector $\mathbf{w} \in \mathbb{R}^{d+1}$:</p>
+    $$\hat{\mathbf{y}} = X \mathbf{w}, \quad \text{where } X = \begin{bmatrix} 1 & x_{11} & \cdots & x_{1d} \\ \vdots & \vdots & \ddots & \vdots \\ 1 & x_{N1} & \cdots & x_{Nd} \end{bmatrix}, \quad \mathbf{w} = \begin{bmatrix} b \\ w_1 \\ \vdots \\ w_d \end{bmatrix}$$
+    <p>The objective is to minimize the residual sum of squared errors (MSE loss):</p>
+    $$\mathcal{L}(\mathbf{w}) = \frac{1}{2N} \|\hat{\mathbf{y}} - \mathbf{y}\|_2^2 = \frac{1}{2N} (X \mathbf{w} - \mathbf{y})^T (X \mathbf{w} - \mathbf{y})$$
 
-    <h3>1. Ordinary Least Squares (OLS) Closed-Form Normal Equation</h3>
-    <p>Augmenting feature matrix $X \in \mathbb{R}^{N \times (d+1)}$ with a leading column of 1s to absorb bias $b$, the Residual Sum of Squares (RSS) loss is:
-    $$\mathcal{L}(\mathbf{w}) = \frac{1}{2N} \|X\mathbf{w} - \mathbf{y}\|_2^2 = \frac{1}{2N} (X\mathbf{w} - \mathbf{y})^T (X\mathbf{w} - \mathbf{y})$$
-    Expanding the quadratic product:
-    $$\mathcal{L}(\mathbf{w}) = \frac{1}{2N} \left( \mathbf{w}^T X^T X \mathbf{w} - 2 \mathbf{y}^T X \mathbf{w} + \mathbf{y}^T \mathbf{y} \right)$$
-    Taking the matrix derivative with respect to $\mathbf{w}$ and setting to zero:
-    $$\nabla_\mathbf{w} \mathcal{L} = \frac{1}{N} \left( X^T X \mathbf{w} - X^T \mathbf{y} \right) = \mathbf{0} \implies X^T X \mathbf{w} = X^T \mathbf{y}$$
-    Assuming $X^T X$ is non-singular (full column rank):
-    $$\mathbf{w}^* = (X^T X)^{-1} X^T \mathbf{y} \quad \text{(The Normal Equation)}$$</p>
+    <!-- SECTION 2: DERIVATION OF NORMAL EQUATIONS -->
+    <h3>2. Analytical Solution: The Normal Equations</h3>
+    <p>Expanding the matrix quadratic loss function:</p>
+    $$\mathcal{L}(\mathbf{w}) = \frac{1}{2N} \left[ \mathbf{w}^T X^T X \mathbf{w} - \mathbf{w}^T X^T \mathbf{y} - \mathbf{y}^T X \mathbf{w} + \mathbf{y}^T \mathbf{y} \right]$$
+    <p>Notice that $\mathbf{w}^T X^T \mathbf{y}$ is a $1 \times 1$ scalar, equal to its transpose $\mathbf{y}^T X \mathbf{w}$. Thus:</p>
+    $$\mathcal{L}(\mathbf{w}) = \frac{1}{2N} \left[ \mathbf{w}^T (X^T X) \mathbf{w} - 2 \mathbf{w}^T (X^T \mathbf{y}) + \mathbf{y}^T \mathbf{y} \right]$$
+    <p>Applying the matrix calculus identities $\nabla_{\mathbf{w}} (\mathbf{w}^T A \mathbf{w}) = 2 A \mathbf{w}$ (for symmetric $A$) and $\nabla_{\mathbf{w}} (\mathbf{w}^T \mathbf{b}) = \mathbf{b}$:</p>
+    $$\nabla_{\mathbf{w}} \mathcal{L}(\mathbf{w}) = \frac{1}{N} \left[ X^T X \mathbf{w} - X^T \mathbf{y} \right]$$
+    <p>Setting the gradient to zero yields the celebrated <strong>Normal Equations</strong>:</p>
+    $$X^T X \mathbf{w}^* = X^T \mathbf{y} \implies \mathbf{w}^* = (X^T X)^{-1} X^T \mathbf{y}$$
 
-    <div class="real-world-box">
-      <h4>🏢 Real-World Problem Mapping: Normal Equation vs Gradient Descent at Scale</h4>
-      <p>Why don't we always use the Normal Equation? Inverting an $(d \times d)$ matrix requires $O(d^3)$ compute time. When $d = 100,000$ (e.g. ad feature embeddings), computing $(X^T X)^{-1}$ would require petabytes of RAM and days of compute. Thus, production AI turns to <strong>Stochastic Gradient Descent (SGD)</strong>, which scales at $O(N \cdot d)$ with constant memory overhead.</p>
+    <div class="key-insight">
+      <p><strong>When Does the Normal Equation Fail?</strong></p>
+      <ul>
+        <li><strong>Computational Collapse ($d &gt; 10,000$):</strong> Computing $(X^T X)^{-1}$ requires $O(d^3)$ arithmetic operations. When $d = 100,000$, inverting a $100,000 \times 100,000$ matrix requires $10^{15}$ FLOPs, freezing any server!</li>
+        <li><strong>Collinearity &amp; Non-Invertibility:</strong> If two features are highly correlated (e.g. temperature in Celsius and Fahrenheit), the columns of $X$ are linearly dependent, $\det(X^T X) = 0$, and $(X^T X)^{-1}$ does not exist!</li>
+      </ul>
+      <em>This is why iterative Gradient Descent and Regularization are mandatory.</em>
     </div>
 
+    <!-- SECTION 3: REGULARIZATION: RIDGE VS LASSO -->
+    <h3>3. Regularization: Ridge ($L_2$) vs. Lasso ($L_1$)</h3>
+
+    <h4>Ridge Regression ($L_2$ Regularization)</h4>
+    <p>Ridge regression adds an $L_2$ penalty on weight magnitudes to prevent explosive coefficients caused by multicollinearity:</p>
+    $$\mathcal{L}_{\text{Ridge}}(\mathbf{w}) = \frac{1}{2N} \|X \mathbf{w} - \mathbf{y}\|_2^2 + \frac{\lambda}{2} \|\mathbf{w}\|_2^2$$
+    <p>Setting the gradient $\frac{1}{N} (X^T X \mathbf{w} - X^T \mathbf{y}) + \lambda \mathbf{w} = \mathbf{0}$ yields the analytical solution:</p>
+    $$\mathbf{w}^*_{\text{Ridge}} = (X^T X + N \lambda I)^{-1} X^T \mathbf{y}$$
+    <p><em>Why Ridge Guarantees Invertibility:</em> Even if $X^T X$ has zero eigenvalues, adding $\lambda I$ shifts every eigenvalue upward by $\lambda &gt; 0$: $\lambda_i(X^T X + \lambda I) = \lambda_i(X^T X) + \lambda \ge \lambda &gt; 0$. The matrix is strictly positive definite and always invertible!</p>
+
+    <h4>Lasso Regression ($L_1$ Regularization &amp; Exact Sparsity)</h4>
+    <p>Lasso penalizes the sum of absolute values:</p>
+    $$\mathcal{L}_{\text{Lasso}}(\mathbf{w}) = \frac{1}{2N} \|X \mathbf{w} - \mathbf{y}\|_2^2 + \lambda \|\mathbf{w}\|_1 = \frac{1}{2N} \|X \mathbf{w} - \mathbf{y}\|_2^2 + \lambda \sum_{j=1}^d |w_j|$$
+    <p>Because the absolute value function $|w_j|$ has a sharp corner at $w_j = 0$, its derivative is undefined at zero. The subdifferential is:</p>
+    $$\partial |w| = \begin{cases} \{1\} & \text{if } w > 0 \\ \{-1\} & \text{if } w < 0 \\ [-1, 1] & \text{if } w = 0 \end{cases}$$
+    <p>The coordinate descent update rule applies the <strong>Soft-Thresholding Operator</strong>:</p>
+    $$w_j^* = S_\lambda(\rho_j) = \text{sign}(\rho_j) \max(|\rho_j| - \lambda, 0)$$
+    <p>If the correlation $\rho_j$ between feature $j$ and the residual is less than $\lambda$, $w_j$ is set to <strong>exact zero</strong>! Lasso acts as automatic, embedded feature selection.</p>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Linear Models</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.2.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In high-dimensional linear regression where the number of features exceeds observations ($d &gt; N$):</p>
+        <ol>
+          <li>Prove that the sample covariance matrix $X^T X \in \mathbb{R}^{d \times d}$ is non-invertible.</li>
+          <li>Prove that for any $\lambda &gt; 0$, the Ridge matrix $A = (X^T X + \lambda I)$ is strictly positive definite and invertible.</li>
+          <li>Calculate the condition number $\kappa(A) = \frac{\sigma_{\max}}{\sigma_{\min}}$ as a function of $\lambda$ and explain how Ridge stabilization prevents numerical rounding catastrophes on 32-bit hardware.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+
+        <p class="step"><strong>Step 1: Rank of $X^T X$ when $d &gt; N$:</strong><br>
+        By the Rank-Nullity Theorem, the rank of a matrix product is bounded by the rank of its factors:
+        $$\text{rank}(X^T X) = \text{rank}(X) \le \min(N, d) = N &lt; d$$
+        Since $X^T X \in \mathbb{R}^{d \times d}$ has rank at most $N &lt; d$, it has at least $d - N$ zero eigenvalues ($\lambda_i = 0$).<br>
+        Because $\det(X^T X) = \prod_{i=1}^d \lambda_i = 0$, $X^T X$ is strictly non-invertible.</p>
+
+        <p class="step"><strong>Step 2: Proof of Invertibility for $X^T X + \lambda I$:</strong><br>
+        A matrix $A$ is strictly positive definite if $\mathbf{z}^T A \mathbf{z} &gt; 0$ for all non-zero vectors $\mathbf{z} \neq \mathbf{0}$.<br>
+        Let $\mathbf{z} \in \mathbb{R}^d \setminus \{\mathbf{0}\}$:
+        $$\mathbf{z}^T (X^T X + \lambda I) \mathbf{z} = \mathbf{z}^T X^T X \mathbf{z} + \lambda \mathbf{z}^T I \mathbf{z} = \|X \mathbf{z}\|_2^2 + \lambda \|\mathbf{z}\|_2^2$$
+        Notice that $\|X \mathbf{z}\|_2^2 \ge 0$ (norm is non-negative).<br>
+        Since $\mathbf{z} \neq \mathbf{0}$, its norm $\|\mathbf{z}\|_2^2 &gt; 0$. Because $\lambda &gt; 0$:
+        $$\lambda \|\mathbf{z}\|_2^2 &gt; 0 \implies \mathbf{z}^T (X^T X + \lambda I) \mathbf{z} \ge 0 + \lambda \|\mathbf{z}\|_2^2 &gt; 0$$
+        Since the quadratic form is strictly positive for all non-zero $\mathbf{z}$, $A = (X^T X + \lambda I)$ is strictly positive definite. All its eigenvalues are strictly positive ($\lambda_i(A) \ge \lambda &gt; 0$), guaranteeing that $\det(A) &gt; 0$ and $A^{-1}$ exists uniquely!</p>
+
+        <p class="step"><strong>Step 3: Condition Number Analysis:</strong><br>
+        Let the eigenvalues of $X^T X$ be $\sigma_1 \ge \sigma_2 \ge \dots \ge \sigma_N \ge 0 \dots 0$.<br>
+        The eigenvalues of $X^T X + \lambda I$ are $\sigma_i + \lambda$. The condition number is:
+        $$\kappa(A) = \frac{\lambda_{\max}(A)}{\lambda_{\min}(A)} = \frac{\sigma_1 + \lambda}{0 + \lambda} = 1 + \frac{\sigma_1}{\lambda}$$
+        Without regularization ($\lambda = 0$), $\kappa = \frac{\sigma_1}{0} = \infty$ (completely ill-conditioned).<br>
+        By introducing $\lambda &gt; 0$, we bound the condition number. In floating-point numerical arithmetic, if $\kappa(A) &gt; 10^{7}$, standard 32-bit floating point arithmetic loses all significant digits due to catastrophic cancellation! Choosing $\lambda$ such that $\kappa(A) &lt; 10^4$ guarantees total numerical stability.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.2: OLS vs. Mini-Batch SGD from Scratch</h3>
+    <p>Below is a production Python implementation comparing the exact analytical OLS Normal Equation against iterative Mini-Batch SGD with condition number tracking.</p>
+
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 2.2 — OLS vs Mini-Batch SGD with Ridge Regularization</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch22_linear_regression/ols_and_sgd_regression.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch22_linear_regression/ols_and_sgd_regression.py</a></p>
+      <div class="code-lab-header">Code Lab 2.2 — OLS Normal Equations vs. Mini-Batch SGD</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch22_linear_regression/linear_regression_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch22_linear_regression/linear_regression_scratch.py</a></p>
 <pre><code>import numpy as np
 
-class LinearRegressionOLS:
-    def fit(self, X, y):
-        X_b = np.c_[np.ones((X.shape[0], 1)), X]
-        self.theta = np.linalg.pinv(X_b.T @ X_b) @ X_b.T @ y
+class LinearRegressionScratch:
+    def __init__(self, lr=0.01, batch_size=32, epochs=50, l2_reg=1e-4):
+        self.lr = lr
+        self.batch_size = batch_size
+        self.epochs = epochs
+        self.l2_reg = l2_reg
+        self.w = None
+
+    def fit_normal_equation(self, X, y):
+        """Analytical Ridge OLS solution: w = (X^T X + lambda I)^-1 X^T y"""
+        X_b = np.c_[np.ones((X.shape[0], 1)), X] # Add bias column
+        d = X_b.shape[1]
+        I = np.eye(d)
+        I[0, 0] = 0.0 # Do not regularize bias!
+        self.w = np.linalg.solve(X_b.T @ X_b + self.l2_reg * I, X_b.T @ y)
+
+    def fit_sgd(self, X, y):
+        """Mini-Batch Stochastic Gradient Descent"""
+        N, d = X.shape
+        X_b = np.c_[np.ones((N, 1)), X]
+        self.w = np.zeros(d + 1)
+
+        for epoch in range(self.epochs):
+            indices = np.random.permutation(N)
+            for start_idx in range(0, N, self.batch_size):
+                batch_idx = indices[start_idx:start_idx + self.batch_size]
+                X_batch = X_b[batch_idx]
+                y_batch = y[batch_idx]
+
+                # Prediction & Error
+                preds = X_batch @ self.w
+                errors = preds - y_batch
+
+                # Gradient: (1/B) * X^T (Xw - y) + lambda * w
+                grad = (X_batch.T @ errors) / len(batch_idx)
+                grad[1:] += self.l2_reg * self.w[1:] # Regularize weights only
+
+                self.w -= self.lr * grad
 
     def predict(self, X):
         X_b = np.c_[np.ones((X.shape[0], 1)), X]
-        return X_b @ self.theta</code></pre>
+        return X_b @ self.w
+
+if __name__ == "__main__":
+    np.random.seed(42)
+    X = np.random.randn(1000, 5)
+    true_w = np.array([2.5, 1.2, -3.4, 0.8, -1.5, 2.0]) # bias=2.5
+    y = np.c_[np.ones((1000, 1)), X] @ true_w + 0.1 * np.random.randn(1000)
+
+    model_exact = LinearRegressionScratch(l2_reg=1e-3)
+    model_exact.fit_normal_equation(X, y)
+
+    model_sgd = LinearRegressionScratch(lr=0.05, batch_size=32, epochs=40, l2_reg=1e-3)
+    model_sgd.fit_sgd(X, y)
+
+    print("True Weights    :", np.round(true_w, 3))
+    print("OLS Weights     :", np.round(model_exact.w, 3))
+    print("SGD Weights     :", np.round(model_sgd.w, 3))</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.2 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.2: Real-Time High-Scale ElasticNet Price Predictor</h3>
+        <p class="project-desc">Architect and implement a production real-estate and asset pricing engine with ElasticNet regularization, coordinate descent feature selection, and streaming mini-batch gradient descent updates capable of handling 50,000 requests/sec.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch22_linear_regression/linear_regression_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch22_linear_regression/linear_regression_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In high-frequency valuation platforms (e.g. Zillow Zestimate, Uber dynamic fare estimation), input features suffer from extreme correlation (square footage vs number of bedrooms vs neighborhood pricing). In this project, you construct a production ElasticNet regression service that automatically eliminates redundant collinear predictors, stabilizes condition numbers, and generates prediction intervals under strict sub-5ms latency SLAs.</p>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 2.3 — LOGISTIC REGRESSION
+     CHAPTER 2.3 — LOGISTIC REGRESSION & MAXIMUM LIKELIHOOD
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-2-3">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 2.3</span>
-    <h2 class="chapter-title">Logistic Regression</h2>
-    <span class="chapter-subtitle">From Continuous Lines to Probabilistic Decisions</span>
+    <h2 class="chapter-title">Logistic Regression &amp; Maximum Likelihood</h2>
+    <span class="chapter-subtitle">Odds Ratios, The Sigmoid Identity, BCE Loss &amp; Iteratively Reweighted Least Squares</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"Doubt is not a pleasant condition, but certainty is an absurd one."</p>
-    <p class="attribution">— Voltaire</p>
+    <p>"Prediction is very difficult, especially if it's about the future."</p>
+    <p class="attribution">— Niels Bohr</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>Linear regression fails for classification because linear outputs are unbounded ($-\infty$ to $+\infty$), predicting nonsensical probabilities like $-1.4$ or $+3.2$. Logistic regression solves this by passing linear logits through the <strong>Sigmoid (Logistic) Function</strong>, squashing real values onto the valid probability interval $(0, 1)$.</p>
+    <!-- SECTION 1: THE ODDS RATIO & SIGMOID -->
+    <h3>1. From Linear Output to Calibrated Probability</h3>
+    <p>Why can we not simply use linear regression $y = \mathbf{w}^T \mathbf{x}$ for binary classification ($y \in \{0, 1\}$)?</p>
+    <ol>
+      <li><strong>Unbounded Range:</strong> A linear function $\mathbf{w}^T \mathbf{x}$ has range $(-\infty, +\infty)$. For extreme feature values, it predicts probabilities like $-2.5$ or $+3.8$, violating the fundamental axioms of probability.</li>
+      <li><strong>Sensitivity to Outliers:</strong> Squaring errors on correctly classified points far from the decision boundary tilts the line, destroying classification accuracy.</li>
+    </ol>
 
-    <h3>1. The Odds Ratio & The Sigmoid Function</h3>
-    <p>Let $p = P(y=1|\mathbf{x})$. The odds of the event occurring is the ratio of success to failure: $\frac{p}{1-p}$. Taking the natural logarithm yields the <strong>Logit (Log-Odds)</strong>, which we model as linear:
-    $$\log\left(\frac{p}{1-p}\right) = \mathbf{w}^T \mathbf{x} + b = z$$
-    Inverting this equation for $p$:
-    $$\frac{p}{1-p} = e^z \implies p = e^z(1 - p) \implies p(1 + e^z) = e^z \implies p = \frac{e^z}{1 + e^z} = \frac{1}{1 + e^{-z}} = \sigma(z)$$</p>
+    <h4>The Log-Odds (Logit) Transformation</h4>
+    <p>To map probability $p \in (0, 1)$ onto the real line $(-\infty, +\infty)$, we first define the <strong>Odds Ratio</strong>—the ratio of the probability of an event occurring to the probability of it not occurring:</p>
+    $$\text{Odds} = \frac{p}{1 - p} \in (0, +\infty)$$
+    <p>Taking the natural logarithm yields the <strong>Logit (Log-Odds)</strong> function, which maps $(0, 1)$ smoothly onto $(-\infty, +\infty)$:</p>
+    $$\text{logit}(p) = \ln\left(\frac{p}{1 - p}\right) = \mathbf{w}^T \mathbf{x}$$
+    <p>Now, solve for $p$ by exponentiating both sides:</p>
+    $$\frac{p}{1 - p} = e^{\mathbf{w}^T \mathbf{x}} \implies p = e^{\mathbf{w}^T \mathbf{x}} (1 - p) = e^{\mathbf{w}^T \mathbf{x}} - p e^{\mathbf{w}^T \mathbf{x}}$$
+    $$p (1 + e^{\mathbf{w}^T \mathbf{x}}) = e^{\mathbf{w}^T \mathbf{x}} \implies p = \frac{e^{\mathbf{w}^T \mathbf{x}}}{1 + e^{\mathbf{w}^T \mathbf{x}}} = \frac{1}{1 + e^{-\mathbf{w}^T \mathbf{x}}} = \sigma(\mathbf{w}^T \mathbf{x})$$
+    <p>This derives the <strong>Sigmoid Function</strong> $\sigma(z) = \frac{1}{1 + e^{-z}}$!</p>
 
     <div class="key-insight">
-      <p><strong>The Remarkable Derivative of the Sigmoid:</strong>
-      $$\sigma'(z) = \frac{d}{dz}\left(\frac{1}{1 + e^{-z}}\right) = \frac{e^{-z}}{(1 + e^{-z})^2} = \frac{1}{1 + e^{-z}} \cdot \frac{e^{-z}}{1 + e^{-z}} = \sigma(z)(1 - \sigma(z))$$
-      The derivative depends exclusively on the function's own output!</p>
+      <p><strong>The Crucial Sigmoid Derivative Identity:</strong></p>
+      $$\sigma'(z) = \frac{d}{dz} (1 + e^{-z})^{-1} = -(1 + e^{-z})^{-2} (-e^{-z}) = \frac{1}{1 + e^{-z}} \cdot \frac{e^{-z}}{1 + e^{-z}} = \sigma(z) (1 - \sigma(z))$$
+      <p><em>The derivative of the sigmoid is simply its own output multiplied by $(1 - \text{output})$! This algebraic property makes logistic gradient calculations blazingly fast.</em></p>
     </div>
 
-    <h3>2. Binary Cross-Entropy Loss Derivation</h3>
-    <p>Given binary labels $y \in \{0, 1\}$, the probability under a Bernoulli distribution is:
-    $$P(y|\mathbf{x}) = \hat{y}^y (1 - \hat{y})^{1 - y}$$
-    Taking the negative log-likelihood for $N$ samples gives the canonical <strong>Binary Cross-Entropy (BCE) Loss</strong>:
-    $$\mathcal{L}(\mathbf{w}) = -\frac{1}{N}\sum_{i=1}^N \left[ y_i \log(\hat{y}_i) + (1 - y_i)\log(1 - \hat{y}_i) \right]$$</p>
+    <!-- SECTION 2: BINARY CROSS ENTROPY -->
+    <h3>2. Binary Cross-Entropy Loss &amp; The Gradient Identity</h3>
+    <p>For a binary label $y_i \in \{0, 1\}$ and predicted probability $p_i = \sigma(\mathbf{w}^T \mathbf{x}_i)$, the Bernoulli probability mass function is:</p>
+    $$P(y_i \mid \mathbf{x}_i) = p_i^{y_i} (1 - p_i)^{1 - y_i}$$
+    <p>The Negative Log-Likelihood over $N$ observations produces the <strong>Binary Cross-Entropy (BCE) Loss</strong>:</p>
+    $$\mathcal{L}(\mathbf{w}) = -\frac{1}{N} \sum_{i=1}^N \left[ y_i \ln(p_i) + (1 - y_i) \ln(1 - p_i) \right]$$
 
-    <div class="code-lab">
-      <div class="code-lab-header">Code Lab 2.3 — Logistic Regression from Scratch</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch23_logistic_regression/logistic_regression_from_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch23_logistic_regression/logistic_regression_from_scratch.py</a></p>
-<pre><code>import numpy as np
+    <h4>Deriving the Gradient Vector</h4>
+    <p>Let $z_i = \mathbf{w}^T \mathbf{x}_i$. By the chain rule:</p>
+    $$\frac{\partial \mathcal{L}}{\partial \mathbf{w}} = \sum_{i=1}^N \frac{\partial \mathcal{L}}{\partial p_i} \frac{\partial p_i}{\partial z_i} \frac{\partial z_i}{\partial \mathbf{w}}$$
+    <p>Evaluating each derivative:</p>
+    <ul>
+      <li>$\frac{\partial \mathcal{L}}{\partial p_i} = -\frac{y_i}{p_i} + \frac{1 - y_i}{1 - p_i} = \frac{p_i - y_i}{p_i(1 - p_i)}$</li>
+      <li>$\frac{\partial p_i}{\partial z_i} = p_i (1 - p_i)$</li>
+      <li>$\frac{\partial z_i}{\partial \mathbf{w}} = \mathbf{x}_i$</li>
+    </ul>
+    $$\frac{\partial \mathcal{L}}{\partial \mathbf{w}} = \frac{1}{N} \sum_{i=1}^N \left[ \frac{p_i - y_i}{p_i(1 - p_i)} \right] \left[ p_i (1 - p_i) \right] \mathbf{x}_i = \frac{1}{N} \sum_{i=1}^N (p_i - y_i) \mathbf{x}_i$$
+    <p>In matrix notation:</p>
+    $$\nabla_{\mathbf{w}} \mathcal{L}(\mathbf{w}) = \frac{1}{N} X^T (\mathbf{p} - \mathbf{y})$$
+    <p>Notice the stunning mathematical symmetry: this gradient has the <strong>exact same algebraic form as Linear Regression</strong> $\frac{1}{N} X^T (\hat{\mathbf{y}} - \mathbf{y})$! The only difference is that $\hat{\mathbf{y}}$ is squashed through the sigmoid function.</p>
 
-class LogisticRegressionScratch:
-    def __init__(self, lr=0.1, n_iter=1000):
-        self.lr, self.n_iter = lr, n_iter
-
-    def _sigmoid(self, z):
-        return np.where(z >= 0, 1 / (1 + np.exp(-z)), np.exp(z) / (1 + np.exp(z)))
-
-    def fit(self, X, y):
-        m, n = X.shape
-        self.w, self.b = np.zeros(n), 0.0
-        for _ in range(self.n_iter):
-            y_hat = self._sigmoid(np.dot(X, self.w) + self.b)
-            # Gradient of BCE with Sigmoid: dL/dw = (1/m) X^T (y_hat - y)
-            dw = (1 / m) * np.dot(X.T, (y_hat - y))
-            db = (1 / m) * np.sum(y_hat - y)
-            self.w -= self.lr * dw
-            self.b -= self.lr * db</code></pre>
-    </div>
-
-    <h3>FAANG Interview Problems — Logistic Regression</h3>
+    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Logistic Regression</h3>
 
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 2.3.1</span>
         <span class="difficulty difficulty-hard">Hard</span>
-        <span class="company-tag company-meta">Meta</span>
         <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Provide the rigorous mathematical derivation for the gradient of Binary Cross-Entropy Loss with respect to weight vector $\mathbf{w}$ in Logistic Regression. Prove that $\nabla_\mathbf{w} \mathcal{L} = \frac{1}{N} X^T (\hat{\mathbf{y}} - \mathbf{y})$, identical in form to Linear Regression despite the non-linear sigmoid.</p>
+        <p><strong>QUESTION:</strong> Prove that Binary Cross-Entropy loss for Logistic Regression is <strong>strictly convex</strong> with respect to weight vector $\mathbf{w}$.</p>
+        <ol>
+          <li>Derive the analytical Hessian matrix $H(\mathbf{w}) = \nabla_{\mathbf{w}}^2 \mathcal{L}(\mathbf{w})$.</li>
+          <li>Prove that $H(\mathbf{w})$ is positive semi-definite everywhere, showing that Logistic Regression is guaranteed to have NO suboptimal local minima.</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Solution</div>
-        <p class="step"><strong>Step 1: Single Sample Loss Decomposition:</strong>
-        $$\mathcal{L}_i = -y_i \log(\hat{y}_i) - (1 - y_i)\log(1 - \hat{y}_i) \quad \text{where } \hat{y}_i = \sigma(z_i), \quad z_i = \mathbf{w}^T \mathbf{x}_i + b$$</p>
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
 
-        <p class="step"><strong>Step 2: Apply the Chain Rule:</strong>
-        $$\frac{\partial \mathcal{L}_i}{\partial w_j} = \frac{\partial \mathcal{L}_i}{\partial \hat{y}_i} \cdot \frac{\partial \hat{y}_i}{\partial z_i} \cdot \frac{\partial z_i}{\partial w_j}$$</p>
+        <p class="step"><strong>Step 1: Compute the Second Derivative (Hessian Matrix):</strong><br>
+        Recall the gradient vector: $\nabla_{\mathbf{w}} \mathcal{L} = \frac{1}{N} \sum_{i=1}^N (p_i - y_i) \mathbf{x}_i$, where $p_i = \sigma(\mathbf{w}^T \mathbf{x}_i)$.<br>
+        Differentiating with respect to $\mathbf{w}$ again:
+        $$H(\mathbf{w}) = \frac{\partial}{\partial \mathbf{w}} \left[ \frac{1}{N} \sum_{i=1}^N (p_i - y_i) \mathbf{x}_i \right] = \frac{1}{N} \sum_{i=1}^N \mathbf{x}_i \left( \frac{\partial p_i}{\partial \mathbf{w}} \right)^T$$
+        Using the sigmoid derivative: $\frac{\partial p_i}{\partial \mathbf{w}} = p_i(1 - p_i) \mathbf{x}_i$.<br>
+        Therefore:
+        $$H(\mathbf{w}) = \frac{1}{N} \sum_{i=1}^N p_i (1 - p_i) \mathbf{x}_i \mathbf{x}_i^T$$
+        In matrix notation, let $D \in \mathbb{R}^{N \times N}$ be a diagonal matrix with entries $D_{ii} = p_i (1 - p_i)$:
+        $$H(\mathbf{w}) = \frac{1}{N} X^T D X$$</p>
 
-        <p class="step"><strong>Step 3: Evaluate Each Factor:</strong>
-        Factor 1: $\frac{\partial \mathcal{L}_i}{\partial \hat{y}_i} = -\frac{y_i}{\hat{y}_i} + \frac{1 - y_i}{1 - \hat{y}_i} = \frac{\hat{y}_i - y_i}{\hat{y}_i(1 - \hat{y}_i)}$<br>
-        Factor 2: $\frac{\partial \hat{y}_i}{\partial z_i} = \sigma'(z_i) = \hat{y}_i(1 - \hat{y}_i)$<br>
-        Factor 3: $\frac{\partial z_i}{\partial w_j} = x_{ij}$</p>
+        <p class="step"><strong>Step 2: Prove Positive Semi-Definiteness:</strong><br>
+        Let $\mathbf{z} \in \mathbb{R}^d$ be any arbitrary non-zero vector. Evaluate the quadratic form $\mathbf{z}^T H \mathbf{z}$:
+        $$\mathbf{z}^T H \mathbf{z} = \mathbf{z}^T \left( \frac{1}{N} X^T D X \right) \mathbf{z} = \frac{1}{N} (X \mathbf{z})^T D (X \mathbf{z})$$
+        Let $\mathbf{v} = X \mathbf{z} \in \mathbb{R}^N$. Then:
+        $$\mathbf{z}^T H \mathbf{z} = \frac{1}{N} \mathbf{v}^T D \mathbf{v} = \frac{1}{N} \sum_{i=1}^N D_{ii} v_i^2 = \frac{1}{N} \sum_{i=1}^N p_i (1 - p_i) v_i^2$$
+        Notice two physical facts:
+        <ol>
+          <li>For any $z \in \mathbb{R}$, the sigmoid output is strictly bounded: $p_i \in (0, 1)$.</li>
+          <li>Therefore, $p_i (1 - p_i) &gt; 0$ for all samples.</li>
+          <li>The square of any real number is non-negative: $v_i^2 \ge 0$.</li>
+        </ol>
+        Since every term in the summation is the product of two positive numbers and a non-negative square:
+        $$\mathbf{z}^T H \mathbf{z} \ge 0, \quad \forall \mathbf{z} \in \mathbb{R}^d$$
+        <strong>Q.E.D. The Hessian is positive semi-definite everywhere. Logistic Regression is strictly convex, guaranteeing that any stationary point reached by gradient descent is a global optimum!</strong></p>
+      </div>
+    </div>
 
-        <p class="step"><strong>Step 4: Multiply and Observe the Cancellation:</strong>
-        $$\frac{\partial \mathcal{L}_i}{\partial w_j} = \left[ \frac{\hat{y}_i - y_i}{\hat{y}_i(1 - \hat{y}_i)} \right] \cdot \left[ \hat{y}_i(1 - \hat{y}_i) \right] \cdot x_{ij} = (\hat{y}_i - y_i) x_{ij}$$
-        Summing over all $N$ samples and writing in matrix form:
-        $$\nabla_\mathbf{w} \mathcal{L} = \frac{1}{N} X^T (\hat{\mathbf{y}} - \mathbf{y}) \quad \blacksquare$$</p>
+    <!-- SECTION 4: CODE LAB -->
+    <h3>3. Production Code Lab 2.3: Logistic Regression with Newton-Raphson IRLS</h3>
+    <p>While first-order gradient descent requires hundreds of iterations, the second-order <strong>Newton-Raphson (IRLS)</strong> algorithm uses the exact Hessian to converge to machine precision in 5 to 7 steps!</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.3 — Logistic Regression &amp; Second-Order IRLS Solver</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch23_logistic_regression/logistic_regression_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch23_logistic_regression/logistic_regression_scratch.py</a></p>
+<pre><code>import numpy as np
+
+class LogisticRegressionIRLS:
+    def __init__(self, max_iter=20, tol=1e-6):
+        self.max_iter = max_iter
+        self.tol = tol
+        self.w = None
+
+    def _sigmoid(self, z):
+        return 1.0 / (1.0 + np.exp(-np.clip(z, -250, 250)))
+
+    def fit(self, X, y):
+        N, d = X.shape
+        X_b = np.c_[np.ones((N, 1)), X]
+        self.w = np.zeros(d + 1)
+
+        for iteration in range(self.max_iter):
+            p = self._sigmoid(X_b @ self.w)
+            
+            # Gradient: (1/N) * X^T (p - y)
+            grad = (X_b.T @ (p - y)) / N
+
+            # Hessian: (1/N) * X^T D X, where D = p * (1 - p)
+            D = p * (1.0 - p)
+            # Efficient computation without allocating NxN diagonal matrix:
+            H = (X_b.T * D) @ X_b / N + 1e-5 * np.eye(d + 1) # Regularization for invertibility
+
+            # Newton-Raphson update: w = w - H^-1 * grad
+            delta_w = np.linalg.solve(H, grad)
+            self.w -= delta_w
+
+            if np.linalg.norm(delta_w) < self.tol:
+                print(f"Newton-Raphson converged in {iteration+1} iterations!")
+                break
+
+    def predict_proba(self, X):
+        X_b = np.c_[np.ones((X.shape[0], 1)), X]
+        return self._sigmoid(X_b @ self.w)
+
+    def predict(self, X, threshold=0.5):
+        return (self.predict_proba(X) >= threshold).astype(int)
+
+if __name__ == "__main__":
+    np.random.seed(42)
+    X = np.random.randn(500, 3)
+    true_w = np.array([-0.5, 1.8, -2.1, 0.9])
+    probs = 1.0 / (1.0 + np.exp(-np.c_[np.ones((500, 1)), X] @ true_w))
+    y = np.random.binomial(1, probs)
+
+    clf = LogisticRegressionIRLS()
+    clf.fit(X, y)
+    print("Estimated Weights:", np.round(clf.w, 3))
+    print("True Weights     :", true_w)</code></pre>
+    </div>
+
+    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.3 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.3: Production Ad Click-Through Rate (CTR) Estimator &amp; Calibrator</h3>
+        <p class="project-desc">Build an industrial CTR prediction service using sparse logistic regression with Platt scaling calibration and expected calibration error (ECE) tracking for ad auction bidding engines.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch23_logistic_regression/logistic_regression_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch23_logistic_regression/logistic_regression_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In real-time ad bidding (Google AdSense, Meta Ads), a model does not just need to classify 0 or 1; it must output an <em>exact calibrated probability</em> of click $p \in [0, 1]$, because the expected value of the bid is $\text{Bid} = \text{CPC} \times p$. If a model is uncalibrated (predicting $0.08$ when true click probability is $0.02$), the platform overbids by 400% and bankrupts the advertiser. In this project, you build an end-to-end logistic scoring engine with Isotonic/Platt calibration curves.</p>
       </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 2.4 — DECISION TREES & RANDOM FORESTS
+     CHAPTER 2.4 — DECISION TREES & INFORMATION GAIN
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-2-4">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 2.4</span>
-    <h2 class="chapter-title">Decision Trees &amp; Ensembles</h2>
-    <span class="chapter-subtitle">CART, Gini Impurity, Bagging &amp; Random Forests</span>
+    <h2 class="chapter-title">Decision Trees &amp; Information Gain</h2>
+    <span class="chapter-subtitle">CART, Gini Impurity, Axis-Aligned Partitioning &amp; Cost-Complexity Pruning</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"In any moment of decision, the best thing you can do is the right thing, the next best thing is the wrong thing, and the worst thing you can do is nothing."</p>
-    <p class="attribution">— Theodore Roosevelt</p>
+    <p>"In a forest of a hundred thousand trees, no two leaves are alike. And no two journeys along the same path are alike."</p>
+    <p class="attribution">— Paulo Coelho</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>Decision trees segment the feature space into axis-aligned rectangular regions through a sequence of binary questions. They require no feature scaling, handle mixed categorical and numeric inputs natively, and remain naturally interpretable. However, single unpruned decision trees suffer from notoriously high variance. Combining them into <strong>Random Forest</strong> and <strong>Gradient Boosted Trees (XGBoost/LightGBM)</strong> creates the undisputed champions of tabular production ML.</p>
+    <!-- SECTION 1: THE CART ALGORITHM -->
+    <h3>1. The Recursive Axis-Aligned Partitioning Paradigm</h3>
+    <p>Linear models divide the feature space with a single flat hyperplane ($\mathbf{w}^T \mathbf{x} + b = 0$). While computationally efficient, linear boundaries fail on non-linear geometries (such as the XOR problem or concentric circles) without manual polynomial feature expansion.</p>
 
-    <h3>1. The Mathematics of Splitting: Gini Impurity</h3>
-    <p>The CART (Classification and Regression Trees) algorithm chooses the feature $j$ and split threshold $t$ that maximizes the reduction in impurity. For a node $S$ with $K$ classes:
-    $$\text{Gini}(S) = 1 - \sum_{k=1}^K p_k^2$$
-    Where $p_k$ is the proportion of samples belonging to class $k$. The split quality is measured by weighted Gini Impurity:
-    $$\mathcal{G}(S, j, t) = \frac{|S_L|}{|S|}\text{Gini}(S_L) + \frac{|S_R|}{|S|}\text{Gini}(S_R)$$</p>
+    <p><strong>Decision Trees</strong> abandon the global parametric assumption entirely. Instead, they apply a <strong>greedy, top-down recursive partitioning</strong> strategy that divides the feature space $\mathbb{R}^d$ into a collection of mutually exclusive hyper-rectangles using axis-aligned orthogonal cuts ($x_j \le \theta$):</p>
+    $$\hat{y}(\mathbf{x}) = \sum_{m=1}^{|T|} c_m \mathbb{I}(\mathbf{x} \in R_m)$$
+    <p>Where $R_m$ is region $m$ associated with leaf node $m$, and $c_m$ is the leaf output (majority class in classification, or mean target in regression).</p>
 
-    <h3>2. Random Forests: Bagging & Feature Subsampling</h3>
-    <p>Random Forests reduce variance without increasing bias through two stochastic randomization mechanisms:
-    <ol>
-      <li><strong>Bootstrap Aggregation (Bagging):</strong> Each tree trains on an independent bootstrap sample (drawn with replacement, leaving ~36.8% out-of-bag samples).</li>
-      <li><strong>Random Feature Subsampling:</strong> At every node split, the tree considers only a random subset of features (typically $\sqrt{d}$), decorrelating the individual trees so their ensemble average cancels variance.</li>
-    </ol></p>
+    <!-- SECTION 2: IMPURITY METRICS -->
+    <h3>2. Splitting Criteria: Gini Impurity vs. Entropy</h3>
+    <p>At each internal node, the tree must choose the feature $j$ and split threshold $\theta$ that maximizes the purity of the resulting child nodes.</p>
 
-    <div class="code-lab">
-      <div class="code-lab-header">Code Lab 2.4 — CART Decision Tree from Scratch</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch24_decision_trees/cart_tree_and_random_forest.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch24_decision_trees/cart_tree_and_random_forest.py</a></p>
-<pre><code>import numpy as np
+    <h4>Gini Impurity (Breiman's CART)</h4>
+    <p>Let $p_k$ be the proportion of training instances in node $S$ belonging to class $k \in \{1,\dots,C\}$. The <strong>Gini Impurity</strong> measures the probability that a randomly chosen element from the set would be incorrectly labeled if it were randomly labeled according to the distribution of labels in the subset:</p>
+    $$I_G(S) = \sum_{k=1}^C p_k (1 - p_k) = \sum_{k=1}^C (p_k - p_k^2) = \sum_{k=1}^C p_k - \sum_{k=1}^C p_k^2 = 1 - \sum_{k=1}^C p_k^2$$
+    <ul>
+      <li><strong>Pure Node ($p_1 = 1, p_{k \ne 1} = 0$):</strong> $I_G = 1 - 1^2 = 0$ (Minimum impurity).</li>
+      <li><strong>Maximum Impurity (Balanced 2-class, $p_1 = p_2 = 0.5$):</strong> $I_G = 1 - (0.5^2 + 0.5^2) = 0.5$.</li>
+    </ul>
 
-def gini_impurity(y):
-    if len(y) == 0: return 0.0
-    p1 = np.mean(y == 1)
-    return 1.0 - (p1**2 + (1.0 - p1)**2)</code></pre>
-    </div>
+    <h4>Information Gain</h4>
+    <p>When a candidate split partitions dataset $S$ of size $N$ into Left subset $S_L$ of size $N_L$ and Right subset $S_R$ of size $N_R$, the <strong>Information Gain</strong> is the reduction in impurity:</p>
+    $$\Delta I_G = I_G(S) - \left[ \frac{N_L}{N} I_G(S_L) + \frac{N_R}{N} I_G(S_R) \right]$$
+    <p>The CART algorithm selects the optimal split $(j^*, \theta^*)$ by maximizing $\Delta I_G$ across all features and all unique candidate thresholds.</p>
 
-    <h3>FAANG Interview Problems — Decision Trees</h3>
+    <!-- SECTION 3: PRUNING -->
+    <h3>3. Overfitting &amp; Minimal Cost-Complexity Pruning</h3>
+    <p>An unconstrained decision tree will grow until every training point sits in its own isolated leaf node ($100\%$ training accuracy). However, such trees have massive variance, capturing random data noise rather than true structural signal.</p>
+
+    <h4>Minimal Cost-Complexity Pruning ($L_0$ Regularization)</h4>
+    <p>Breiman et al. introduced <strong>Cost-Complexity Pruning</strong>, defining a regularized loss function that balances training misclassification rate $\mathcal{R}(T)$ with tree complexity (number of terminal leaves $|T|$):</p>
+    $$\mathcal{R}_\alpha(T) = \mathcal{R}(T) + \alpha |T|$$
+    <p>Where $\alpha \ge 0$ is the regularization parameter:</p>
+    <ul>
+      <li>$\alpha = 0$: The original, unconstrained full tree.</li>
+      <li>$\alpha \to \infty$: The simplest possible tree (a single root node).</li>
+    </ul>
+    <p>For every internal node $t$, collapsing its entire subtree $T_t$ into a single leaf increases error by $\mathcal{R}(t) - \mathcal{R}(T_t)$ while reducing leaf count by $|T_t| - 1$. The node where the cost of complexity reduction is minimized is identified by:</p>
+    $$\alpha_{\text{eff}}(t) = \frac{\mathcal{R}(t) - \mathcal{R}(T_t)}{|T_t| - 1}$$
+    <p>Pruning the node with the smallest $\alpha_{\text{eff}}$ produces a nested sequence of optimal subtrees $T_0 \supset T_1 \supset T_2 \dots$, from which the best subtree is chosen via cross-validation.</p>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Decision Trees</h3>
 
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 2.4.1</span>
         <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google</span>
         <span class="company-tag company-amazon">Amazon</span>
-        <span class="company-tag company-apple">Apple</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Suppose node $S$ has 10 positive samples and 10 negative samples. Split A produces Left: $(8+, 2-)$ and Right: $(2+, 8-)$. Split B produces Left: $(10+, 5-)$ and Right: $(0+, 5-)$. Calculate the Gini impurity for both splits and determine which split CART selects.</p>
+        <p><strong>QUESTION:</strong> A parent node $S$ contains $N = 10$ samples: $6$ Positive ($+$) and $4$ Negative ($-$). A candidate split partitions the data into:</p>
+        <ul>
+          <li><strong>Left Child ($S_L$):</strong> $4$ Positive ($+$), $0$ Negative ($-$). ($N_L = 4$).</li>
+          <li><strong>Right Child ($S_R$):</strong> $2$ Positive ($+$), $4$ Negative ($-$). ($N_R = 6$).</li>
+        </ul>
+        <ol>
+          <li>Calculate the initial Gini impurity $I_G(S)$ of the parent node.</li>
+          <li>Calculate the Gini impurities of the Left and Right child nodes.</li>
+          <li>Calculate the exact weighted Information Gain $\Delta I_G$ of this candidate split.</li>
+          <li>Why does high-throughput production software (e.g. XGBoost, scikit-learn) default to Gini Impurity instead of Shannon Entropy?</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Solution</div>
-        <p class="step"><strong>Step 1: Evaluate Parent Impurity:</strong>
-        $$\text{Gini}(S) = 1 - \left((10/20)^2 + (10/20)^2\right) = 1 - (0.25 + 0.25) = 0.500$$</p>
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
 
-        <p class="step"><strong>Step 2: Evaluate Split A:</strong>
-        Left node (10 samples: 8 pos, 2 neg):
-        $$\text{Gini}(S_L) = 1 - \left((8/10)^2 + (2/10)^2\right) = 1 - (0.64 + 0.04) = 0.320$$
-        Right node (10 samples: 2 pos, 8 neg): $\text{Gini}(S_R) = 0.320$ (by symmetry).<br>
-        Weighted Gini: $\mathcal{G}_A = \frac{10}{20}(0.320) + \frac{10}{20}(0.320) = 0.320$.</p>
+        <p class="step"><strong>Step 1: Parent Gini Impurity:</strong><br>
+        $p_+ = \frac{6}{10} = 0.6, \quad p_- = \frac{4}{10} = 0.4$.
+        $$I_G(S) = 1 - (p_+^2 + p_-^2) = 1 - (0.6^2 + 0.4^2) = 1 - (0.36 + 0.16) = 1 - 0.52 = 0.48$$</p>
 
-        <p class="step"><strong>Step 3: Evaluate Split B:</strong>
-        Left node (15 samples: 10 pos, 5 neg):
-        $$\text{Gini}(S_L) = 1 - \left((10/15)^2 + (5/15)^2\right) = 1 - (4/9 + 1/9) = 1 - 5/9 = 4/9 \approx 0.444$$
-        Right node (5 samples: 0 pos, 5 neg): Pure node! $\text{Gini}(S_R) = 1 - (0^2 + 1^2) = 0.000$.<br>
-        Weighted Gini: $\mathcal{G}_B = \frac{15}{20}(0.444) + \frac{5}{20}(0.000) = 0.75 \times 0.444 = 0.333$.</p>
+        <p class="step"><strong>Step 2: Child Node Impurities:</strong><br>
+        <strong>Left Node ($S_L$):</strong> $p_+ = \frac{4}{4} = 1.0, \quad p_- = 0.0$.
+        $$I_G(S_L) = 1 - (1.0^2 + 0.0^2) = 1 - 1 = \mathbf{0.0} \quad (\text{Pure Node!})$$
+        <strong>Right Node ($S_R$):</strong> $p_+ = \frac{2}{6} = \frac{1}{3}, \quad p_- = \frac{4}{6} = \frac{2}{3}$.
+        $$I_G(S_R) = 1 - \left( \left(\frac{1}{3}\right)^2 + \left(\frac{2}{3}\right)^2 \right) = 1 - \left( \frac{1}{9} + \frac{4}{9} \right) = 1 - \frac{5}{9} = \frac{4}{9} \approx \mathbf{0.4444}$$</p>
 
-        <p class="step"><strong>Step 4: Decision:</strong> Because $\mathcal{G}_A = 0.320 < \mathcal{G}_B = 0.333$, Split A produces lower overall impurity. CART selects <strong>Split A</strong>.</p>
+        <p class="step"><strong>Step 3: Calculate Weighted Information Gain:</strong><br>
+        The weighted child impurity is:
+        $$I_G(\text{Children}) = \frac{N_L}{N} I_G(S_L) + \frac{N_R}{N} I_G(S_R) = \frac{4}{10}(0.0) + \frac{6}{10}\left(\frac{4}{9}\right) = 0 + \frac{24}{90} = \frac{4}{15} \approx 0.2667$$
+        Subtract from parent impurity:
+        $$\Delta I_G = I_G(S) - I_G(\text{Children}) = 0.48 - 0.2667 = \mathbf{0.2133}$$
+        <strong>Result: The split achieves an Information Gain of $0.2133$.</strong></p>
+
+        <p class="step"><strong>Step 4: Why Gini Dominates Production Engines:</strong><br>
+        Shannon Entropy requires evaluating logarithms: $-\sum p_k \log_2(p_k)$. In CPU microcode, evaluating a transcendental logarithmic instruction ($\text{FYL2X}$ or SIMD $\ln$) requires between <strong>20 and 50 clock cycles</strong>. In contrast, Gini impurity requires only multiplication and addition ($1 - \sum p_k^2$), which modern CPU ALUs execute in <strong>1 single clock cycle</strong>! When evaluating billions of candidate splits across millions of samples, Gini runs up to <strong>10x faster</strong> while producing statistically indistinguishable trees.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.4: CART Decision Tree from First Principles</h3>
+    <p>Below is an educational, production-style implementation of a binary CART Decision Tree classifier written in pure Python without scikit-learn.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.4 — Recursive Binary CART Classifier</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch24_decision_trees/decision_tree_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch24_decision_trees/decision_tree_scratch.py</a></p>
+<pre><code>import numpy as np
+
+class TreeNode:
+    def __init__(self, feature=None, threshold=None, left=None, right=None, *, value=None):
+        self.feature = feature
+        self.threshold = threshold
+        self.left = left
+        self.right = right
+        self.value = value
+
+    @property
+    def is_leaf(self):
+        return self.value is not None
+
+class DecisionTreeClassifierScratch:
+    def __init__(self, max_depth=5, min_samples_split=2):
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.root = None
+
+    def _gini(self, y):
+        counts = np.bincount(y)
+        probs = counts / len(y)
+        return 1.0 - np.sum(probs ** 2)
+
+    def _best_split(self, X, y):
+        best_gain = -1.0
+        split_feat, split_thresh = None, None
+        parent_gini = self._gini(y)
+
+        n_samples, n_features = X.shape
+        for feat in range(n_features):
+            thresholds = np.unique(X[:, feat])
+            for thresh in thresholds:
+                left_mask = X[:, feat] <= thresh
+                right_mask = ~left_mask
+
+                if np.sum(left_mask) == 0 or np.sum(right_mask) == 0:
+                    continue
+
+                # Weighted Gini impurity
+                n_l, n_r = np.sum(left_mask), np.sum(right_mask)
+                gini_l = self._gini(y[left_mask])
+                gini_r = self._gini(y[right_mask])
+                weighted_gini = (n_l / n_samples) * gini_l + (n_r / n_samples) * gini_r
+                gain = parent_gini - weighted_gini
+
+                if gain > best_gain:
+                    best_gain = gain
+                    split_feat, split_thresh = feat, thresh
+
+        return split_feat, split_thresh, best_gain
+
+    def _build_tree(self, X, y, depth=0):
+        n_samples, n_labels = X.shape[0], len(np.unique(y))
+        
+        # Base cases: pure node, max depth reached, or min samples threshold
+        if depth >= self.max_depth or n_labels == 1 or n_samples < self.min_samples_split:
+            leaf_val = np.argmax(np.bincount(y))
+            return TreeNode(value=leaf_val)
+
+        feat, thresh, gain = self._best_split(X, y)
+        if gain <= 0:
+            return TreeNode(value=np.argmax(np.bincount(y)))
+
+        left_mask = X[:, feat] <= thresh
+        left_child = self._build_tree(X[left_mask], y[left_mask], depth + 1)
+        right_child = self._build_tree(X[~left_mask], y[~left_mask], depth + 1)
+
+        return TreeNode(feature=feat, threshold=thresh, left=left_child, right=right_child)
+
+    def fit(self, X, y):
+        self.root = self._build_tree(X, y)
+
+    def _predict_sample(self, node, x):
+        if node.is_leaf:
+            return node.value
+        if x[node.feature] <= node.threshold:
+            return self._predict_sample(node.left, x)
+        return self._predict_sample(node.right, x)
+
+    def predict(self, X):
+        return np.array([self._predict_sample(self.root, x) for x in X])
+
+if __name__ == "__main__":
+    from sklearn.datasets import make_moons
+    X, y = make_moons(n_samples=300, noise=0.2, random_state=42)
+    clf = DecisionTreeClassifierScratch(max_depth=4)
+    clf.fit(X, y)
+    preds = clf.predict(X)
+    print(f"Training Accuracy: {np.mean(preds == y) * 100:.2f}%")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.4 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.4: Medical Triage Decision Support &amp; Cost-Complexity Pruning Engine</h3>
+        <p class="project-desc">Build an interpretable clinical decision support system that produces auditable medical triage decision trees, calculates empirical $\alpha_{\text{eff}}$ pruning paths, and generates human-readable diagnostic rules for intensive care units.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch24_decision_trees/decision_tree_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch24_decision_trees/decision_tree_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In clinical medicine and legal compliance, deep neural networks are often rejected as "black boxes" because doctors cannot explain why a patient was denied ICU admission. In this project, you build an interpretable CART engine that outputs human-verifiable rule logic (e.g. <code>IF Troponin &gt; 0.04 AND Systolic_BP &lt; 90 THEN High_Risk</code>) while applying cost-complexity pruning to eliminate spurious edge branches.</p>
       </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 2.5 — KNN & SVMS
+     CHAPTER 2.5 — ENSEMBLE METHODS: RANDOM FORESTS & BAGGING
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-2-5">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 2.5</span>
-    <h2 class="chapter-title">KNN &amp; Support Vector Machines</h2>
-    <span class="chapter-subtitle">Geometric Margins, Slack Variables &amp; The Kernel Trick</span>
+    <h2 class="chapter-title">Ensemble Methods: Random Forests &amp; Bagging</h2>
+    <span class="chapter-subtitle">Variance Reduction, The 63.2% Bootstrap Theorem, Out-of-Bag Error &amp; Feature Importance</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"Simplicity is the prerequisite for reliability."</p>
-    <p class="attribution">— Edsger W. Dijkstra</p>
+    <p>"None of us is as smart as all of us."</p>
+    <p class="attribution">— Ken Blanchard</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>Instance-based learning (K-Nearest Neighbors) stores training points directly in memory, postponing computation until inference. Support Vector Machines (SVMs), developed by Vladimir Vapnik, identify the optimal hyperplane that maximizes the geometric margin separating two classes.</p>
+    <!-- SECTION 1: THE VARIANCE REDUCTION THEOREM -->
+    <h3>1. The Mathematics of Ensemble Variance Reduction</h3>
+    <p>Individual decision trees are high-variance, low-bias estimators: a slight change in the training dataset completely alters the split thresholds throughout the tree. How can we eliminate this variance without compromising predictive power?</p>
 
-    <h3>1. Support Vector Machines: Margin Maximization</h3>
-    <p>For linearly separable data with labels $y_i \in \{-1, +1\}$, the geometric distance from any point to hyperplane $\mathbf{w}^T \mathbf{x} + b = 0$ is:
-    $$\gamma_i = y_i \left(\frac{\mathbf{w}^T \mathbf{x}_i + b}{\|\mathbf{w}\|_2}\right)$$
-    Maximizing the margin $\frac{1}{\|\mathbf{w}\|_2}$ subject to $y_i(\mathbf{w}^T \mathbf{x}_i + b) \ge 1$ is equivalent to minimizing $\frac{1}{2}\|\mathbf{w}\|_2^2$. For non-separable data, we introduce slack variables $\xi_i \ge 0$ and regularization penalty $C$:
-    $$\min_{\mathbf{w}, b, \boldsymbol{\xi}} \frac{1}{2}\|\mathbf{w}\|_2^2 + C \sum_{i=1}^N \xi_i \quad \text{s.t. } y_i(\mathbf{w}^T \mathbf{x}_i + b) \ge 1 - \xi_i, \quad \xi_i \ge 0$$</p>
+    <h4>The Variance of Averaged Correlated Estimators</h4>
+    <p>Suppose we train $B$ separate decision tree estimators $\hat{f}_1, \hat{f}_2, \dots, \hat{f}_B$, each with variance $\sigma^2$ and positive pairwise correlation $\rho \in [0, 1]$. Consider the ensemble average $\bar{f} = \frac{1}{B} \sum_{i=1}^B \hat{f}_i$. The variance of this ensemble is:</p>
+    $$\text{Var}(\bar{f}) = \text{Var}\left( \frac{1}{B} \sum_{i=1}^B \hat{f}_i \right) = \frac{1}{B^2} \left[ \sum_{i=1}^B \text{Var}(\hat{f}_i) + \sum_{i \neq j} \text{Cov}(\hat{f}_i, \hat{f}_j) \right]$$
+    <p>Since $\text{Var}(\hat{f}_i) = \sigma^2$ and $\text{Cov}(\hat{f}_i, \hat{f}_j) = \rho \sigma^2$, and there are $B(B-1)$ pairwise cross-terms:</p>
+    $$\text{Var}(\bar{f}) = \frac{1}{B^2} \left[ B \sigma^2 + B(B - 1) \rho \sigma^2 \right] = \frac{\sigma^2}{B} + \frac{B - 1}{B} \rho \sigma^2$$
+    $$\text{Var}(\bar{f}) = \rho \sigma^2 + \frac{1 - \rho}{B} \sigma^2$$
+
+    <div class="key-insight">
+      <p><strong>The Fundamental Law of Ensembles:</strong></p>
+      <ul>
+        <li>As the number of trees $B \to \infty$, the second term $\frac{1 - \rho}{B} \sigma^2 \to 0$.</li>
+        <li>The remaining variance is strictly bounded by the correlation term: $\lim_{B \to \infty} \text{Var}(\bar{f}) = \mathbf{\rho \sigma^2}$.</li>
+      </ul>
+      <em>Crucial Engineering Deduction:</em> If your trees are identical ($\rho = 1$), averaging 1,000 trees achieves <strong>zero variance reduction</strong>! To slash variance, Leo Breiman realized that the algorithm must actively <strong>decorrelate the trees (minimize $\rho$)</strong>!
+    </div>
+
+    <!-- SECTION 2: BAGGING & THE 63.2% THEOREM -->
+    <h3>2. Bootstrap Aggregation (Bagging) &amp; The 63.2% Theorem</h3>
+    <p><strong>Bootstrap Aggregation (Bagging)</strong> decorrelates trees by training each tree on an independently drawn <em>bootstrap sample</em>: drawing $N$ samples from dataset $\mathcal{D}$ of size $N$ <strong>with replacement</strong>.</p>
+
+    <div class="real-world-box">
+      <h4>📐 The 63.2% Bootstrap Theorem Dissected</h4>
+      <p>When sampling $N$ items with replacement from a dataset of size $N$, what is the probability that any specific sample $i$ is NEVER selected?</p>
+      <ol>
+        <li>On any individual random draw, the probability of NOT selecting sample $i$ is:
+        $$P(\text{Not picked in 1 draw}) = 1 - \frac{1}{N}$$</li>
+        <li>Since all $N$ draws are mutually independent, the probability of NOT being picked in all $N$ draws is:
+        $$P(\text{Excluded from bootstrap}) = \left( 1 - \frac{1}{N} \right)^N$$</li>
+        <li>Taking the calculus limit as dataset size $N \to \infty$ (using the definition of the mathematical constant $e$):
+        $$\lim_{N \to \infty} \left( 1 - \frac{1}{N} \right)^N = e^{-1} = \frac{1}{e} \approx 0.367879 = \mathbf{36.8\%}$$</li>
+      </ol>
+      <p>Conversely, the probability that sample $i$ appears at least once in the bootstrap sample is $1 - e^{-1} \approx \mathbf{63.2\%}$!</p>
+    </div>
+
+    <h4>Out-of-Bag (OOB) Validation Error</h4>
+    <p>Because each tree leaves out approximately $36.8\%$ of the dataset, these unselected samples are called <strong>Out-of-Bag (OOB) samples</strong>. For every training sample $\mathbf{x}_i$, we can evaluate its prediction using <em>only the subset of trees that never saw $\mathbf{x}_i$ during training</em>!</p>
+    <p>This provides an unbiased, built-in cross-validation score without setting aside an explicit validation set or running costly $K$-Fold cross-validation.</p>
+
+    <!-- SECTION 3: RANDOM FORESTS -->
+    <h3>3. Random Forests: Random Feature Subspaces</h3>
+    <p>Bagging alone is insufficient when one feature is overwhelmingly strong (e.g. income in credit scoring): every single bootstrap tree will pick that same dominant feature at the root node, causing high tree correlation $\rho$.</p>
+
+    <p><strong>Random Forests (Breiman, 2001)</strong> introduce a second layer of randomization: at every candidate split, the tree is forbidden from searching across all $d$ features. Instead, it randomly selects a small subset of $m$ features:</p>
+    $$m = \lfloor \sqrt{d} \rfloor \quad (\text{for Classification})$$
+    $$m = \lfloor d / 3 \rfloor \quad (\text{for Regression})$$
+    <p>By forcing trees to split on suboptimal surrogate features, Random Forests drastically reduce pairwise tree correlation $\rho$, driving ensemble variance down to near zero.</p>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Ensembles</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.5.1</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are training an ensemble of $B = 100$ classifiers to predict fraudulent financial transactions. Each individual classifier has an independent error rate of $\epsilon = 0.35$. The final prediction is determined by simple majority vote.</p>
+        <ol>
+          <li>Calculate the probability that the ensemble produces an incorrect majority vote.</li>
+          <li>If the classifiers are not independent, but have pairwise correlation $\rho = 0.20$, calculate the variance of the ensemble prediction compared to an individual classifier with variance $\sigma^2 = 1.0$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+
+        <p class="step"><strong>Step 1: Majority Vote Error Under Independence:</strong><br>
+        Let $X$ be the number of classifiers that make an erroneous prediction. Under independence, $X$ follows a Binomial distribution: $X \sim \text{Binomial}(B = 100, p = 0.35)$.<br>
+        The ensemble makes an error if at least 51 classifiers vote incorrectly ($X \ge 51$):
+        $$P(\text{Ensemble Error}) = \sum_{k=51}^{100} \binom{100}{k} (0.35)^k (0.65)^{100 - k}$$
+        Approximating via the Central Limit Theorem:
+        $$\mu = B p = 100 \times 0.35 = 35$$
+        $$\sigma = \sqrt{B p (1 - p)} = \sqrt{100 \times 0.35 \times 0.65} = \sqrt{22.75} \approx 4.7697$$
+        With continuity correction ($X \ge 50.5$):
+        $$Z = \frac{50.5 - 35}{4.7697} = \frac{15.5}{4.7697} \approx 3.25$$
+        From standard normal tables:
+        $$P(Z \ge 3.25) = 1 - \Phi(3.25) \approx \mathbf{0.000577} = \mathbf{0.058\%}$$
+        <em>The Power of Ensembles:</em> Combining 100 mediocre models (35% error each) reduces overall error to <strong>less than 0.06%</strong>!</p>
+
+        <p class="step"><strong>Step 2: Variance Under Correlation $\rho = 0.20$:</strong><br>
+        Apply the ensemble variance formula with $B = 100$, $\sigma^2 = 1.0$, and $\rho = 0.20$:
+        $$\text{Var}(\bar{f}) = \rho \sigma^2 + \frac{1 - \rho}{B} \sigma^2 = (0.20)(1.0) + \frac{1 - 0.20}{100}(1.0)$$
+        $$\text{Var}(\bar{f}) = 0.20 + \frac{0.80}{100} = 0.20 + 0.008 = \mathbf{0.208}$$
+        Notice that even with an infinite number of trees ($B \to \infty$), the variance can never drop below $0.20$. Correlation creates an irreducible variance floor.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.5: Random Forest with OOB Scoring from Scratch</h3>
+    <p>Below is a production implementation of a Random Forest Classifier implementing row bootstrapping, random feature subspace selection, and Out-of-Bag validation.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 2.5 — Linear SVM with Hinge Loss Subgradient Descent</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch25_knn_svm/knn_and_linear_svm.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch25_knn_svm/knn_and_linear_svm.py</a></p>
+      <div class="code-lab-header">Code Lab 2.5 — Random Forest &amp; Out-of-Bag Evaluator</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch25_random_forests/random_forest_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch25_random_forests/random_forest_scratch.py</a></p>
 <pre><code>import numpy as np
+from collections import Counter
 
-class LinearSVM:
-    def __init__(self, lr=0.001, lambda_param=0.01, epochs=500):
-        self.lr, self.lambda_param, self.epochs = lr, lambda_param, epochs
+class RandomForestClassifierScratch:
+    def __init__(self, n_estimators=20, max_depth=6, min_samples_split=2):
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.trees = []
+        self.tree_features = []
+        self.oob_score_ = None
+
+    def _bootstrap_sample(self, X, y):
+        N = X.shape[0]
+        indices = np.random.choice(N, size=N, replace=True)
+        oob_indices = np.setdiff1d(np.arange(N), np.unique(indices))
+        return X[indices], y[indices], oob_indices
 
     def fit(self, X, y):
-        y_mod = np.where(y <= 0, -1, 1)
-        self.w = np.zeros(X.shape[1])
-        self.b = 0.0
-        for _ in range(self.epochs):
-            for i, x_i in enumerate(X):
-                if y_mod[i] * (np.dot(x_i, self.w) - self.b) >= 1:
-                    self.w -= self.lr * (2 * self.lambda_param * self.w)
-                else:
-                    self.w -= self.lr * (2 * self.lambda_param * self.w - y_mod[i] * x_i)
-                    self.b -= self.lr * (-y_mod[i])</code></pre>
+        from sklearn.tree import DecisionTreeClassifier
+        N, d = X.shape
+        max_features = max(1, int(np.sqrt(d)))
+        
+        oob_predictions = {i: [] for i in range(N)}
+
+        for _ in range(self.n_estimators):
+            X_boot, y_boot, oob_idx = self._bootstrap_sample(X, y)
+            
+            # Select random feature subspace
+            feat_idx = np.random.choice(d, size=max_features, replace=False)
+            
+            tree = DecisionTreeClassifier(max_depth=self.max_depth, min_samples_split=self.min_samples_split)
+            tree.fit(X_boot[:, feat_idx], y_boot)
+
+            self.trees.append(tree)
+            self.tree_features.append(feat_idx)
+
+            # Record predictions for OOB samples
+            if len(oob_idx) > 0:
+                preds = tree.predict(X[oob_idx][:, feat_idx])
+                for idx, pred in zip(oob_idx, preds):
+                    oob_predictions[idx].append(pred)
+
+        # Calculate Out-of-Bag Score
+        correct = 0
+        total_eval = 0
+        for i in range(N):
+            if len(oob_predictions[i]) > 0:
+                majority_vote = Counter(oob_predictions[i]).most_common(1)[0][0]
+                if majority_vote == y[i]:
+                    correct += 1
+                total_eval += 1
+        
+        self.oob_score_ = correct / total_eval if total_eval > 0 else 0.0
+
+    def predict(self, X):
+        tree_preds = np.array([tree.predict(X[:, feats]) for tree, feats in zip(self.trees, self.tree_features)])
+        # Majority vote across axis 0 (trees)
+        y_pred = [Counter(tree_preds[:, i]).most_common(1)[0][0] for i in range(X.shape[0])]
+        return np.array(y_pred)
+
+if __name__ == "__main__":
+    from sklearn.datasets import make_classification
+    X, y = make_classification(n_samples=500, n_features=20, n_informative=10, random_state=42)
+    rf = RandomForestClassifierScratch(n_estimators=30, max_depth=5)
+    rf.fit(X, y)
+    print(f"Random Forest Out-of-Bag (OOB) Accuracy: {rf.oob_score_ * 100:.2f}%")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.5 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.5: High-Frequency Credit Default Random Forest &amp; Out-of-Bag Sentinel</h3>
+        <p class="project-desc">Build a production credit risk scoring engine that trains an ensemble of 500 decorrelated decision trees, estimates live Out-of-Bag generalization bounds, and outputs Permutation Feature Importance scores to satisfy fair lending regulatory audits.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch25_random_forests/random_forest_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch25_random_forests/random_forest_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In banking credit approval (JPMorgan Chase, Capital One), regulations mandate that models must explain feature importances without bias. In this project, you construct a high-throughput Random Forest service that scores loan applications, generates Out-of-Bag error margins, and evaluates permutation importance to identify risky predictors.</p>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 2.6 — UNSUPERVISED LEARNING
+     CHAPTER 2.5B — GRADIENT BOOSTED DECISION TREES (XGBOOST, LIGHTGBM)
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-2-5b">
   <div class="chapter-header">
-    <span class="chapter-number">Chapter 2.6</span>
-    <h2 class="chapter-title">Unsupervised Learning</h2>
-    <span class="chapter-subtitle">K-Means++, Hierarchical Clustering &amp; Principal Component Analysis</span>
+    <span class="chapter-number">Chapter 2.5B</span>
+    <h2 class="chapter-title">Gradient Boosted Decision Trees (GBDT)</h2>
+    <span class="chapter-subtitle">Functional Gradient Descent, The XGBoost Taylor Expansion, LightGBM GOSS &amp; CatBoost</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"The greatest value of a picture is when it forces us to notice what we never expected to see."</p>
-    <p class="attribution">— John Tukey</p>
+    <p>"Deep learning wins on unstructured perceptual data (pixels, audio, text). Gradient Boosted Trees win on structured tabular data. Master both, and you command the entire spectrum of machine learning."</p>
+    <p class="attribution">— Kaggle Grandmaster Maxim</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>Over 95% of enterprise data is unlabeled. Unsupervised learning discovers latent geometric clusters, manifold structures, and low-dimensional projections without human annotation.</p>
+    <!-- SECTION 1: FUNCTIONAL GRADIENT DESCENT -->
+    <h3>1. From Bagging to Boosting: Functional Gradient Descent</h3>
+    <p>While Random Forests train trees independently in parallel to reduce variance, <strong>Boosting</strong> trains trees sequentially to reduce bias. Each new tree is explicitly constructed to correct the residual mistakes made by the collective ensemble of all previous trees:</p>
+    $$F_m(\mathbf{x}) = F_{m-1}(\mathbf{x}) + \eta f_m(\mathbf{x})$$
+    <p>Where $\eta \in (0, 1]$ is the shrinkage learning rate.</p>
 
-    <h3>1. K-Means++ Seeding Algorithm</h3>
-    <p>Standard random centroid initialization frequently converges to suboptimal local minima. K-Means++ seeds initial centroids with probability proportional to their squared distance from existing centroids:
-    $$P(x) = \frac{D(x)^2}{\sum_{x' \in X} D(x')^2}$$
-    This guarantees an expected approximation ratio $O(\log k)$ to the global optimal clustering cost.</p>
+    <h4>Gradient Boosting as Gradient Descent in Function Space</h4>
+    <p>Jerome Friedman (2001) realized that fitting residuals is mathematically equivalent to <strong>Gradient Descent in Function Space</strong>. In standard parameter optimization, we take steps in parameter space: $\mathbf{w} \leftarrow \mathbf{w} - \eta \nabla_{\mathbf{w}} \mathcal{L}$. In Gradient Boosting, we take steps in <em>prediction space</em>:</p>
+    $$f_m(\mathbf{x}_i) \approx -\left[ \frac{\partial \mathcal{L}(y_i, F(\mathbf{x}_i))}{\partial F(\mathbf{x}_i)} \right]_{F = F_{m-1}}$$
+    <p>The "residuals" fitted by tree $m$ are literally the <strong>Negative Gradients (Pseudo-Residuals)</strong> of the loss function!</p>
+
+    <!-- SECTION 2: XGBOOST DERIVATION -->
+    <h3>2. The XGBoost Formulation: Second-Order Taylor Expansion</h3>
+    <p>Tianqi Chen and Carlos Guestrin (2016) revolutionized machine learning by introducing <strong>XGBoost (eXtreme Gradient Boosting)</strong>. Unlike traditional GBDT which only uses first-order gradients, XGBoost uses a <strong>Second-Order Taylor Expansion</strong> of the loss function, allowing exact analytical optimization of tree leaves.</p>
+
+    <div class="real-world-box">
+      <h4>🏆 The XGBoost Objective Derivation</h4>
+      <p>At step $t$, we seek a new tree $f_t(\mathbf{x})$ that minimizes the objective:</p>
+      $$\mathcal{L}^{(t)} = \sum_{i=1}^N \mathcal{L}\left(y_i, \hat{y}_i^{(t-1)} + f_t(\mathbf{x}_i)\right) + \Omega(f_t)$$
+      <p>Where $\Omega(f_t) = \gamma T + \frac{1}{2} \lambda \sum_{j=1}^T w_j^2$ is the tree complexity penalty ($T$ leaves, weights $w_j$).</p>
+      <p>Approximating the loss using a second-order Taylor expansion $f(x + \Delta x) \approx f(x) + f'(x)\Delta x + \frac{1}{2} f''(x)\Delta x^2$:</p>
+      $$\mathcal{L}^{(t)} \approx \sum_{i=1}^N \left[ \mathcal{L}(y_i, \hat{y}_i^{(t-1)}) + g_i f_t(\mathbf{x}_i) + \frac{1}{2} h_i f_t^2(\mathbf{x}_i) \right] + \gamma T + \frac{1}{2} \lambda \sum_{j=1}^T w_j^2$$
+      <p>Where $g_i = \frac{\partial \mathcal{L}}{\partial \hat{y}_i^{(t-1)}}$ (gradient) and $h_i = \frac{\partial^2 \mathcal{L}}{\partial (\hat{y}_i^{(t-1)})^2}$ (Hessian). Removing constant terms:</p>
+      $$\tilde{\mathcal{L}}^{(t)} = \sum_{j=1}^T \left[ \left( \sum_{i \in I_j} g_i \right) w_j + \frac{1}{2} \left( \sum_{i \in I_j} h_i + \lambda \right) w_j^2 \right] + \gamma T$$
+      <p>Let $G_j = \sum_{i \in I_j} g_i$ and $H_j = \sum_{i \in I_j} h_i$. Differentiating with respect to leaf weight $w_j$ and setting to zero yields the <strong>Optimal Leaf Weight</strong>:</p>
+      $$w_j^* = -\frac{G_j}{H_j + \lambda}$$
+      <p>Substituting $w_j^*$ back into the objective yields the optimal leaf score:</p>
+      $$\tilde{\mathcal{L}}^*(q) = -\frac{1}{2} \sum_{j=1}^T \frac{G_j^2}{H_j + \lambda} + \gamma T$$
+      <p>When evaluating a candidate split partitioning leaf $j$ into Left ($L$) and Right ($R$), the exact <strong>XGBoost Split Gain</strong> is:</p>
+      $$\text{Gain} = \frac{1}{2} \left[ \frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda} - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda} \right] - \gamma$$
+    </div>
+
+    <!-- SECTION 3: LIGHTGBM VS CATBOOST -->
+    <h3>3. High-Scale Engineering: LightGBM &amp; CatBoost</h3>
+    <p>In enterprise datasets (hundreds of millions of rows), XGBoost's exact greedy split search becomes an I/O bottleneck. Two modern frameworks solved this through algorithmic innovations:</p>
+
+    <h4>LightGBM (Microsoft Research)</h4>
+    <ul>
+      <li><strong>Histogram-Based Binning:</strong> Discretizes continuous 32-bit floating-point features into 256 discrete integer bins (1 byte each). Computing histogram bin boundaries takes $O(N)$, and split searching takes $O(\text{bins})$, slashing memory by 80% and speeding up training by 15x.</li>
+      <li><strong>GOSS (Gradient-based One-Side Sampling):</strong> Keeps all samples with large gradients ($|g_i| &gt; a$), and randomly downsamples instances with small gradients ($|g_i| \le a$), focusing training on hard, unlearned errors while preserving statistical expectations.</li>
+      <li><strong>Leaf-Wise (Best-First) Growth:</strong> Grows trees by splitting the single leaf that maximizes global loss reduction, rather than growing level-by-level.</li>
+    </ul>
+
+    <h4>CatBoost (Yandex)</h4>
+    <ul>
+      <li><strong>Symmetric (Oblivious) Trees:</strong> Uses the exact same split condition across all nodes at the same tree depth. This allows the tree structure to be evaluated on CPUs using bitwise SIMD instructions, achieving microsecond inference latency.</li>
+      <li><strong>Ordered Target Encoding:</strong> Encodes high-cardinality categorical variables using historical cumulative averages, mathematically eliminating target leakage.</li>
+    </ul>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Gradient Boosting</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.5B.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In XGBoost, prove why the regularization parameter $\lambda$ in the denominator of the optimal leaf weight formula $w_j^* = -\frac{G_j}{H_j + \lambda}$ acts as an $L_2$ shrinkage stabilizer.</p>
+        <ol>
+          <li>Evaluate $w_j^*$ when sample count in leaf $j$ is small (few samples, small $H_j$).</li>
+          <li>Explain why setting $\gamma &gt; 0$ in the split gain formula acts as automated tree pre-pruning.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+
+        <p class="step"><strong>Step 1: Shrinkage Effect of $\lambda$:</strong><br>
+        For squared error loss $\mathcal{L} = \frac{1}{2}(y - \hat{y})^2$, the second derivative is constant: $h_i = 1$.<br>
+        In this case, $H_j = \sum_{i \in I_j} 1 = N_j$ (the exact count of samples in leaf $j$). The leaf weight is:
+        $$w_j^* = -\frac{\sum_{i \in I_j} g_i}{N_j + \lambda}$$
+        Notice what happens when a leaf has very few samples (e.g. $N_j = 1$):
+        <ul>
+          <li>If $\lambda = 0$, $w_j^* = -g_1 / 1 = -g_1$, which makes a massive, volatile prediction step based on a single outlier sample!</li>
+          <li>If $\lambda = 10$, $w_j^* = -g_1 / (1 + 10) = -g_1 / 11$, heavily shrinking the leaf prediction toward zero!</li>
+        </ul>
+        Thus, $\lambda$ strictly prevents leaves with low statistical support from making extreme, overfitted predictions.</p>
+
+        <p class="step"><strong>Step 2: Automated Pre-Pruning via $\gamma$:</strong><br>
+        The split gain formula is:
+        $$\text{Gain} = \frac{1}{2} \left[ \frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda} - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda} \right] - \gamma$$
+        Notice that a split is only performed if $\text{Gain} &gt; 0$, which is equivalent to:
+        $$\frac{1}{2} \left[ \frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda} - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda} \right] &gt; \gamma$$
+        $\gamma$ serves as an explicit threshold: if the improvement in objective function does not exceed $\gamma$, the algorithm refuses to create the split! This enforces automatic early stopping (pre-pruning) during tree growth.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.5B: Minimal Gradient Boosting Regressor</h3>
+    <p>Below is an educational implementation of a Gradient Boosting Regressor in pure Python fitting pseudo-residuals via functional gradient descent.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 2.6 — K-Means++ & SVD-based PCA from Scratch</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch26_unsupervised/kmeans_and_pca.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch26_unsupervised/kmeans_and_pca.py</a></p>
+      <div class="code-lab-header">Code Lab 2.5B — Gradient Boosting Regressor from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch25b_gradient_boosting/gbdt_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch25b_gradient_boosting/gbdt_scratch.py</a></p>
+<pre><code>import numpy as np
+from sklearn.tree import DecisionTreeRegressor
+
+class GradientBoostingRegressorScratch:
+    def __init__(self, n_estimators=50, learning_rate=0.1, max_depth=3):
+        self.n_estimators = n_estimators
+        self.learning_rate = learning_rate
+        self.max_depth = max_depth
+        self.base_pred = None
+        self.trees = []
+
+    def fit(self, X, y):
+        # 1. Initialize base model with constant mean prediction
+        self.base_pred = np.mean(y)
+        f_m = np.full(len(y), self.base_pred)
+
+        for _ in range(self.n_estimators):
+            # 2. Compute negative gradient (pseudo-residuals) for MSE loss:
+            # L = 0.5 * (y - f)^2 ==> -dL/df = (y - f)
+            residuals = y - f_m
+
+            # 3. Fit weak regression tree to residuals
+            tree = DecisionTreeRegressor(max_depth=self.max_depth)
+            tree.fit(X, residuals)
+            self.trees.append(tree)
+
+            # 4. Update ensemble predictions with shrinkage
+            f_m += self.learning_rate * tree.predict(X)
+
+    def predict(self, X):
+        preds = np.full(len(X), self.base_pred)
+        for tree in self.trees:
+            preds += self.learning_rate * tree.predict(X)
+        return preds
+
+if __name__ == "__main__":
+    np.random.seed(42)
+    X = np.linspace(-3, 3, 200).reshape(-1, 1)
+    y = np.sin(X).ravel() + 0.1 * np.random.randn(200)
+
+    gb = GradientBoostingRegressorScratch(n_estimators=40, learning_rate=0.1, max_depth=2)
+    gb.fit(X, y)
+    preds = gb.predict(X)
+    mse = np.mean((preds - y) ** 2)
+    print(f"Gradient Boosting Regressor MSE: {mse:.4f}")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.5B Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.5B: Industrial Click-Through &amp; Conversion Rate GBDT Engine</h3>
+        <p class="project-desc">Architect and implement an end-to-end industrial GBDT ranking service using LightGBM and XGBoost, implementing custom second-order focal loss objectives, monotonic feature constraints, and automated early stopping.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch25b_gradient_boosting/gbdt_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch25b_gradient_boosting/gbdt_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In e-commerce search ranking (Amazon, Walmart), tabular features (product price, rating, seller trust, user click recency) dominate model predictions. In this project, you build an industrial GBDT serving pipeline that enforces monotonic business constraints (e.g. higher product prices must never increase predicted conversion probability all else equal) and handles millions of real-time queries per second.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 2.6 — SUPPORT VECTOR MACHINES & KERNEL METHODS
+     ====================================================================== -->
+<div class="chapter" id="chapter-2-6">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.6</span>
+    <h2 class="chapter-title">Support Vector Machines &amp; Kernel Methods</h2>
+    <span class="chapter-subtitle">Geometric Margins, Slack Variables, Mercer's Theorem &amp; Infinite-Dimensional Hilbert Spaces</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"There is nothing more practical than a good theory."</p>
+    <p class="attribution">— Vladimir Vapnik, Inventor of SVMs</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE MAXIMUM MARGIN PRINCIPLE -->
+    <h3>1. The Maximum Margin Principle</h3>
+    <p>Given a linearly separable dataset of positive and negative points, there exist infinitely many hyperplanes that achieve 100% training accuracy. Which one is optimal?</p>
+
+    <p>Vladimir Vapnik proved through Statistical Learning Theory (Vapnik-Chervonenkis / VC dimension) that the hyperplane that <strong>maximizes the geometric margin</strong> to the closest training points minimizes the structural risk bound on unseen data.</p>
+
+    <h4>Derivation of the Geometric Margin</h4>
+    <p>The perpendicular Euclidean distance from any point $\mathbf{x}_i$ to the decision boundary $\mathbf{w}^T \mathbf{x} + b = 0$ is:</p>
+    $$\text{distance}(\mathbf{x}_i) = \frac{|\mathbf{w}^T \mathbf{x}_i + b|}{\|\mathbf{w}\|_2}$$
+    <p>Scaling both $\mathbf{w}$ and $b$ by any positive scalar does not change the hyperplane. We choose the canonical scaling such that the closest data points (the <strong>Support Vectors</strong>) satisfy $|\mathbf{w}^T \mathbf{x}_i + b| = 1$:</p>
+    $$y_i (\mathbf{w}^T \mathbf{x}_i + b) \ge 1, \quad \forall i=1,\dots,N$$
+    <p>The total margin width between the positive support vectors ($\mathbf{w}^T \mathbf{x}_+ + b = +1$) and negative support vectors ($\mathbf{w}^T \mathbf{x}_- + b = -1$) is:</p>
+    $$\text{Margin} = \frac{\mathbf{w}^T (\mathbf{x}_+ - \mathbf{x}_-)}{\|\mathbf{w}\|_2} = \frac{(\mathbf{w}^T \mathbf{x}_+ + b) - (\mathbf{w}^T \mathbf{x}_- + b)}{\|\mathbf{w}\|_2} = \frac{1 - (-1)}{\|\mathbf{w}\|_2} = \frac{2}{\|\mathbf{w}\|_2}$$
+    <p>Maximizing $\frac{2}{\|\mathbf{w}\|_2}$ is mathematically equivalent to minimizing the inverse squared norm $\frac{1}{2} \|\mathbf{w}\|_2^2$!</p>
+
+    <!-- SECTION 2: SOFT MARGIN & HINGE LOSS -->
+    <h3>2. Soft-Margin SVM &amp; Hinge Loss</h3>
+    <p>When data is noisy or overlapping, no strict separating boundary exists. We introduce non-negative <strong>Slack Variables</strong> $\xi_i \ge 0$, which allow data points to violate the margin boundary at a linear cost:</p>
+    $$\min_{\mathbf{w}, b, \boldsymbol{\xi}} \frac{1}{2} \|\mathbf{w}\|_2^2 + C \sum_{i=1}^N \xi_i \quad \text{subject to } y_i(\mathbf{w}^T \mathbf{x}_i + b) \ge 1 - \xi_i, \quad \xi_i \ge 0$$
+    <p>Where $C &gt; 0$ is the regularization parameter governing the bias-variance trade-off (large $C$ forces narrow margins with fewer errors; small $C$ permits wider margins with more violations).</p>
+
+    <div class="key-insight">
+      <p><strong>The Hinge Loss Formulation:</strong><br>
+      Notice that if a point satisfies the margin ($y_i (\mathbf{w}^T \mathbf{x}_i + b) \ge 1$), the minimal slack is $\xi_i = 0$. If it violates the margin, $\xi_i = 1 - y_i(\mathbf{w}^T \mathbf{x}_i + b)$. Thus, $\xi_i = \max(0, 1 - y_i(\mathbf{w}^T \mathbf{x}_i + b))$.<br>
+      The SVM primal problem is mathematically identical to minimizing <strong>Hinge Loss</strong> with $L_2$ weight decay:</p>
+      $$\min_{\mathbf{w}, b} \frac{1}{N} \sum_{i=1}^N \underbrace{\max\left(0, 1 - y_i(\mathbf{w}^T \mathbf{x}_i + b)\right)}_{\text{Hinge Loss}} + \frac{1}{2C} \|\mathbf{w}\|_2^2$$
+    </div>
+
+    <!-- SECTION 3: THE KERNEL TRICK -->
+    <h3>3. The Kernel Trick: Mapping into Infinite Dimensions</h3>
+    <p>When data is fundamentally non-linear (e.g. concentric circles), linear hyperplanes fail. The classical solution is to project features into a higher-dimensional space using mapping $\phi(\mathbf{x})$. However, computing $\phi(\mathbf{x})$ explicitly can be computationally impossible (e.g. mapping 100 features into all polynomial combinations of degree 10 produces $10^{13}$ dimensions!).</p>
+
+    <p><strong>The Kernel Trick</strong> solves this: because the SVM dual optimization problem depends <em>only</em> on inner products $\phi(\mathbf{x}_i)^T \phi(\mathbf{x}_j)$, we can replace the inner product with a <strong>Kernel function $K(\mathbf{x}_i, \mathbf{x}_j)$</strong> that computes the result directly in low-dimensional space without ever evaluating the high-dimensional coordinates!</p>
+
+    <h4>The Radial Basis Function (RBF / Gaussian) Kernel</h4>
+    $$K(\mathbf{x}, \mathbf{z}) = \exp\left( -\gamma \|\mathbf{x} - \mathbf{z}\|_2^2 \right), \quad \gamma = \frac{1}{2\sigma^2}$$
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Support Vector Machines</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.6.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove mathematically that the 1D Radial Basis Function (RBF) Kernel $K(x, z) = \exp\left( -\frac{(x - z)^2}{2} \right)$ corresponds to an inner product in an <strong>infinite-dimensional Hilbert space</strong> $\phi(x)^T \phi(z)$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Expand the Squared Difference:</strong>
+        $$(x - z)^2 = x^2 - 2xz + z^2 \implies -\frac{(x - z)^2}{2} = -\frac{x^2}{2} + xz - \frac{z^2}{2}$$
+        Substitute into the exponential:
+        $$K(x, z) = \exp\left(-\frac{x^2}{2}\right) \cdot \exp(xz) \cdot \exp\left(-\frac{z^2}{2}\right)$$</p>
+
+        <p class="step"><strong>Step 2: Apply the Taylor Series Expansion of the Exponential Function:</strong><br>
+        Recall the infinite Taylor series: $e^u = \sum_{k=0}^\infty \frac{u^k}{k!} = 1 + u + \frac{u^2}{2!} + \frac{u^3}{3!} + \dots$<br>
+        Applying this to $e^{xz}$:
+        $$\exp(xz) = \sum_{k=0}^\infty \frac{(xz)^k}{k!} = \sum_{k=0}^\infty \frac{x^k z^k}{k!} = \sum_{k=0}^\infty \left( \frac{x^k}{\sqrt{k!}} \right) \left( \frac{z^k}{\sqrt{k!}} \right)$$</p>
+
+        <p class="step"><strong>Step 3: Factorize into an Infinite-Dimensional Inner Product:</strong>
+        $$K(x, z) = \sum_{k=0}^\infty \left[ \exp\left(-\frac{x^2}{2}\right) \frac{x^k}{\sqrt{k!}} \right] \left[ \exp\left(-\frac{z^2}{2}\right) \frac{z^k}{\sqrt{k!}} \right]$$
+        Define the infinite-dimensional feature map $\phi(x)$:
+        $$\phi(x) = \exp\left(-\frac{x^2}{2}\right) \begin{bmatrix} 1, & x, & \frac{x^2}{\sqrt{2!}}, & \frac{x^3}{\sqrt{3!}}, & \dots, & \frac{x^k}{\sqrt{k!}}, & \dots \end{bmatrix}^T \in \mathbb{R}^\infty$$
+        Then the kernel evaluation is the exact inner product of two infinite-dimensional vectors:
+        $$K(x, z) = \langle \phi(x), \phi(z) \rangle = \phi(x)^T \phi(z)$$
+        <strong>Q.E.D. The RBF kernel evaluates an inner product across an infinite polynomial feature space in $O(d)$ time and zero extra memory!</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.6: Pegasos Stochastic Subgradient SVM</h3>
+    <p>Below is an industrial implementation of the <strong>Pegasos</strong> (Primal Estimated sub-GrAdient SOlver for SVM) algorithm, training a linear Support Vector Machine in $O(N)$ time via stochastic subgradient descent.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.6 — Pegasos Linear SVM from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch26_svm/pegasos_svm_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch26_svm/pegasos_svm_scratch.py</a></p>
+<pre><code>import numpy as np
+
+class PegasosSVMScratch:
+    def __init__(self, lambda_param=1e-3, n_epochs=50):
+        self.lambda_param = lambda_param
+        self.n_epochs = n_epochs
+        self.w = None
+        self.b = 0.0
+
+    def fit(self, X, y):
+        # y must be in {-1, +1}
+        N, d = X.shape
+        self.w = np.zeros(d)
+        t = 0
+
+        for epoch in range(self.n_epochs):
+            indices = np.random.permutation(N)
+            for i in indices:
+                t += 1
+                eta = 1.0 / (self.lambda_param * t) # Decaying learning rate
+                x_i, y_i = X[i], y[i]
+
+                # Functional margin condition: y_i * (w^T x_i + b) < 1
+                if y_i * (np.dot(self.w, x_i) + self.b) < 1.0:
+                    # Subgradient step: w = (1 - eta * lambda) * w + eta * y_i * x_i
+                    self.w = (1.0 - eta * self.lambda_param) * self.w + eta * y_i * x_i
+                    self.b += eta * y_i
+                else:
+                    # Margin satisfied: shrink w only
+                    self.w = (1.0 - eta * self.lambda_param) * self.w
+
+    def predict(self, X):
+        return np.sign(np.dot(X, self.w) + self.b).astype(int)
+
+if __name__ == "__main__":
+    from sklearn.datasets import make_blobs
+    X, y = make_blobs(n_samples=400, centers=2, random_state=42)
+    y = np.where(y == 0, -1, 1)
+
+    svm = PegasosSVMScratch(lambda_param=1e-2, n_epochs=30)
+    svm.fit(X, y)
+    preds = svm.predict(X)
+    print(f"Pegasos SVM Accuracy: {np.mean(preds == y) * 100:.2f}%")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.6 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.6: High-Security Network Intrusion &amp; Malware Anomaly Detector</h3>
+        <p class="project-desc">Architect and implement a high-security network packet classifier using One-Class RBF Support Vector Machines, mapping network telemetry into an infinite-dimensional Hilbert space to detect zero-day cyberattacks without ground-truth attack signatures.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch26_svm/pegasos_svm_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch26_svm/pegasos_svm_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In cybersecurity monitoring (CrowdStrike, Cloudflare), zero-day attacks do not match any historical malware signature. In this project, you construct a One-Class RBF Support Vector Machine that defines a tight non-linear geometric boundary around normal server telemetry. Any packet violating the support vector margin is instantaneously flagged as an intrusion with zero false positive cascades.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     CHAPTER 2.7 — UNSUPERVISED LEARNING: K-MEANS++ & PCA
+     ====================================================================== -->
+<div class="chapter" id="chapter-2-7">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.7</span>
+    <h2 class="chapter-title">Unsupervised Learning: K-Means++ &amp; PCA</h2>
+    <span class="chapter-subtitle">Clustering Inertia, The K-Means++ $D^2$ Theorem &amp; PCA Variance Maximization</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Most of human and animal learning is unsupervised. If intelligence was a cake, unsupervised learning would be the cake, supervised learning would be the icing on the cake, and reinforcement learning would be the cherry on the cake."</p>
+    <p class="attribution">— Yann LeCun</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: K-MEANS & K-MEANS++ -->
+    <h3>1. K-Means Clustering &amp; The $D^2$ Initialization Theorem</h3>
+    <p>In unsupervised learning, we are given unlabeled data $X = \{\mathbf{x}_1, \dots, \mathbf{x}_N\} \subset \mathbb{R}^d$ and must discover natural groupings or low-dimensional manifolds. <strong>$K$-Means</strong> partitions the dataset into $K$ disjoint clusters $C = \{C_1, \dots, C_K\}$ by minimizing the <strong>Within-Cluster Sum of Squares (Inertia)</strong>:</p>
+    $$J(C, \boldsymbol{\mu}) = \sum_{k=1}^K \sum_{\mathbf{x}_i \in C_k} \|\mathbf{x}_i - \boldsymbol{\mu}_k\|_2^2$$
+    <p>Where $\boldsymbol{\mu}_k = \frac{1}{|C_k|} \sum_{\mathbf{x}_i \in C_k} \mathbf{x}_i$ is the centroid (mean) of cluster $k$.</p>
+
+    <h4>Lloyd's Alternating Algorithm</h4>
+    <ol>
+      <li><strong>Assignment Step:</strong> Hold centroids $\boldsymbol{\mu}$ fixed. Assign each point $\mathbf{x}_i$ to its nearest centroid:
+      $$c_i = \arg\min_{k \in \{1,\dots,K\}} \|\mathbf{x}_i - \boldsymbol{\mu}_k\|_2^2$$</li>
+      <li><strong>Update Step:</strong> Hold assignments $c_i$ fixed. Recompute each centroid as the center of mass of its assigned points:
+      $$\boldsymbol{\mu}_k = \frac{1}{|C_k|} \sum_{i: c_i = k} \mathbf{x}_i$$</li>
+    </ol>
+    <p>Every step strictly decreases the objective $J$, guaranteeing convergence to a local minimum. However, standard random initialization frequently traps the algorithm in terrible local optima.</p>
+
+    <div class="real-world-box">
+      <h4>🏆 The K-Means++ $D^2$ Initialization Theorem (Arthur &amp; Vassilvitskii, 2007)</h4>
+      <p>Standard random initialization produces arbitrarily bad clusterings (unbounded approximation ratio). Arthur and Vassilvitskii proved that initializing centroids using <strong>$D^2$ sampling</strong> guarantees an expected cost within $O(\log K)$ of the optimal clustering!</p>
+      <ol>
+        <li>Choose the first centroid $\boldsymbol{\mu}_1$ uniformly at random from dataset $X$.</li>
+        <li>For each point $\mathbf{x}_i$, compute $D(\mathbf{x}_i) = \min_{j} \|\mathbf{x}_i - \boldsymbol{\mu}_j\|_2$, the shortest distance to any already chosen centroid.</li>
+        <li>Choose the next centroid $\boldsymbol{\mu}_k$ from $X$ with probability proportional to the squared distance:
+        $$P(\mathbf{x}_i) = \frac{D(\mathbf{x}_i)^2}{\sum_{j=1}^N D(\mathbf{x}_j)^2}$$</li>
+        <li>Repeat steps 2 and 3 until $K$ centroids are chosen.</li>
+      </ol>
+      <p><em>Geometric Intuition:</em> Points that are far away from existing centroids have an exponentially higher probability of being chosen as the next center, naturally spreading centroids across distinct spatial modes!</p>
+    </div>
+
+    <!-- SECTION 2: PCA VARIANCE MAXIMIZATION -->
+    <h3>2. Principal Component Analysis (PCA): Maximum Variance</h3>
+    <p>High-dimensional data ($d &gt; 1,000$) suffers from the <strong>Curse of Dimensionality</strong>: points become equidistant, distance metrics lose discriminative power, and compute explodes. <strong>Principal Component Analysis (PCA)</strong> finds an orthogonal linear projection from $\mathbb{R}^d$ to $\mathbb{R}^k$ ($k \ll d$) that preserves the maximum possible variance.</p>
+
+    <h4>Mathematical Derivation via Lagrange Multipliers</h4>
+    <p>Assume data $X \in \mathbb{R}^{N \times d}$ is centered ($\sum_{i=1}^N \mathbf{x}_i = \mathbf{0}$). We seek a unit direction $\mathbf{u}_1 \in \mathbb{R}^d$ ($\|\mathbf{u}_1\|_2 = 1$) such that the variance of the projected data $X \mathbf{u}_1$ is maximized:</p>
+    $$\text{Var}(X \mathbf{u}_1) = \frac{1}{N} (X \mathbf{u}_1)^T (X \mathbf{u}_1) = \mathbf{u}_1^T \left( \frac{1}{N} X^T X \right) \mathbf{u}_1 = \mathbf{u}_1^T \Sigma \mathbf{u}_1$$
+    <p>Where $\Sigma = \frac{1}{N} X^T X$ is the $d \times d$ sample covariance matrix. We formulate the constrained optimization problem:</p>
+    $$\max_{\mathbf{u}_1} \mathbf{u}_1^T \Sigma \mathbf{u}_1 \quad \text{subject to } \mathbf{u}_1^T \mathbf{u}_1 = 1$$
+    <p>Construct the Lagrangian:</p>
+    $$\mathcal{L}(\mathbf{u}_1, \lambda_1) = \mathbf{u}_1^T \Sigma \mathbf{u}_1 - \lambda_1 (\mathbf{u}_1^T \mathbf{u}_1 - 1)$$
+    <p>Setting the gradient to zero:</p>
+    $$\nabla_{\mathbf{u}_1} \mathcal{L} = 2 \Sigma \mathbf{u}_1 - 2 \lambda_1 \mathbf{u}_1 = \mathbf{0} \implies \Sigma \mathbf{u}_1 = \lambda_1 \mathbf{u}_1$$
+    <p>This is the exact definition of an <strong>Eigenvector Equation</strong>! Multiplying by $\mathbf{u}_1^T$ on the left:</p>
+    $$\mathbf{u}_1^T \Sigma \mathbf{u}_1 = \lambda_1 \mathbf{u}_1^T \mathbf{u}_1 = \lambda_1 (1) = \lambda_1$$
+    <p>To maximize variance $\mathbf{u}_1^T \Sigma \mathbf{u}_1$, we must choose $\mathbf{u}_1$ to be the eigenvector corresponding to the <strong>Largest Eigenvalue $\lambda_1 = \lambda_{\max}(\Sigma)$</strong>!</p>
+
+    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Unsupervised Learning</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.7.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove the mathematical equivalence between Principal Component Analysis (PCA) and Singular Value Decomposition (SVD). Given centered data matrix $X \in \mathbb{R}^{N \times d}$ with SVD $X = U \Sigma V^T$, prove that the right singular vectors $V$ are the exact principal component directions of the covariance matrix, and derive the relationship between singular values $\sigma_i$ and eigenvalues $\lambda_i$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Express Sample Covariance Matrix in SVD Terms:</strong><br>
+        The sample covariance matrix of centered data $X$ is:
+        $$C = \frac{1}{N} X^T X$$
+        Substitute the SVD of $X = U \Sigma V^T$:
+        $$C = \frac{1}{N} (U \Sigma V^T)^T (U \Sigma V^T) = \frac{1}{N} (V \Sigma^T U^T) (U \Sigma V^T)$$
+        Since $U \in \mathbb{R}^{N \times N}$ is orthogonal ($U^T U = I_N$):
+        $$C = \frac{1}{N} V (\Sigma^T \Sigma) V^T = V \left( \frac{\Sigma^T \Sigma}{N} \right) V^T$$</p>
+
+        <p class="step"><strong>Step 2: Match with the Spectral Eigendecomposition:</strong><br>
+        Recall the Spectral Theorem: any symmetric positive semi-definite matrix $C$ can be decomposed as $C = Q \Lambda Q^T$, where $Q$ contains eigenvectors and $\Lambda$ is a diagonal matrix of eigenvalues.<br>
+        Comparing $C = V \left( \frac{\Sigma^T \Sigma}{N} \right) V^T$ with $C = Q \Lambda Q^T$:
+        <ul>
+          <li>The right singular vectors $V$ are <strong>identical to the eigenvectors $Q$</strong> of the covariance matrix!</li>
+          <li>The eigenvalues of the covariance matrix are related to the singular values by:
+          $$\lambda_i = \frac{\sigma_i^2}{N}$$</li>
+        </ul>
+        <em>Production Value:</em> In software engineering, we <strong>never compute $X^T X$ directly</strong> to perform PCA, because forming $X^T X$ squares the condition number ($\kappa(X^T X) = \kappa(X)^2$), destroying numerical precision! Instead, high-performance libraries compute the SVD of $X$ directly, extracting principal components in $O(N d \min(N, d))$ with double the numerical stability.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 4: CODE LAB -->
+    <h3>3. Production Code Lab 2.7: SVD-Based PCA from First Principles</h3>
+    <p>Below is a production implementation of SVD-based PCA in pure Python, calculating explained variance ratios without forming the $X^T X$ covariance matrix.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.7 — High-Stability SVD PCA Engine</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch27_unsupervised_learning/pca_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch27_unsupervised_learning/pca_scratch.py</a></p>
 <pre><code>import numpy as np
 
 class PCAScratch:
     def __init__(self, n_components=2):
         self.n_components = n_components
+        self.components_ = None
+        self.explained_variance_ratio_ = None
+        self.mean_ = None
 
-    def fit_transform(self, X):
-        X_centered = X - np.mean(X, axis=0)
+    def fit(self, X):
+        N = X.shape[0]
+        # 1. Center the data
+        self.mean_ = np.mean(X, axis=0)
+        X_centered = X - self.mean_
+
+        # 2. SVD: X = U * S * V^T (No X^T X covariance matrix needed!)
         U, S, Vt = np.linalg.svd(X_centered, full_matrices=False)
-        return np.dot(X_centered, Vt[:self.n_components].T)</code></pre>
+
+        # 3. Principal components are rows of Vt (columns of V)
+        self.components_ = Vt[:self.n_components]
+
+        # 4. Explained variance: lambda_i = S_i^2 / (N - 1)
+        explained_variance = (S ** 2) / (N - 1)
+        total_variance = np.sum(explained_variance)
+        self.explained_variance_ratio_ = explained_variance[:self.n_components] / total_variance
+
+    def transform(self, X):
+        X_centered = X - self.mean_
+        # Project onto top-k orthogonal components
+        return X_centered @ self.components_.T
+
+if __name__ == "__main__":
+    np.random.seed(42)
+    X = np.random.randn(200, 10)
+    pca = PCAScratch(n_components=3)
+    pca.fit(X)
+    X_proj = pca.transform(X)
+    print(f"Projected Shape               : {X_proj.shape}")
+    print(f"Explained Variance Ratios (3) : {np.round(pca.explained_variance_ratio_, 4)}")
+    print(f"Total Variance Captured       : {np.sum(pca.explained_variance_ratio_)*100:.2f}%")</code></pre>
+    </div>
+
+    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.7 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.7: High-Dimensional Customer Segmentation &amp; Embedding Projector</h3>
+        <p class="project-desc">Architect and implement a production customer behavioral segmentation service combining $K$-Means++ with SVD-based PCA projection, silhouette score validation, and automated centroid drift alerting.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch27_unsupervised_learning/pca_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch27_unsupervised_learning/pca_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In e-commerce platforms (Spotify, Amazon), user interactions are captured across hundreds of behavioral signals (listen duration, search queries, churn indicators). In this project, you construct an end-to-end unsupervised pipeline that projects 500-dimensional user vectors down to 10 principal dimensions, clusters users using $K$-Means++, and provides real-time customer persona tags for targeted marketing campaigns.</p>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 2.7 — FEATURE ENGINEERING
+     CHAPTER 2.8 — FEATURE ENGINEERING & LEAKAGE PREVENTION
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-2-8">
   <div class="chapter-header">
-    <span class="chapter-number">Chapter 2.7</span>
-    <h2 class="chapter-title">Feature Engineering</h2>
-    <span class="chapter-subtitle">Handling Missing Data, Target Encoding &amp; Data Leakage</span>
+    <span class="chapter-number">Chapter 2.8</span>
+    <h2 class="chapter-title">Feature Engineering &amp; Data Leakage Prevention</h2>
+    <span class="chapter-subtitle">Target Encoding, Robust Scaling, Outlier Geometry &amp; The Cardinal Sin of ML</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"Coming up with features is difficult, time-consuming, requires expert knowledge. 'Applied machine learning' is basically feature engineering."</p>
+    <p>"Coming up with features is difficult, time-consuming, and requires expert knowledge. Applied machine learning is basically feature engineering."</p>
     <p class="attribution">— Andrew Ng</p>
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>Feature engineering transforms raw sensor telemetry, database logs, and transaction tables into numerical signals that machine learning algorithms can separate. In tabular competitions and enterprise deployments, superior feature engineering routinely defeats superior modeling algorithms.</p>
+    <!-- SECTION 1: THE TAXONOMY OF ENCODINGS -->
+    <h3>1. Categorical Encoding Strategies</h3>
+    <p>Machine learning models are mathematical functions operating on vector spaces $\mathbb{R}^d$: they cannot directly ingest textual categories like <code>"device_iphone"</code> or <code>"zip_code_94103"</code>. How we translate discrete symbols into numbers determines whether our model succeeds or fails.</p>
+
+    <h4>The Spectrum of Encodings</h4>
+    <ul>
+      <li><strong>One-Hot Encoding:</strong> Creates $K$ binary indicator columns. While theoretically unconstrained, if a category has cardinality $K = 100,000$ (e.g. URL domains), one-hot encoding introduces $100,000$ sparse columns, destroying memory caches and causing the curse of dimensionality.</li>
+      <li><strong>Label (Ordinal) Encoding:</strong> Assigns integers $0, 1, 2, \dots, K-1$. This artificially imposes a false mathematical order: it implies that $\text{Category 2} &gt; \text{Category 1}$, and that $\text{Category 2} - \text{Category 1} = \text{Category 1} - \text{Category 0}$. In linear models and neural networks, this introduces catastrophic inductive bias errors!</li>
+      <li><strong>Smoothed Target Encoding (Empirical Bayes):</strong> Replaces each category $c$ with the expected value of target $y$ within that category, smoothed toward the global mean $\bar{y}_{\text{global}}$:
+      $$\hat{x}_c = \frac{n_c \bar{y}_c + m \cdot \bar{y}_{\text{global}}}{n_c + m}$$
+      Where $n_c$ is the frequency count of category $c$, and $m$ is the prior smoothing weight. For rare categories ($n_c \to 0$), the estimate shrinks to the global prior; for frequent categories ($n_c \gg m$), it relies on empirical category evidence!</li>
+    </ul>
+
+    <!-- SECTION 2: NUMERICAL SCALING -->
+    <h3>2. Numerical Normalization &amp; Outlier Geometry</h3>
+    <p>When features have drastically different numerical scales (e.g. Annual Income in $\$10,000$s vs. Age in years $[18, 80]$), the gradient descent loss surface becomes a severely elongated, ill-conditioned ravine. Optimization oscillates violently across the income dimension while making zero progress along the age dimension.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Scaler</th>
+          <th>Mathematical Formula</th>
+          <th>Sensitivity to Outliers</th>
+          <th>Best Use Case</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>StandardScaler (Z-score)</strong></td>
+          <td>$z = \frac{x - \mu}{\sigma}$</td>
+          <td>High (Mean and std are distorted by extreme spikes)</td>
+          <td>Normally distributed features without heavy tails.</td>
+        </tr>
+        <tr>
+          <td><strong>MinMaxScaler</strong></td>
+          <td>$x' = \frac{x - x_{\min}}{x_{\max} - x_{\min}}$</td>
+          <td>Extreme (A single outlier squashes all other data into a tiny band)</td>
+          <td>Bounding bounded image pixels $[0, 255] \to [0, 1]$.</td>
+        </tr>
+        <tr>
+          <td><strong>RobustScaler</strong></td>
+          <td>$x' = \frac{x - \text{median}(x)}{\text{IQR}(x)} = \frac{x - Q_2}{Q_3 - Q_1}$</td>
+          <td><strong>Immune</strong> (Median and Interquartile Range ignore outliers)</td>
+          <td><strong>Default choice for real-world tabular data</strong> with heavy tails.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- SECTION 3: DATA LEAKAGE -->
+    <h3>3. The Cardinal Sin of ML: Data Leakage</h3>
+    <p><strong>Data Leakage</strong> is the silent evaluation catastrophe where information from the test or target dataset contaminates the training feature pipeline. Models with data leakage show spectacular 99.8% metrics in development notebooks, but completely crash upon production deployment.</p>
 
     <div class="real-world-box">
-      <h4>🏢 Real-World Problem Mapping: The $10 Million Target Leakage Catastrophe</h4>
-      <p>A fintech company built a loan default prediction model that achieved an astounding 99.8% ROC-AUC in cross-validation. In production, the model caused massive credit losses. Post-mortem analysis revealed that the feature pipeline included `collection_recovery_fee`, a field populated by the database <em>only after a borrower had already defaulted</em>. Training with future information is <strong>Data Leakage</strong>. Strict pipeline isolation (`fit` on train only) is mandatory.</p>
+      <h4>🚨 The Three Primary Vectors of Data Leakage</h4>
+      <ol>
+        <li><strong>Preprocessor Contamination (Fit-Before-Split):</strong> Fitting a scaler, imputer, or target encoder on the <em>entire dataset before splitting</em> into train/test:
+        $$\text{FATAL ANTI-PATTERN: } \quad \text{scaler.fit}(X_{\text{all}}) \implies \text{test samples pollute } \mu \text{ and } \sigma!$$
+        <em>Correct Protocol:</em> <code>scaler.fit(X_train)</code>, then <code>scaler.transform(X_test)</code>. The test set must be treated as completely unseen future data!</li>
+        <li><strong>Target Leakage:</strong> Including features that are direct consequences of the target variable. For example, in a churn prediction model, including the feature <code>days_since_cancellation_email</code> is target leakage—in production, that field is only populated <em>after</em> the user has already churned!</li>
+        <li><strong>Temporal (Lookahead) Leakage:</strong> In time-series and financial models, using future rolling statistics (e.g. 7-day future moving average) to predict current stock prices.</li>
+      </ol>
     </div>
 
-    <div class="code-lab">
-      <div class="code-lab-header">Code Lab 2.7 — Outlier-Resilient Scaler & Target Encoder</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch27_feature_engineering/feature_pipeline.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch27_feature_engineering/feature_pipeline.py</a></p>
-<pre><code>import numpy as np
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Feature Engineering</h3>
 
-class ProductionRobustScaler:
-    """Uses median and Interquartile Range (IQR) to ignore outliers."""
-    def fit_transform(self, X):
-        med = np.median(X, axis=0)
-        iqr = np.percentile(X, 75, axis=0) - np.percentile(X, 25, axis=0)
-        iqr[iqr == 0] = 1.0
-        return (X - med) / iqr</code></pre>
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.8.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In high-scale ad click prediction, why does naive Target Encoding cause massive overfitting? Explain how <strong>Out-of-Fold (OOF) Target Encoding</strong> mathematically prevents target leakage during model training.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+
+        <p class="step"><strong>Step 1: Why Naive Target Encoding Overfits:</strong><br>
+        Suppose an ad category appears only once in the dataset ($n_c = 1$), and that user clicked the ad ($y = 1$).<br>
+        Without out-of-fold partitioning, the target encoded feature for this sample will be $\approx 1.0$. The decision tree or linear model learns to memorize that $\text{Feature} \approx 1.0 \implies \text{Click}$, achieving 100% training accuracy. However, in production test data, this category was merely an accidental click; the model learned a spurious label leak rather than true category propensity.</p>
+
+        <p class="step"><strong>Step 2: The Out-of-Fold (OOF) Mathematical Solution:</strong><br>
+        To prevent a sample from leaking its own label into its feature value, we apply $K$-Fold partitioning exclusively within the training set:</p>
+        <ol>
+          <li>Divide the training set into $K$ disjoint folds: $D = D_1 \cup D_2 \cup \dots \cup D_K$.</li>
+          <li>To calculate the encoded feature for samples in fold $k$, we compute category statistics using <strong>only the remaining $K - 1$ folds</strong> ($D \setminus D_k$):
+          $$\hat{x}_i = \frac{n_{c,-k} \bar{y}_{c,-k} + m \bar{y}_{\text{global},-k}}{n_{c,-k} + m}, \quad \forall i \in D_k$$</li>
+          <li>Repeat this for all $K$ folds. Every training sample's feature is computed without its own label having any mathematical influence on the calculation!</li>
+        </ol>
+        <strong>Result: OOF encoding completely eradicates label leakage, ensuring training metrics match test generalization.</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.8: Leak-Free Feature Preprocessor Pipeline</h3>
+    <p>Below is a production-grade scikit-learn compatible transformer implementing Out-of-Fold Target Encoding and Robust Scaling with zero data leakage.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.8 — Out-of-Fold Target Encoder from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch28_feature_engineering/leak_free_pipeline.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch28_feature_engineering/leak_free_pipeline.py</a></p>
+<pre><code>import numpy as np
+from sklearn.model_selection import KFold
+
+class OutOfFoldTargetEncoder:
+    """
+    Computes smoothed out-of-fold target encodings preventing label leakage.
+    """
+    def __init__(self, n_splits=5, smoothing=10.0):
+        self.n_splits = n_splits
+        self.smoothing = smoothing
+        self.global_mean_ = None
+        self.mapping_ = {}
+
+    def fit_transform(self, categories, y):
+        self.global_mean_ = np.mean(y)
+        encoded = np.zeros(len(categories))
+        kf = KFold(n_splits=self.n_splits, shuffle=True, random_state=42)
+
+        # 1. Compute Out-of-Fold encodings for training
+        for train_idx, val_idx in kf.split(categories):
+            cat_train, y_train = categories[train_idx], y[train_idx]
+            cat_val = categories[val_idx]
+
+            # Compute stats on K-1 folds
+            unique_cats = np.unique(cat_train)
+            fold_map = {}
+            for c in unique_cats:
+                y_c = y_train[cat_train == c]
+                n_c = len(y_c)
+                smoothed = (np.sum(y_c) + self.smoothing * self.global_mean_) / (n_c + self.smoothing)
+                fold_map[c] = smoothed
+
+            # Apply to validation fold
+            encoded[val_idx] = np.array([fold_map.get(c, self.global_mean_) for c in cat_val])
+
+        # 2. Compute full training mappings for inference transform
+        unique_cats = np.unique(categories)
+        for c in unique_cats:
+            y_c = y[categories == c]
+            n_c = len(y_c)
+            self.mapping_[c] = (np.sum(y_c) + self.smoothing * self.global_mean_) / (n_c + self.smoothing)
+
+        return encoded
+
+    def transform(self, categories):
+        return np.array([self.mapping_.get(c, self.global_mean_) for c in categories])
+
+if __name__ == "__main__":
+    cats = np.array(["electronics", "clothing", "electronics", "home", "clothing", "electronics", "home", "books"])
+    labels = np.array([1, 0, 1, 0, 0, 0, 1, 0])
+    encoder = OutOfFoldTargetEncoder(n_splits=3, smoothing=5.0)
+    encoded_train = encoder.fit_transform(cats, labels)
+    print("Out-of-Fold Encoded Training Array:\n", np.round(encoded_train, 4))</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.8 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.8: Production Feature Store &amp; Automated Data Leakage Sentinel</h3>
+        <p class="project-desc">Architect and implement an enterprise feature preprocessing pipeline that automatically inspects tabular schemas, detects target correlation anomalies, isolates temporal boundaries, and halts training when data leakage is detected.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch28_feature_engineering/leak_free_pipeline.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch28_feature_engineering/leak_free_pipeline.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In large-scale financial platforms (Stripe, Robinhood), data engineers and ML scientists constantly write new feature extraction scripts. If a single junior engineer creates a feature that calculates average user spend over a window that accidentally includes the transaction timestamp, the entire model suffers fatal data leakage. In this project, you construct a continuous feature store sentinel that tests feature-to-target mutual information across time slices and raises automated build alerts on leakage contamination.</p>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     CHAPTER 2.8 — MODEL EVALUATION
+     CHAPTER 2.9 — MODEL EVALUATION, ROC-AUC & CALIBRATION
      ====================================================================== -->
-<div class="chapter">
+<div class="chapter" id="chapter-2-9">
   <div class="chapter-header">
-    <span class="chapter-number">Chapter 2.8</span>
-    <h2 class="chapter-title">Model Evaluation</h2>
-    <span class="chapter-subtitle">Measuring What Matters — Precision, Recall, ROC-AUC &amp; Calibration</span>
+    <span class="chapter-number">Chapter 2.9</span>
+    <h2 class="chapter-title">Model Evaluation, ROC-AUC &amp; Calibration</h2>
+    <span class="chapter-subtitle">The Mann-Whitney U Theorem, Precision-Recall Dynamics &amp; Expected Calibration Error</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -444,41 +1687,203 @@ class ProductionRobustScaler:
   </div>
 
   <div class="chapter-body">
-    <span class="level-badge level-foundation">Foundation</span>
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <p>Accuracy is a dangerous metric. In a dataset where 99.9% of transactions are legitimate and 0.1% are fraudulent, a model that classifies everything as legitimate achieves 99.9% accuracy while letting every single criminal transaction through.</p>
+    <!-- SECTION 1: BEYOND ACCURACY -->
+    <h3>1. The Tyranny of Accuracy &amp; The Confusion Matrix</h3>
+    <p>In academic toy problems with balanced $50/50$ classes, classification accuracy ($\frac{\text{Correct}}{\text{Total}}$) is an intuitive metric. In production enterprise AI, accuracy is virtually useless.</p>
 
-    <h3>1. Precision, Recall & The Harmonic Mean F1</h3>
-    <p>$$\text{Precision} = \frac{\text{TP}}{\text{TP} + \text{FP}}, \quad \text{Recall} = \frac{\text{TP}}{\text{TP} + \text{FN}}$$
-    The $F_1$ score is the harmonic mean, penalizing extreme trade-offs:
-    $$F_1 = 2 \cdot \frac{\text{Precision} \cdot \text{Recall}}{\text{Precision} + \text{Recall}} = \frac{2\text{TP}}{2\text{TP} + \text{FP} + \text{FN}}$$</p>
+    <p>Consider credit card fraud detection: out of $1,000,000$ transactions, exactly $100$ are fraudulent ($0.01\%$ prevalence). A trivial dummy classifier that outputs <code>return 0</code> for every transaction achieves a phenomenal <strong>$99.99\%$ accuracy</strong> while failing to catch a single dollar of fraudulent theft! Evaluating models requires dissecting the <strong>Confusion Matrix</strong>:</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Mathematical Formula</th>
+          <th>Physical Meaning</th>
+          <th>Critical Production Context</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Precision</strong></td>
+          <td>$\frac{\text{TP}}{\text{TP} + \text{FP}}$</td>
+          <td>When the model predicts Positive, how often is it right?</td>
+          <td>Spam filters, automated ban hammers (Minimize False Alarms).</td>
+        </tr>
+        <tr>
+          <td><strong>Recall (Sensitivity / TPR)</strong></td>
+          <td>$\frac{\text{TP}}{\text{TP} + \text{FN}}$</td>
+          <td>Out of all actual Positive cases, how many did the model catch?</td>
+          <td>Cancer screening, fraud detection (Minimize Missed Detections).</td>
+        </tr>
+        <tr>
+          <td><strong>Specificity (TNR)</strong></td>
+          <td>$\frac{\text{TN}}{\text{TN} + \text{FP}}$</td>
+          <td>Out of all actual Negative cases, how many were correctly identified?</td>
+          <td>Baseline population filtering.</td>
+        </tr>
+        <tr>
+          <td><strong>$F_1$ Score</strong></td>
+          <td>$2 \cdot \frac{\text{Precision} \cdot \text{Recall}}{\text{Precision} + \text{Recall}}$</td>
+          <td>Harmonic mean balancing precision and recall.</td>
+          <td>Penalizes extreme disparities (if Precision=1.0 but Recall=0.01, $F_1 \approx 0.02$).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- SECTION 2: ROC-AUC & MANN-WHITNEY U -->
+    <h3>2. Receiver Operating Characteristic (ROC) &amp; The Mann-Whitney U Theorem</h3>
+    <p>Most binary classifiers output a continuous score or probability $s \in [0, 1]$. To make a hard binary decision, we must choose a decision threshold $\tau$. The <strong>ROC Curve</strong> plots the True Positive Rate ($\text{TPR} = \frac{\text{TP}}{P}$) against the False Positive Rate ($\text{FPR} = \frac{\text{FP}}{N}$) across all possible thresholds $\tau \in [0, 1]$.</p>
+
+    <div class="real-world-box">
+      <h4>🏆 The Mann-Whitney U Equivalence Theorem</h4>
+      <p>The Area Under the ROC Curve ($\text{ROC-AUC}$) is not merely a geometric area. It has a profound statistical identity:</p>
+      $$\text{ROC-AUC} = P(S_+ &gt; S_-)$$
+      <p><em>The ROC-AUC is the exact probability that a randomly drawn positive instance receives a higher predicted score than a randomly drawn negative instance!</em></p>
+      <p>Furthermore, it is mathematically identical to the normalized <strong>Mann-Whitney $U$ Rank-Sum Statistic</strong>:</p>
+      $$\text{ROC-AUC} = \frac{U}{N_+ N_-} = \frac{1}{N_+ N_-} \sum_{i=1}^{N_+} \sum_{j=1}^{N_-} \mathbb{I}(s_i^+ &gt; s_j^-)$$
+    </div>
+
+    <!-- SECTION 3: PROBABILITY CALIBRATION -->
+    <h3>3. Probability Calibration: Expected Calibration Error (ECE)</h3>
+    <p>In safety-critical AI (autonomous driving, medical triage, real-time ad bidding), ranking order is insufficient. We require <strong>well-calibrated probabilities</strong>: if a weather model predicts a 70% chance of rain across 100 days, it must rain on exactly 70 of those days.</p>
+
+    <h4>Expected Calibration Error (ECE)</h4>
+    <p>To measure calibration, predictions are grouped into $M$ equally spaced confidence bins $B_1, \dots, B_M$ (e.g. $[0, 0.1], [0.1, 0.2], \dots$). For each bin, we compute its empirical accuracy and average confidence:</p>
+    $$\text{acc}(B_m) = \frac{1}{|B_m|} \sum_{i \in B_m} \mathbb{I}(y_i = \hat{y}_i), \quad \text{conf}(B_m) = \frac{1}{|B_m|} \sum_{i \in B_m} \hat{p}_i$$
+    <p>The <strong>Expected Calibration Error (ECE)</strong> is the weighted average absolute difference:</p>
+    $$\text{ECE} = \sum_{m=1}^M \frac{|B_m|}{N} \left| \text{acc}(B_m) - \text{conf}(B_m) \right|$$
+    <p>Modern deep neural networks (unlike classical logistic regression) are notoriously uncalibrated: due to overparameterization and cross-entropy loss, they produce overconfident predictions ($p \approx 0.999$) even when wrong! Engineers apply <strong>Platt Scaling</strong> or <strong>Isotonic Regression</strong> as post-processing calibration layers.</p>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Evaluation &amp; Metrics</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.9.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove that the Area Under the Receiver Operating Characteristic Curve ($\text{ROC-AUC}$) is mathematically equivalent to the normalized Mann-Whitney $U$ statistic:</p>
+        $$\text{AUC} = \frac{1}{N_+ N_-} \sum_{i \in \text{Pos}} \sum_{j \in \text{Neg}} \mathbb{I}(s_i &gt; s_j)$$
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Express AUC as an Integral:</strong><br>
+        Let $F_-(s) = P(S_- \le s)$ be the cumulative distribution function (CDF) of scores for negative samples. The False Positive Rate as a function of threshold $\tau$ is $\text{FPR}(\tau) = P(S_- &gt; \tau) = 1 - F_-(\tau)$.<br>
+        The True Positive Rate is $\text{TPR}(\tau) = P(S_+ &gt; \tau) = 1 - F_+(\tau)$.<br>
+        The area under the curve $\text{TPR}(\text{FPR})$ is defined by the Riemann-Stieltjes integral:
+        $$\text{AUC} = \int_{0}^1 \text{TPR} \, d(\text{FPR})$$
+        Change integration variable from $\text{FPR}$ to threshold $\tau \in (-\infty, +\infty)$:<br>
+        Notice that when $\tau = -\infty$, $\text{FPR} = 1$; when $\tau = +\infty$, $\text{FPR} = 0$.<br>
+        Furthermore, $d(\text{FPR}) = d(1 - F_-(\tau)) = -f_-(\tau) d\tau$, where $f_-(\tau)$ is the probability density function (PDF) of negative scores.</p>
+
+        <p class="step"><strong>Step 2: Evaluate the Integral:</strong>
+        $$\text{AUC} = \int_{+\infty}^{-\infty} \text{TPR}(\tau) (-f_-(\tau) d\tau) = \int_{-\infty}^{+\infty} \text{TPR}(\tau) f_-(\tau) d\tau$$
+        Substitute $\text{TPR}(\tau) = P(S_+ &gt; \tau)$:
+        $$\text{AUC} = \int_{-\infty}^{+\infty} P(S_+ &gt; \tau) f_-(\tau) d\tau$$</p>
+
+        <p class="step"><strong>Step 3: Recognize as an Expectation:</strong><br>
+        By definition of expected value over a continuous random variable $S_-$ with density $f_-(\tau)$:
+        $$\int_{-\infty}^{+\infty} P(S_+ &gt; \tau) f_-(\tau) d\tau = \mathbb{E}_{S_-}[P(S_+ &gt; S_-)] = P(S_+ &gt; S_-)$$
+        For an empirical dataset of $N_+$ positive samples with scores $\{s_i^+\}$ and $N_-$ negative samples with scores $\{s_j^-\}$, the empirical probability is the fraction of all $N_+ \times N_-$ pairs where the positive score exceeds the negative score:
+        $$\text{AUC} = \frac{1}{N_+ N_-} \sum_{i=1}^{N_+} \sum_{j=1}^{N_-} \mathbb{I}(s_i^+ &gt; s_j^-)$$
+        <strong>Q.E.D. ROC-AUC is exactly equal to the probability of correct pairwise ranking!</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.9: ROC-AUC, PR-AUC &amp; ECE from Scratch</h3>
+    <p>Below is a pure Python implementation of ROC-AUC via the Mann-Whitney $U$ rank formula, Precision-Recall AUC, and Expected Calibration Error (ECE).</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 2.8 — Confusion Matrix & ROC-AUC from Scratch</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch28_model_evaluation/metrics_from_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch28_model_evaluation/metrics_from_scratch.py</a></p>
+      <div class="code-lab-header">Code Lab 2.9 — High-Precision Metric &amp; Calibration Evaluator</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch29_model_evaluation/metrics_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch29_model_evaluation/metrics_scratch.py</a></p>
 <pre><code>import numpy as np
 
-def roc_auc_scratch(y_true, y_scores):
-    pos = y_scores[y_true == 1]
-    neg = y_scores[y_true == 0]
-    concordant = np.sum(pos[:, None] > neg[None, :])
-    ties = np.sum(pos[:, None] == neg[None, :]) * 0.5
-    return float((concordant + ties) / (len(pos) * len(neg)))</code></pre>
+def compute_roc_auc_mann_whitney(y_true, y_scores):
+    """
+    Computes exact ROC-AUC via Mann-Whitney U rank statistic in O(N log N) time.
+    """
+    pos_scores = y_scores[y_true == 1]
+    neg_scores = y_scores[y_true == 0]
+    n_pos, n_neg = len(pos_scores), len(neg_scores)
+    if n_pos == 0 or n_neg == 0:
+        return 0.5
+
+    # Combine and rank all scores (1-indexed ranks)
+    all_scores = np.concatenate([pos_scores, neg_scores])
+    ranks = np.argsort(np.argsort(all_scores)) + 1
+    pos_ranks = ranks[:n_pos]
+
+    # Mann-Whitney U formula: U = sum(R_pos) - n_pos*(n_pos + 1)/2
+    u_stat = np.sum(pos_ranks) - (n_pos * (n_pos + 1)) / 2.0
+    return u_stat / (n_pos * n_neg)
+
+def compute_ece(y_true, y_probs, n_bins=10):
+    """
+    Computes Expected Calibration Error (ECE) across n_bins.
+    """
+    bins = np.linspace(0.0, 1.0, n_bins + 1)
+    ece = 0.0
+    N = len(y_true)
+
+    for i in range(n_bins):
+        bin_mask = (y_probs > bins[i]) & (y_probs <= bins[i + 1])
+        bin_count = np.sum(bin_mask)
+        if bin_count > 0:
+            bin_acc = np.mean(y_true[bin_mask])
+            bin_conf = np.mean(y_probs[bin_mask])
+            ece += (bin_count / N) * np.abs(bin_acc - bin_conf)
+
+    return float(ece)
+
+if __name__ == "__main__":
+    y_true = np.array([1, 0, 1, 1, 0, 0, 1, 0])
+    y_scores = np.array([0.9, 0.2, 0.8, 0.65, 0.4, 0.1, 0.85, 0.3])
+
+    auc = compute_roc_auc_mann_whitney(y_true, y_scores)
+    ece = compute_ece(y_true, y_scores, n_bins=5)
+    print(f"Mann-Whitney ROC-AUC : {auc:.4f}")
+    print(f"Calibration Error ECE : {ece:.4f}")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.9 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.9: Production Credit Risk &amp; Fraud Scoring Engine with Threshold Optimization</h3>
+        <p class="project-desc">Architect and implement a production credit risk and fraud evaluation service that sweeps cost-matrix matrices, computes optimal operating thresholds under asymmetric misclassification penalties (where false negatives cost 50x false positives), and applies Platt calibration.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch29_model_evaluation/metrics_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch29_model_evaluation/metrics_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In financial underwriting (PayPal, Affirm), a threshold of 0.5 is meaningless: approving a fraudulent loan costs the company $\$5,000$ in chargebacks, while rejecting a valid customer costs $\$25$ in lost interest fees. In this project, you build an automated threshold optimizer that maps ROC-AUC and PR-AUC curves to expected business profit equations, finding the exact mathematical threshold $\tau^*$ that maximizes revenue.</p>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- ======================================================================
-     PROJECT 2 — HOUSE PRICE PREDICTOR FROM SCRATCH
+     HANDS-ON PROJECT 2 — PRODUCTION CREDIT RISK & FRAUD ENGINE
      ====================================================================== -->
 <div class="project-section">
   <div class="project-header">
-    <span class="project-tag">Hands-On Project 2</span>
-    <h3 class="project-title">End-to-End House Price Predictor from Scratch</h3>
-    <p class="project-desc">Build a complete regression engine implementing data cleaning, RobustScaler, Gradient Boosted regression trees, cross-validation, and production inference.</p>
-    <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch22_linear_regression/ols_and_sgd_regression.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch22_linear_regression/ols_and_sgd_regression.py</a></p>
+    <span class="project-tag">Hands-On Capstone Project 2</span>
+    <h3 class="project-title">Production Credit Risk &amp; Financial Fraud Scoring Engine</h3>
+    <p class="project-desc">Synthesize all classical machine learning algorithms—from OOF target encoding and RobustScaler to LightGBM, Random Forests, cost-complexity pruning, and calibrated threshold optimization—into a high-throughput, latency-budgeted credit scoring service.</p>
+    <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/project2_house_price_predictor/predict_prices.py" target="_blank">🔗 Full Project Code: part2_classical_ml/project2_house_price_predictor/predict_prices.py</a></p>
   </div>
   <div class="project-body">
-    <p><strong>Architecture Overview:</strong> You will train multiple classical architectures on tabular real estate housing data, benchmark OLS vs SGD vs Decision Trees, perform feature importance analysis, and output P90 prediction intervals.</p>
+    <p><strong>Architecture &amp; Production Pipeline:</strong> In this capstone project, you engineer an enterprise tabular ML service:</p>
+    <ul>
+      <li><strong>Leak-Free Feature Store:</strong> Ingests 1,000,000 transaction records, applying out-of-fold target encoding, robust scaling, and missing indicator imputation with zero cross-split leakage.</li>
+      <li><strong>Model Benchmark Arena:</strong> Trains and evaluates Ridge Regression, Support Vector Machines, Random Forests, and Gradient Boosted Trees side-by-side.</li>
+      <li><strong>Asymmetric Cost Optimizer:</strong> Evaluates business cost matrices (where false negatives cost $\$5,000$ and false positives cost $\$20$), solving for the optimal operating decision threshold $	au^*$ via ROC and PR curve sweeps.</li>
+      <li><strong>Probability Calibrator:</strong> Applies Platt scaling to guarantee that predicted risk probabilities reflect authentic default rates to satisfy federal lending audits.</li>
+    </ul>
   </div>
 </div>

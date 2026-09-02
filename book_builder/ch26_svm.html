@@ -1,0 +1,158 @@
+<!-- ======================================================================
+     CHAPTER 2.6 — SUPPORT VECTOR MACHINES & KERNEL METHODS
+     ====================================================================== -->
+<div class="chapter" id="chapter-2-6">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.6</span>
+    <h2 class="chapter-title">Support Vector Machines &amp; Kernel Methods</h2>
+    <span class="chapter-subtitle">Geometric Margins, Slack Variables, Mercer's Theorem &amp; Infinite-Dimensional Hilbert Spaces</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"There is nothing more practical than a good theory."</p>
+    <p class="attribution">— Vladimir Vapnik, Inventor of SVMs</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE MAXIMUM MARGIN PRINCIPLE -->
+    <h3>1. The Maximum Margin Principle</h3>
+    <p>Given a linearly separable dataset of positive and negative points, there exist infinitely many hyperplanes that achieve 100% training accuracy. Which one is optimal?</p>
+
+    <p>Vladimir Vapnik proved through Statistical Learning Theory (Vapnik-Chervonenkis / VC dimension) that the hyperplane that <strong>maximizes the geometric margin</strong> to the closest training points minimizes the structural risk bound on unseen data.</p>
+
+    <h4>Derivation of the Geometric Margin</h4>
+    <p>The perpendicular Euclidean distance from any point $\mathbf{x}_i$ to the decision boundary $\mathbf{w}^T \mathbf{x} + b = 0$ is:</p>
+    $$\text{distance}(\mathbf{x}_i) = \frac{|\mathbf{w}^T \mathbf{x}_i + b|}{\|\mathbf{w}\|_2}$$
+    <p>Scaling both $\mathbf{w}$ and $b$ by any positive scalar does not change the hyperplane. We choose the canonical scaling such that the closest data points (the <strong>Support Vectors</strong>) satisfy $|\mathbf{w}^T \mathbf{x}_i + b| = 1$:</p>
+    $$y_i (\mathbf{w}^T \mathbf{x}_i + b) \ge 1, \quad \forall i=1,\dots,N$$
+    <p>The total margin width between the positive support vectors ($\mathbf{w}^T \mathbf{x}_+ + b = +1$) and negative support vectors ($\mathbf{w}^T \mathbf{x}_- + b = -1$) is:</p>
+    $$\text{Margin} = \frac{\mathbf{w}^T (\mathbf{x}_+ - \mathbf{x}_-)}{\|\mathbf{w}\|_2} = \frac{(\mathbf{w}^T \mathbf{x}_+ + b) - (\mathbf{w}^T \mathbf{x}_- + b)}{\|\mathbf{w}\|_2} = \frac{1 - (-1)}{\|\mathbf{w}\|_2} = \frac{2}{\|\mathbf{w}\|_2}$$
+    <p>Maximizing $\frac{2}{\|\mathbf{w}\|_2}$ is mathematically equivalent to minimizing the inverse squared norm $\frac{1}{2} \|\mathbf{w}\|_2^2$!</p>
+
+    <!-- SECTION 2: SOFT MARGIN & HINGE LOSS -->
+    <h3>2. Soft-Margin SVM &amp; Hinge Loss</h3>
+    <p>When data is noisy or overlapping, no strict separating boundary exists. We introduce non-negative <strong>Slack Variables</strong> $\xi_i \ge 0$, which allow data points to violate the margin boundary at a linear cost:</p>
+    $$\min_{\mathbf{w}, b, \boldsymbol{\xi}} \frac{1}{2} \|\mathbf{w}\|_2^2 + C \sum_{i=1}^N \xi_i \quad \text{subject to } y_i(\mathbf{w}^T \mathbf{x}_i + b) \ge 1 - \xi_i, \quad \xi_i \ge 0$$
+    <p>Where $C &gt; 0$ is the regularization parameter governing the bias-variance trade-off (large $C$ forces narrow margins with fewer errors; small $C$ permits wider margins with more violations).</p>
+
+    <div class="key-insight">
+      <p><strong>The Hinge Loss Formulation:</strong><br>
+      Notice that if a point satisfies the margin ($y_i (\mathbf{w}^T \mathbf{x}_i + b) \ge 1$), the minimal slack is $\xi_i = 0$. If it violates the margin, $\xi_i = 1 - y_i(\mathbf{w}^T \mathbf{x}_i + b)$. Thus, $\xi_i = \max(0, 1 - y_i(\mathbf{w}^T \mathbf{x}_i + b))$.<br>
+      The SVM primal problem is mathematically identical to minimizing <strong>Hinge Loss</strong> with $L_2$ weight decay:</p>
+      $$\min_{\mathbf{w}, b} \frac{1}{N} \sum_{i=1}^N \underbrace{\max\left(0, 1 - y_i(\mathbf{w}^T \mathbf{x}_i + b)\right)}_{\text{Hinge Loss}} + \frac{1}{2C} \|\mathbf{w}\|_2^2$$
+    </div>
+
+    <!-- SECTION 3: THE KERNEL TRICK -->
+    <h3>3. The Kernel Trick: Mapping into Infinite Dimensions</h3>
+    <p>When data is fundamentally non-linear (e.g. concentric circles), linear hyperplanes fail. The classical solution is to project features into a higher-dimensional space using mapping $\phi(\mathbf{x})$. However, computing $\phi(\mathbf{x})$ explicitly can be computationally impossible (e.g. mapping 100 features into all polynomial combinations of degree 10 produces $10^{13}$ dimensions!).</p>
+
+    <p><strong>The Kernel Trick</strong> solves this: because the SVM dual optimization problem depends <em>only</em> on inner products $\phi(\mathbf{x}_i)^T \phi(\mathbf{x}_j)$, we can replace the inner product with a <strong>Kernel function $K(\mathbf{x}_i, \mathbf{x}_j)$</strong> that computes the result directly in low-dimensional space without ever evaluating the high-dimensional coordinates!</p>
+
+    <h4>The Radial Basis Function (RBF / Gaussian) Kernel</h4>
+    $$K(\mathbf{x}, \mathbf{z}) = \exp\left( -\gamma \|\mathbf{x} - \mathbf{z}\|_2^2 \right), \quad \gamma = \frac{1}{2\sigma^2}$$
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Support Vector Machines</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.6.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove mathematically that the 1D Radial Basis Function (RBF) Kernel $K(x, z) = \exp\left( -\frac{(x - z)^2}{2} \right)$ corresponds to an inner product in an <strong>infinite-dimensional Hilbert space</strong> $\phi(x)^T \phi(z)$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Expand the Squared Difference:</strong>
+        $$(x - z)^2 = x^2 - 2xz + z^2 \implies -\frac{(x - z)^2}{2} = -\frac{x^2}{2} + xz - \frac{z^2}{2}$$
+        Substitute into the exponential:
+        $$K(x, z) = \exp\left(-\frac{x^2}{2}\right) \cdot \exp(xz) \cdot \exp\left(-\frac{z^2}{2}\right)$$</p>
+
+        <p class="step"><strong>Step 2: Apply the Taylor Series Expansion of the Exponential Function:</strong><br>
+        Recall the infinite Taylor series: $e^u = \sum_{k=0}^\infty \frac{u^k}{k!} = 1 + u + \frac{u^2}{2!} + \frac{u^3}{3!} + \dots$<br>
+        Applying this to $e^{xz}$:
+        $$\exp(xz) = \sum_{k=0}^\infty \frac{(xz)^k}{k!} = \sum_{k=0}^\infty \frac{x^k z^k}{k!} = \sum_{k=0}^\infty \left( \frac{x^k}{\sqrt{k!}} \right) \left( \frac{z^k}{\sqrt{k!}} \right)$$</p>
+
+        <p class="step"><strong>Step 3: Factorize into an Infinite-Dimensional Inner Product:</strong>
+        $$K(x, z) = \sum_{k=0}^\infty \left[ \exp\left(-\frac{x^2}{2}\right) \frac{x^k}{\sqrt{k!}} \right] \left[ \exp\left(-\frac{z^2}{2}\right) \frac{z^k}{\sqrt{k!}} \right]$$
+        Define the infinite-dimensional feature map $\phi(x)$:
+        $$\phi(x) = \exp\left(-\frac{x^2}{2}\right) \begin{bmatrix} 1, & x, & \frac{x^2}{\sqrt{2!}}, & \frac{x^3}{\sqrt{3!}}, & \dots, & \frac{x^k}{\sqrt{k!}}, & \dots \end{bmatrix}^T \in \mathbb{R}^\infty$$
+        Then the kernel evaluation is the exact inner product of two infinite-dimensional vectors:
+        $$K(x, z) = \langle \phi(x), \phi(z) \rangle = \phi(x)^T \phi(z)$$
+        <strong>Q.E.D. The RBF kernel evaluates an inner product across an infinite polynomial feature space in $O(d)$ time and zero extra memory!</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.6: Pegasos Stochastic Subgradient SVM</h3>
+    <p>Below is an industrial implementation of the <strong>Pegasos</strong> (Primal Estimated sub-GrAdient SOlver for SVM) algorithm, training a linear Support Vector Machine in $O(N)$ time via stochastic subgradient descent.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.6 — Pegasos Linear SVM from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch26_svm/pegasos_svm_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch26_svm/pegasos_svm_scratch.py</a></p>
+<pre><code>import numpy as np
+
+class PegasosSVMScratch:
+    def __init__(self, lambda_param=1e-3, n_epochs=50):
+        self.lambda_param = lambda_param
+        self.n_epochs = n_epochs
+        self.w = None
+        self.b = 0.0
+
+    def fit(self, X, y):
+        # y must be in {-1, +1}
+        N, d = X.shape
+        self.w = np.zeros(d)
+        t = 0
+
+        for epoch in range(self.n_epochs):
+            indices = np.random.permutation(N)
+            for i in indices:
+                t += 1
+                eta = 1.0 / (self.lambda_param * t) # Decaying learning rate
+                x_i, y_i = X[i], y[i]
+
+                # Functional margin condition: y_i * (w^T x_i + b) < 1
+                if y_i * (np.dot(self.w, x_i) + self.b) < 1.0:
+                    # Subgradient step: w = (1 - eta * lambda) * w + eta * y_i * x_i
+                    self.w = (1.0 - eta * self.lambda_param) * self.w + eta * y_i * x_i
+                    self.b += eta * y_i
+                else:
+                    # Margin satisfied: shrink w only
+                    self.w = (1.0 - eta * self.lambda_param) * self.w
+
+    def predict(self, X):
+        return np.sign(np.dot(X, self.w) + self.b).astype(int)
+
+if __name__ == "__main__":
+    from sklearn.datasets import make_blobs
+    X, y = make_blobs(n_samples=400, centers=2, random_state=42)
+    y = np.where(y == 0, -1, 1)
+
+    svm = PegasosSVMScratch(lambda_param=1e-2, n_epochs=30)
+    svm.fit(X, y)
+    preds = svm.predict(X)
+    print(f"Pegasos SVM Accuracy: {np.mean(preds == y) * 100:.2f}%")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.6 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.6: High-Security Network Intrusion &amp; Malware Anomaly Detector</h3>
+        <p class="project-desc">Architect and implement a high-security network packet classifier using One-Class RBF Support Vector Machines, mapping network telemetry into an infinite-dimensional Hilbert space to detect zero-day cyberattacks without ground-truth attack signatures.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch26_svm/pegasos_svm_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch26_svm/pegasos_svm_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In cybersecurity monitoring (CrowdStrike, Cloudflare), zero-day attacks do not match any historical malware signature. In this project, you construct a One-Class RBF Support Vector Machine that defines a tight non-linear geometric boundary around normal server telemetry. Any packet violating the support vector margin is instantaneously flagged as an intrusion with zero false positive cascades.</p>
+      </div>
+    </div>
+  </div>
+</div>

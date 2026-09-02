@@ -1,0 +1,176 @@
+<!-- ======================================================================
+     CHAPTER 2.5B — GRADIENT BOOSTED DECISION TREES (XGBOOST, LIGHTGBM)
+     ====================================================================== -->
+<div class="chapter" id="chapter-2-5b">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.5B</span>
+    <h2 class="chapter-title">Gradient Boosted Decision Trees (GBDT)</h2>
+    <span class="chapter-subtitle">Functional Gradient Descent, The XGBoost Taylor Expansion, LightGBM GOSS &amp; CatBoost</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Deep learning wins on unstructured perceptual data (pixels, audio, text). Gradient Boosted Trees win on structured tabular data. Master both, and you command the entire spectrum of machine learning."</p>
+    <p class="attribution">— Kaggle Grandmaster Maxim</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: FUNCTIONAL GRADIENT DESCENT -->
+    <h3>1. From Bagging to Boosting: Functional Gradient Descent</h3>
+    <p>While Random Forests train trees independently in parallel to reduce variance, <strong>Boosting</strong> trains trees sequentially to reduce bias. Each new tree is explicitly constructed to correct the residual mistakes made by the collective ensemble of all previous trees:</p>
+    $$F_m(\mathbf{x}) = F_{m-1}(\mathbf{x}) + \eta f_m(\mathbf{x})$$
+    <p>Where $\eta \in (0, 1]$ is the shrinkage learning rate.</p>
+
+    <h4>Gradient Boosting as Gradient Descent in Function Space</h4>
+    <p>Jerome Friedman (2001) realized that fitting residuals is mathematically equivalent to <strong>Gradient Descent in Function Space</strong>. In standard parameter optimization, we take steps in parameter space: $\mathbf{w} \leftarrow \mathbf{w} - \eta \nabla_{\mathbf{w}} \mathcal{L}$. In Gradient Boosting, we take steps in <em>prediction space</em>:</p>
+    $$f_m(\mathbf{x}_i) \approx -\left[ \frac{\partial \mathcal{L}(y_i, F(\mathbf{x}_i))}{\partial F(\mathbf{x}_i)} \right]_{F = F_{m-1}}$$
+    <p>The "residuals" fitted by tree $m$ are literally the <strong>Negative Gradients (Pseudo-Residuals)</strong> of the loss function!</p>
+
+    <!-- SECTION 2: XGBOOST DERIVATION -->
+    <h3>2. The XGBoost Formulation: Second-Order Taylor Expansion</h3>
+    <p>Tianqi Chen and Carlos Guestrin (2016) revolutionized machine learning by introducing <strong>XGBoost (eXtreme Gradient Boosting)</strong>. Unlike traditional GBDT which only uses first-order gradients, XGBoost uses a <strong>Second-Order Taylor Expansion</strong> of the loss function, allowing exact analytical optimization of tree leaves.</p>
+
+    <div class="real-world-box">
+      <h4>🏆 The XGBoost Objective Derivation</h4>
+      <p>At step $t$, we seek a new tree $f_t(\mathbf{x})$ that minimizes the objective:</p>
+      $$\mathcal{L}^{(t)} = \sum_{i=1}^N \mathcal{L}\left(y_i, \hat{y}_i^{(t-1)} + f_t(\mathbf{x}_i)\right) + \Omega(f_t)$$
+      <p>Where $\Omega(f_t) = \gamma T + \frac{1}{2} \lambda \sum_{j=1}^T w_j^2$ is the tree complexity penalty ($T$ leaves, weights $w_j$).</p>
+      <p>Approximating the loss using a second-order Taylor expansion $f(x + \Delta x) \approx f(x) + f'(x)\Delta x + \frac{1}{2} f''(x)\Delta x^2$:</p>
+      $$\mathcal{L}^{(t)} \approx \sum_{i=1}^N \left[ \mathcal{L}(y_i, \hat{y}_i^{(t-1)}) + g_i f_t(\mathbf{x}_i) + \frac{1}{2} h_i f_t^2(\mathbf{x}_i) \right] + \gamma T + \frac{1}{2} \lambda \sum_{j=1}^T w_j^2$$
+      <p>Where $g_i = \frac{\partial \mathcal{L}}{\partial \hat{y}_i^{(t-1)}}$ (gradient) and $h_i = \frac{\partial^2 \mathcal{L}}{\partial (\hat{y}_i^{(t-1)})^2}$ (Hessian). Removing constant terms:</p>
+      $$\tilde{\mathcal{L}}^{(t)} = \sum_{j=1}^T \left[ \left( \sum_{i \in I_j} g_i \right) w_j + \frac{1}{2} \left( \sum_{i \in I_j} h_i + \lambda \right) w_j^2 \right] + \gamma T$$
+      <p>Let $G_j = \sum_{i \in I_j} g_i$ and $H_j = \sum_{i \in I_j} h_i$. Differentiating with respect to leaf weight $w_j$ and setting to zero yields the <strong>Optimal Leaf Weight</strong>:</p>
+      $$w_j^* = -\frac{G_j}{H_j + \lambda}$$
+      <p>Substituting $w_j^*$ back into the objective yields the optimal leaf score:</p>
+      $$\tilde{\mathcal{L}}^*(q) = -\frac{1}{2} \sum_{j=1}^T \frac{G_j^2}{H_j + \lambda} + \gamma T$$
+      <p>When evaluating a candidate split partitioning leaf $j$ into Left ($L$) and Right ($R$), the exact <strong>XGBoost Split Gain</strong> is:</p>
+      $$\text{Gain} = \frac{1}{2} \left[ \frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda} - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda} \right] - \gamma$$
+    </div>
+
+    <!-- SECTION 3: LIGHTGBM VS CATBOOST -->
+    <h3>3. High-Scale Engineering: LightGBM &amp; CatBoost</h3>
+    <p>In enterprise datasets (hundreds of millions of rows), XGBoost's exact greedy split search becomes an I/O bottleneck. Two modern frameworks solved this through algorithmic innovations:</p>
+
+    <h4>LightGBM (Microsoft Research)</h4>
+    <ul>
+      <li><strong>Histogram-Based Binning:</strong> Discretizes continuous 32-bit floating-point features into 256 discrete integer bins (1 byte each). Computing histogram bin boundaries takes $O(N)$, and split searching takes $O(\text{bins})$, slashing memory by 80% and speeding up training by 15x.</li>
+      <li><strong>GOSS (Gradient-based One-Side Sampling):</strong> Keeps all samples with large gradients ($|g_i| &gt; a$), and randomly downsamples instances with small gradients ($|g_i| \le a$), focusing training on hard, unlearned errors while preserving statistical expectations.</li>
+      <li><strong>Leaf-Wise (Best-First) Growth:</strong> Grows trees by splitting the single leaf that maximizes global loss reduction, rather than growing level-by-level.</li>
+    </ul>
+
+    <h4>CatBoost (Yandex)</h4>
+    <ul>
+      <li><strong>Symmetric (Oblivious) Trees:</strong> Uses the exact same split condition across all nodes at the same tree depth. This allows the tree structure to be evaluated on CPUs using bitwise SIMD instructions, achieving microsecond inference latency.</li>
+      <li><strong>Ordered Target Encoding:</strong> Encodes high-cardinality categorical variables using historical cumulative averages, mathematically eliminating target leakage.</li>
+    </ul>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Gradient Boosting</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.5B.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In XGBoost, prove why the regularization parameter $\lambda$ in the denominator of the optimal leaf weight formula $w_j^* = -\frac{G_j}{H_j + \lambda}$ acts as an $L_2$ shrinkage stabilizer.</p>
+        <ol>
+          <li>Evaluate $w_j^*$ when sample count in leaf $j$ is small (few samples, small $H_j$).</li>
+          <li>Explain why setting $\gamma &gt; 0$ in the split gain formula acts as automated tree pre-pruning.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+
+        <p class="step"><strong>Step 1: Shrinkage Effect of $\lambda$:</strong><br>
+        For squared error loss $\mathcal{L} = \frac{1}{2}(y - \hat{y})^2$, the second derivative is constant: $h_i = 1$.<br>
+        In this case, $H_j = \sum_{i \in I_j} 1 = N_j$ (the exact count of samples in leaf $j$). The leaf weight is:
+        $$w_j^* = -\frac{\sum_{i \in I_j} g_i}{N_j + \lambda}$$
+        Notice what happens when a leaf has very few samples (e.g. $N_j = 1$):
+        <ul>
+          <li>If $\lambda = 0$, $w_j^* = -g_1 / 1 = -g_1$, which makes a massive, volatile prediction step based on a single outlier sample!</li>
+          <li>If $\lambda = 10$, $w_j^* = -g_1 / (1 + 10) = -g_1 / 11$, heavily shrinking the leaf prediction toward zero!</li>
+        </ul>
+        Thus, $\lambda$ strictly prevents leaves with low statistical support from making extreme, overfitted predictions.</p>
+
+        <p class="step"><strong>Step 2: Automated Pre-Pruning via $\gamma$:</strong><br>
+        The split gain formula is:
+        $$\text{Gain} = \frac{1}{2} \left[ \frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda} - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda} \right] - \gamma$$
+        Notice that a split is only performed if $\text{Gain} &gt; 0$, which is equivalent to:
+        $$\frac{1}{2} \left[ \frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda} - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda} \right] &gt; \gamma$$
+        $\gamma$ serves as an explicit threshold: if the improvement in objective function does not exceed $\gamma$, the algorithm refuses to create the split! This enforces automatic early stopping (pre-pruning) during tree growth.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.5B: Minimal Gradient Boosting Regressor</h3>
+    <p>Below is an educational implementation of a Gradient Boosting Regressor in pure Python fitting pseudo-residuals via functional gradient descent.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.5B — Gradient Boosting Regressor from Scratch</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch25b_gradient_boosting/gbdt_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch25b_gradient_boosting/gbdt_scratch.py</a></p>
+<pre><code>import numpy as np
+from sklearn.tree import DecisionTreeRegressor
+
+class GradientBoostingRegressorScratch:
+    def __init__(self, n_estimators=50, learning_rate=0.1, max_depth=3):
+        self.n_estimators = n_estimators
+        self.learning_rate = learning_rate
+        self.max_depth = max_depth
+        self.base_pred = None
+        self.trees = []
+
+    def fit(self, X, y):
+        # 1. Initialize base model with constant mean prediction
+        self.base_pred = np.mean(y)
+        f_m = np.full(len(y), self.base_pred)
+
+        for _ in range(self.n_estimators):
+            # 2. Compute negative gradient (pseudo-residuals) for MSE loss:
+            # L = 0.5 * (y - f)^2 ==> -dL/df = (y - f)
+            residuals = y - f_m
+
+            # 3. Fit weak regression tree to residuals
+            tree = DecisionTreeRegressor(max_depth=self.max_depth)
+            tree.fit(X, residuals)
+            self.trees.append(tree)
+
+            # 4. Update ensemble predictions with shrinkage
+            f_m += self.learning_rate * tree.predict(X)
+
+    def predict(self, X):
+        preds = np.full(len(X), self.base_pred)
+        for tree in self.trees:
+            preds += self.learning_rate * tree.predict(X)
+        return preds
+
+if __name__ == "__main__":
+    np.random.seed(42)
+    X = np.linspace(-3, 3, 200).reshape(-1, 1)
+    y = np.sin(X).ravel() + 0.1 * np.random.randn(200)
+
+    gb = GradientBoostingRegressorScratch(n_estimators=40, learning_rate=0.1, max_depth=2)
+    gb.fit(X, y)
+    preds = gb.predict(X)
+    mse = np.mean((preds - y) ** 2)
+    print(f"Gradient Boosting Regressor MSE: {mse:.4f}")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.5B Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.5B: Industrial Click-Through &amp; Conversion Rate GBDT Engine</h3>
+        <p class="project-desc">Architect and implement an end-to-end industrial GBDT ranking service using LightGBM and XGBoost, implementing custom second-order focal loss objectives, monotonic feature constraints, and automated early stopping.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch25b_gradient_boosting/gbdt_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch25b_gradient_boosting/gbdt_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In e-commerce search ranking (Amazon, Walmart), tabular features (product price, rating, seller trust, user click recency) dominate model predictions. In this project, you build an industrial GBDT serving pipeline that enforces monotonic business constraints (e.g. higher product prices must never increase predicted conversion probability all else equal) and handles millions of real-time queries per second.</p>
+      </div>
+    </div>
+  </div>
+</div>

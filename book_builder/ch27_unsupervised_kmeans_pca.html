@@ -1,0 +1,163 @@
+<!-- ======================================================================
+     CHAPTER 2.7 — UNSUPERVISED LEARNING: K-MEANS++ & PCA
+     ====================================================================== -->
+<div class="chapter" id="chapter-2-7">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.7</span>
+    <h2 class="chapter-title">Unsupervised Learning: K-Means++ &amp; PCA</h2>
+    <span class="chapter-subtitle">Clustering Inertia, The K-Means++ $D^2$ Theorem &amp; PCA Variance Maximization</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Most of human and animal learning is unsupervised. If intelligence was a cake, unsupervised learning would be the cake, supervised learning would be the icing on the cake, and reinforcement learning would be the cherry on the cake."</p>
+    <p class="attribution">— Yann LeCun</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: K-MEANS & K-MEANS++ -->
+    <h3>1. K-Means Clustering &amp; The $D^2$ Initialization Theorem</h3>
+    <p>In unsupervised learning, we are given unlabeled data $X = \{\mathbf{x}_1, \dots, \mathbf{x}_N\} \subset \mathbb{R}^d$ and must discover natural groupings or low-dimensional manifolds. <strong>$K$-Means</strong> partitions the dataset into $K$ disjoint clusters $C = \{C_1, \dots, C_K\}$ by minimizing the <strong>Within-Cluster Sum of Squares (Inertia)</strong>:</p>
+    $$J(C, \boldsymbol{\mu}) = \sum_{k=1}^K \sum_{\mathbf{x}_i \in C_k} \|\mathbf{x}_i - \boldsymbol{\mu}_k\|_2^2$$
+    <p>Where $\boldsymbol{\mu}_k = \frac{1}{|C_k|} \sum_{\mathbf{x}_i \in C_k} \mathbf{x}_i$ is the centroid (mean) of cluster $k$.</p>
+
+    <h4>Lloyd's Alternating Algorithm</h4>
+    <ol>
+      <li><strong>Assignment Step:</strong> Hold centroids $\boldsymbol{\mu}$ fixed. Assign each point $\mathbf{x}_i$ to its nearest centroid:
+      $$c_i = \arg\min_{k \in \{1,\dots,K\}} \|\mathbf{x}_i - \boldsymbol{\mu}_k\|_2^2$$</li>
+      <li><strong>Update Step:</strong> Hold assignments $c_i$ fixed. Recompute each centroid as the center of mass of its assigned points:
+      $$\boldsymbol{\mu}_k = \frac{1}{|C_k|} \sum_{i: c_i = k} \mathbf{x}_i$$</li>
+    </ol>
+    <p>Every step strictly decreases the objective $J$, guaranteeing convergence to a local minimum. However, standard random initialization frequently traps the algorithm in terrible local optima.</p>
+
+    <div class="real-world-box">
+      <h4>🏆 The K-Means++ $D^2$ Initialization Theorem (Arthur &amp; Vassilvitskii, 2007)</h4>
+      <p>Standard random initialization produces arbitrarily bad clusterings (unbounded approximation ratio). Arthur and Vassilvitskii proved that initializing centroids using <strong>$D^2$ sampling</strong> guarantees an expected cost within $O(\log K)$ of the optimal clustering!</p>
+      <ol>
+        <li>Choose the first centroid $\boldsymbol{\mu}_1$ uniformly at random from dataset $X$.</li>
+        <li>For each point $\mathbf{x}_i$, compute $D(\mathbf{x}_i) = \min_{j} \|\mathbf{x}_i - \boldsymbol{\mu}_j\|_2$, the shortest distance to any already chosen centroid.</li>
+        <li>Choose the next centroid $\boldsymbol{\mu}_k$ from $X$ with probability proportional to the squared distance:
+        $$P(\mathbf{x}_i) = \frac{D(\mathbf{x}_i)^2}{\sum_{j=1}^N D(\mathbf{x}_j)^2}$$</li>
+        <li>Repeat steps 2 and 3 until $K$ centroids are chosen.</li>
+      </ol>
+      <p><em>Geometric Intuition:</em> Points that are far away from existing centroids have an exponentially higher probability of being chosen as the next center, naturally spreading centroids across distinct spatial modes!</p>
+    </div>
+
+    <!-- SECTION 2: PCA VARIANCE MAXIMIZATION -->
+    <h3>2. Principal Component Analysis (PCA): Maximum Variance</h3>
+    <p>High-dimensional data ($d &gt; 1,000$) suffers from the <strong>Curse of Dimensionality</strong>: points become equidistant, distance metrics lose discriminative power, and compute explodes. <strong>Principal Component Analysis (PCA)</strong> finds an orthogonal linear projection from $\mathbb{R}^d$ to $\mathbb{R}^k$ ($k \ll d$) that preserves the maximum possible variance.</p>
+
+    <h4>Mathematical Derivation via Lagrange Multipliers</h4>
+    <p>Assume data $X \in \mathbb{R}^{N \times d}$ is centered ($\sum_{i=1}^N \mathbf{x}_i = \mathbf{0}$). We seek a unit direction $\mathbf{u}_1 \in \mathbb{R}^d$ ($\|\mathbf{u}_1\|_2 = 1$) such that the variance of the projected data $X \mathbf{u}_1$ is maximized:</p>
+    $$\text{Var}(X \mathbf{u}_1) = \frac{1}{N} (X \mathbf{u}_1)^T (X \mathbf{u}_1) = \mathbf{u}_1^T \left( \frac{1}{N} X^T X \right) \mathbf{u}_1 = \mathbf{u}_1^T \Sigma \mathbf{u}_1$$
+    <p>Where $\Sigma = \frac{1}{N} X^T X$ is the $d \times d$ sample covariance matrix. We formulate the constrained optimization problem:</p>
+    $$\max_{\mathbf{u}_1} \mathbf{u}_1^T \Sigma \mathbf{u}_1 \quad \text{subject to } \mathbf{u}_1^T \mathbf{u}_1 = 1$$
+    <p>Construct the Lagrangian:</p>
+    $$\mathcal{L}(\mathbf{u}_1, \lambda_1) = \mathbf{u}_1^T \Sigma \mathbf{u}_1 - \lambda_1 (\mathbf{u}_1^T \mathbf{u}_1 - 1)$$
+    <p>Setting the gradient to zero:</p>
+    $$\nabla_{\mathbf{u}_1} \mathcal{L} = 2 \Sigma \mathbf{u}_1 - 2 \lambda_1 \mathbf{u}_1 = \mathbf{0} \implies \Sigma \mathbf{u}_1 = \lambda_1 \mathbf{u}_1$$
+    <p>This is the exact definition of an <strong>Eigenvector Equation</strong>! Multiplying by $\mathbf{u}_1^T$ on the left:</p>
+    $$\mathbf{u}_1^T \Sigma \mathbf{u}_1 = \lambda_1 \mathbf{u}_1^T \mathbf{u}_1 = \lambda_1 (1) = \lambda_1$$
+    <p>To maximize variance $\mathbf{u}_1^T \Sigma \mathbf{u}_1$, we must choose $\mathbf{u}_1$ to be the eigenvector corresponding to the <strong>Largest Eigenvalue $\lambda_1 = \lambda_{\max}(\Sigma)$</strong>!</p>
+
+    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Unsupervised Learning</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.7.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove the mathematical equivalence between Principal Component Analysis (PCA) and Singular Value Decomposition (SVD). Given centered data matrix $X \in \mathbb{R}^{N \times d}$ with SVD $X = U \Sigma V^T$, prove that the right singular vectors $V$ are the exact principal component directions of the covariance matrix, and derive the relationship between singular values $\sigma_i$ and eigenvalues $\lambda_i$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Express Sample Covariance Matrix in SVD Terms:</strong><br>
+        The sample covariance matrix of centered data $X$ is:
+        $$C = \frac{1}{N} X^T X$$
+        Substitute the SVD of $X = U \Sigma V^T$:
+        $$C = \frac{1}{N} (U \Sigma V^T)^T (U \Sigma V^T) = \frac{1}{N} (V \Sigma^T U^T) (U \Sigma V^T)$$
+        Since $U \in \mathbb{R}^{N \times N}$ is orthogonal ($U^T U = I_N$):
+        $$C = \frac{1}{N} V (\Sigma^T \Sigma) V^T = V \left( \frac{\Sigma^T \Sigma}{N} \right) V^T$$</p>
+
+        <p class="step"><strong>Step 2: Match with the Spectral Eigendecomposition:</strong><br>
+        Recall the Spectral Theorem: any symmetric positive semi-definite matrix $C$ can be decomposed as $C = Q \Lambda Q^T$, where $Q$ contains eigenvectors and $\Lambda$ is a diagonal matrix of eigenvalues.<br>
+        Comparing $C = V \left( \frac{\Sigma^T \Sigma}{N} \right) V^T$ with $C = Q \Lambda Q^T$:
+        <ul>
+          <li>The right singular vectors $V$ are <strong>identical to the eigenvectors $Q$</strong> of the covariance matrix!</li>
+          <li>The eigenvalues of the covariance matrix are related to the singular values by:
+          $$\lambda_i = \frac{\sigma_i^2}{N}$$</li>
+        </ul>
+        <em>Production Value:</em> In software engineering, we <strong>never compute $X^T X$ directly</strong> to perform PCA, because forming $X^T X$ squares the condition number ($\kappa(X^T X) = \kappa(X)^2$), destroying numerical precision! Instead, high-performance libraries compute the SVD of $X$ directly, extracting principal components in $O(N d \min(N, d))$ with double the numerical stability.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 4: CODE LAB -->
+    <h3>3. Production Code Lab 2.7: SVD-Based PCA from First Principles</h3>
+    <p>Below is a production implementation of SVD-based PCA in pure Python, calculating explained variance ratios without forming the $X^T X$ covariance matrix.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.7 — High-Stability SVD PCA Engine</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch27_unsupervised_learning/pca_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch27_unsupervised_learning/pca_scratch.py</a></p>
+<pre><code>import numpy as np
+
+class PCAScratch:
+    def __init__(self, n_components=2):
+        self.n_components = n_components
+        self.components_ = None
+        self.explained_variance_ratio_ = None
+        self.mean_ = None
+
+    def fit(self, X):
+        N = X.shape[0]
+        # 1. Center the data
+        self.mean_ = np.mean(X, axis=0)
+        X_centered = X - self.mean_
+
+        # 2. SVD: X = U * S * V^T (No X^T X covariance matrix needed!)
+        U, S, Vt = np.linalg.svd(X_centered, full_matrices=False)
+
+        # 3. Principal components are rows of Vt (columns of V)
+        self.components_ = Vt[:self.n_components]
+
+        # 4. Explained variance: lambda_i = S_i^2 / (N - 1)
+        explained_variance = (S ** 2) / (N - 1)
+        total_variance = np.sum(explained_variance)
+        self.explained_variance_ratio_ = explained_variance[:self.n_components] / total_variance
+
+    def transform(self, X):
+        X_centered = X - self.mean_
+        # Project onto top-k orthogonal components
+        return X_centered @ self.components_.T
+
+if __name__ == "__main__":
+    np.random.seed(42)
+    X = np.random.randn(200, 10)
+    pca = PCAScratch(n_components=3)
+    pca.fit(X)
+    X_proj = pca.transform(X)
+    print(f"Projected Shape               : {X_proj.shape}")
+    print(f"Explained Variance Ratios (3) : {np.round(pca.explained_variance_ratio_, 4)}")
+    print(f"Total Variance Captured       : {np.sum(pca.explained_variance_ratio_)*100:.2f}%")</code></pre>
+    </div>
+
+    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.7 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.7: High-Dimensional Customer Segmentation &amp; Embedding Projector</h3>
+        <p class="project-desc">Architect and implement a production customer behavioral segmentation service combining $K$-Means++ with SVD-based PCA projection, silhouette score validation, and automated centroid drift alerting.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch27_unsupervised_learning/pca_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch27_unsupervised_learning/pca_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In e-commerce platforms (Spotify, Amazon), user interactions are captured across hundreds of behavioral signals (listen duration, search queries, churn indicators). In this project, you construct an end-to-end unsupervised pipeline that projects 500-dimensional user vectors down to 10 principal dimensions, clusters users using $K$-Means++, and provides real-time customer persona tags for targeted marketing campaigns.</p>
+      </div>
+    </div>
+  </div>
+</div>

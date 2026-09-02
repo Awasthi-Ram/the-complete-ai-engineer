@@ -1,0 +1,187 @@
+<!-- ======================================================================
+     CHAPTER 2.3 — LOGISTIC REGRESSION & MAXIMUM LIKELIHOOD
+     ====================================================================== -->
+<div class="chapter" id="chapter-2-3">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.3</span>
+    <h2 class="chapter-title">Logistic Regression &amp; Maximum Likelihood</h2>
+    <span class="chapter-subtitle">Odds Ratios, The Sigmoid Identity, BCE Loss &amp; Iteratively Reweighted Least Squares</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Prediction is very difficult, especially if it's about the future."</p>
+    <p class="attribution">— Niels Bohr</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE ODDS RATIO & SIGMOID -->
+    <h3>1. From Linear Output to Calibrated Probability</h3>
+    <p>Why can we not simply use linear regression $y = \mathbf{w}^T \mathbf{x}$ for binary classification ($y \in \{0, 1\}$)?</p>
+    <ol>
+      <li><strong>Unbounded Range:</strong> A linear function $\mathbf{w}^T \mathbf{x}$ has range $(-\infty, +\infty)$. For extreme feature values, it predicts probabilities like $-2.5$ or $+3.8$, violating the fundamental axioms of probability.</li>
+      <li><strong>Sensitivity to Outliers:</strong> Squaring errors on correctly classified points far from the decision boundary tilts the line, destroying classification accuracy.</li>
+    </ol>
+
+    <h4>The Log-Odds (Logit) Transformation</h4>
+    <p>To map probability $p \in (0, 1)$ onto the real line $(-\infty, +\infty)$, we first define the <strong>Odds Ratio</strong>—the ratio of the probability of an event occurring to the probability of it not occurring:</p>
+    $$\text{Odds} = \frac{p}{1 - p} \in (0, +\infty)$$
+    <p>Taking the natural logarithm yields the <strong>Logit (Log-Odds)</strong> function, which maps $(0, 1)$ smoothly onto $(-\infty, +\infty)$:</p>
+    $$\text{logit}(p) = \ln\left(\frac{p}{1 - p}\right) = \mathbf{w}^T \mathbf{x}$$
+    <p>Now, solve for $p$ by exponentiating both sides:</p>
+    $$\frac{p}{1 - p} = e^{\mathbf{w}^T \mathbf{x}} \implies p = e^{\mathbf{w}^T \mathbf{x}} (1 - p) = e^{\mathbf{w}^T \mathbf{x}} - p e^{\mathbf{w}^T \mathbf{x}}$$
+    $$p (1 + e^{\mathbf{w}^T \mathbf{x}}) = e^{\mathbf{w}^T \mathbf{x}} \implies p = \frac{e^{\mathbf{w}^T \mathbf{x}}}{1 + e^{\mathbf{w}^T \mathbf{x}}} = \frac{1}{1 + e^{-\mathbf{w}^T \mathbf{x}}} = \sigma(\mathbf{w}^T \mathbf{x})$$
+    <p>This derives the <strong>Sigmoid Function</strong> $\sigma(z) = \frac{1}{1 + e^{-z}}$!</p>
+
+    <div class="key-insight">
+      <p><strong>The Crucial Sigmoid Derivative Identity:</strong></p>
+      $$\sigma'(z) = \frac{d}{dz} (1 + e^{-z})^{-1} = -(1 + e^{-z})^{-2} (-e^{-z}) = \frac{1}{1 + e^{-z}} \cdot \frac{e^{-z}}{1 + e^{-z}} = \sigma(z) (1 - \sigma(z))$$
+      <p><em>The derivative of the sigmoid is simply its own output multiplied by $(1 - \text{output})$! This algebraic property makes logistic gradient calculations blazingly fast.</em></p>
+    </div>
+
+    <!-- SECTION 2: BINARY CROSS ENTROPY -->
+    <h3>2. Binary Cross-Entropy Loss &amp; The Gradient Identity</h3>
+    <p>For a binary label $y_i \in \{0, 1\}$ and predicted probability $p_i = \sigma(\mathbf{w}^T \mathbf{x}_i)$, the Bernoulli probability mass function is:</p>
+    $$P(y_i \mid \mathbf{x}_i) = p_i^{y_i} (1 - p_i)^{1 - y_i}$$
+    <p>The Negative Log-Likelihood over $N$ observations produces the <strong>Binary Cross-Entropy (BCE) Loss</strong>:</p>
+    $$\mathcal{L}(\mathbf{w}) = -\frac{1}{N} \sum_{i=1}^N \left[ y_i \ln(p_i) + (1 - y_i) \ln(1 - p_i) \right]$$
+
+    <h4>Deriving the Gradient Vector</h4>
+    <p>Let $z_i = \mathbf{w}^T \mathbf{x}_i$. By the chain rule:</p>
+    $$\frac{\partial \mathcal{L}}{\partial \mathbf{w}} = \sum_{i=1}^N \frac{\partial \mathcal{L}}{\partial p_i} \frac{\partial p_i}{\partial z_i} \frac{\partial z_i}{\partial \mathbf{w}}$$
+    <p>Evaluating each derivative:</p>
+    <ul>
+      <li>$\frac{\partial \mathcal{L}}{\partial p_i} = -\frac{y_i}{p_i} + \frac{1 - y_i}{1 - p_i} = \frac{p_i - y_i}{p_i(1 - p_i)}$</li>
+      <li>$\frac{\partial p_i}{\partial z_i} = p_i (1 - p_i)$</li>
+      <li>$\frac{\partial z_i}{\partial \mathbf{w}} = \mathbf{x}_i$</li>
+    </ul>
+    $$\frac{\partial \mathcal{L}}{\partial \mathbf{w}} = \frac{1}{N} \sum_{i=1}^N \left[ \frac{p_i - y_i}{p_i(1 - p_i)} \right] \left[ p_i (1 - p_i) \right] \mathbf{x}_i = \frac{1}{N} \sum_{i=1}^N (p_i - y_i) \mathbf{x}_i$$
+    <p>In matrix notation:</p>
+    $$\nabla_{\mathbf{w}} \mathcal{L}(\mathbf{w}) = \frac{1}{N} X^T (\mathbf{p} - \mathbf{y})$$
+    <p>Notice the stunning mathematical symmetry: this gradient has the <strong>exact same algebraic form as Linear Regression</strong> $\frac{1}{N} X^T (\hat{\mathbf{y}} - \mathbf{y})$! The only difference is that $\hat{\mathbf{y}}$ is squashed through the sigmoid function.</p>
+
+    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Logistic Regression</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.3.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove that Binary Cross-Entropy loss for Logistic Regression is <strong>strictly convex</strong> with respect to weight vector $\mathbf{w}$.</p>
+        <ol>
+          <li>Derive the analytical Hessian matrix $H(\mathbf{w}) = \nabla_{\mathbf{w}}^2 \mathcal{L}(\mathbf{w})$.</li>
+          <li>Prove that $H(\mathbf{w})$ is positive semi-definite everywhere, showing that Logistic Regression is guaranteed to have NO suboptimal local minima.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Compute the Second Derivative (Hessian Matrix):</strong><br>
+        Recall the gradient vector: $\nabla_{\mathbf{w}} \mathcal{L} = \frac{1}{N} \sum_{i=1}^N (p_i - y_i) \mathbf{x}_i$, where $p_i = \sigma(\mathbf{w}^T \mathbf{x}_i)$.<br>
+        Differentiating with respect to $\mathbf{w}$ again:
+        $$H(\mathbf{w}) = \frac{\partial}{\partial \mathbf{w}} \left[ \frac{1}{N} \sum_{i=1}^N (p_i - y_i) \mathbf{x}_i \right] = \frac{1}{N} \sum_{i=1}^N \mathbf{x}_i \left( \frac{\partial p_i}{\partial \mathbf{w}} \right)^T$$
+        Using the sigmoid derivative: $\frac{\partial p_i}{\partial \mathbf{w}} = p_i(1 - p_i) \mathbf{x}_i$.<br>
+        Therefore:
+        $$H(\mathbf{w}) = \frac{1}{N} \sum_{i=1}^N p_i (1 - p_i) \mathbf{x}_i \mathbf{x}_i^T$$
+        In matrix notation, let $D \in \mathbb{R}^{N \times N}$ be a diagonal matrix with entries $D_{ii} = p_i (1 - p_i)$:
+        $$H(\mathbf{w}) = \frac{1}{N} X^T D X$$</p>
+
+        <p class="step"><strong>Step 2: Prove Positive Semi-Definiteness:</strong><br>
+        Let $\mathbf{z} \in \mathbb{R}^d$ be any arbitrary non-zero vector. Evaluate the quadratic form $\mathbf{z}^T H \mathbf{z}$:
+        $$\mathbf{z}^T H \mathbf{z} = \mathbf{z}^T \left( \frac{1}{N} X^T D X \right) \mathbf{z} = \frac{1}{N} (X \mathbf{z})^T D (X \mathbf{z})$$
+        Let $\mathbf{v} = X \mathbf{z} \in \mathbb{R}^N$. Then:
+        $$\mathbf{z}^T H \mathbf{z} = \frac{1}{N} \mathbf{v}^T D \mathbf{v} = \frac{1}{N} \sum_{i=1}^N D_{ii} v_i^2 = \frac{1}{N} \sum_{i=1}^N p_i (1 - p_i) v_i^2$$
+        Notice two physical facts:
+        <ol>
+          <li>For any $z \in \mathbb{R}$, the sigmoid output is strictly bounded: $p_i \in (0, 1)$.</li>
+          <li>Therefore, $p_i (1 - p_i) &gt; 0$ for all samples.</li>
+          <li>The square of any real number is non-negative: $v_i^2 \ge 0$.</li>
+        </ol>
+        Since every term in the summation is the product of two positive numbers and a non-negative square:
+        $$\mathbf{z}^T H \mathbf{z} \ge 0, \quad \forall \mathbf{z} \in \mathbb{R}^d$$
+        <strong>Q.E.D. The Hessian is positive semi-definite everywhere. Logistic Regression is strictly convex, guaranteeing that any stationary point reached by gradient descent is a global optimum!</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 4: CODE LAB -->
+    <h3>3. Production Code Lab 2.3: Logistic Regression with Newton-Raphson IRLS</h3>
+    <p>While first-order gradient descent requires hundreds of iterations, the second-order <strong>Newton-Raphson (IRLS)</strong> algorithm uses the exact Hessian to converge to machine precision in 5 to 7 steps!</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.3 — Logistic Regression &amp; Second-Order IRLS Solver</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch23_logistic_regression/logistic_regression_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch23_logistic_regression/logistic_regression_scratch.py</a></p>
+<pre><code>import numpy as np
+
+class LogisticRegressionIRLS:
+    def __init__(self, max_iter=20, tol=1e-6):
+        self.max_iter = max_iter
+        self.tol = tol
+        self.w = None
+
+    def _sigmoid(self, z):
+        return 1.0 / (1.0 + np.exp(-np.clip(z, -250, 250)))
+
+    def fit(self, X, y):
+        N, d = X.shape
+        X_b = np.c_[np.ones((N, 1)), X]
+        self.w = np.zeros(d + 1)
+
+        for iteration in range(self.max_iter):
+            p = self._sigmoid(X_b @ self.w)
+            
+            # Gradient: (1/N) * X^T (p - y)
+            grad = (X_b.T @ (p - y)) / N
+
+            # Hessian: (1/N) * X^T D X, where D = p * (1 - p)
+            D = p * (1.0 - p)
+            # Efficient computation without allocating NxN diagonal matrix:
+            H = (X_b.T * D) @ X_b / N + 1e-5 * np.eye(d + 1) # Regularization for invertibility
+
+            # Newton-Raphson update: w = w - H^-1 * grad
+            delta_w = np.linalg.solve(H, grad)
+            self.w -= delta_w
+
+            if np.linalg.norm(delta_w) < self.tol:
+                print(f"Newton-Raphson converged in {iteration+1} iterations!")
+                break
+
+    def predict_proba(self, X):
+        X_b = np.c_[np.ones((X.shape[0], 1)), X]
+        return self._sigmoid(X_b @ self.w)
+
+    def predict(self, X, threshold=0.5):
+        return (self.predict_proba(X) >= threshold).astype(int)
+
+if __name__ == "__main__":
+    np.random.seed(42)
+    X = np.random.randn(500, 3)
+    true_w = np.array([-0.5, 1.8, -2.1, 0.9])
+    probs = 1.0 / (1.0 + np.exp(-np.c_[np.ones((500, 1)), X] @ true_w))
+    y = np.random.binomial(1, probs)
+
+    clf = LogisticRegressionIRLS()
+    clf.fit(X, y)
+    print("Estimated Weights:", np.round(clf.w, 3))
+    print("True Weights     :", true_w)</code></pre>
+    </div>
+
+    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.3 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.3: Production Ad Click-Through Rate (CTR) Estimator &amp; Calibrator</h3>
+        <p class="project-desc">Build an industrial CTR prediction service using sparse logistic regression with Platt scaling calibration and expected calibration error (ECE) tracking for ad auction bidding engines.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch23_logistic_regression/logistic_regression_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch23_logistic_regression/logistic_regression_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In real-time ad bidding (Google AdSense, Meta Ads), a model does not just need to classify 0 or 1; it must output an <em>exact calibrated probability</em> of click $p \in [0, 1]$, because the expected value of the bid is $\text{Bid} = \text{CPC} \times p$. If a model is uncalibrated (predicting $0.08$ when true click probability is $0.02$), the platform overbids by 400% and bankrupts the advertiser. In this project, you build an end-to-end logistic scoring engine with Isotonic/Platt calibration curves.</p>
+      </div>
+    </div>
+  </div>
+</div>

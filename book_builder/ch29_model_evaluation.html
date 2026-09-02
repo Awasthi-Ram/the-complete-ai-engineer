@@ -1,0 +1,196 @@
+<!-- ======================================================================
+     CHAPTER 2.9 — MODEL EVALUATION, ROC-AUC & CALIBRATION
+     ====================================================================== -->
+<div class="chapter" id="chapter-2-9">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.9</span>
+    <h2 class="chapter-title">Model Evaluation, ROC-AUC &amp; Calibration</h2>
+    <span class="chapter-subtitle">The Mann-Whitney U Theorem, Precision-Recall Dynamics &amp; Expected Calibration Error</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"When a measure becomes a target, it ceases to be a good measure."</p>
+    <p class="attribution">— Goodhart's Law</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: BEYOND ACCURACY -->
+    <h3>1. The Tyranny of Accuracy &amp; The Confusion Matrix</h3>
+    <p>In academic toy problems with balanced $50/50$ classes, classification accuracy ($\frac{\text{Correct}}{\text{Total}}$) is an intuitive metric. In production enterprise AI, accuracy is virtually useless.</p>
+
+    <p>Consider credit card fraud detection: out of $1,000,000$ transactions, exactly $100$ are fraudulent ($0.01\%$ prevalence). A trivial dummy classifier that outputs <code>return 0</code> for every transaction achieves a phenomenal <strong>$99.99\%$ accuracy</strong> while failing to catch a single dollar of fraudulent theft! Evaluating models requires dissecting the <strong>Confusion Matrix</strong>:</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Mathematical Formula</th>
+          <th>Physical Meaning</th>
+          <th>Critical Production Context</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Precision</strong></td>
+          <td>$\frac{\text{TP}}{\text{TP} + \text{FP}}$</td>
+          <td>When the model predicts Positive, how often is it right?</td>
+          <td>Spam filters, automated ban hammers (Minimize False Alarms).</td>
+        </tr>
+        <tr>
+          <td><strong>Recall (Sensitivity / TPR)</strong></td>
+          <td>$\frac{\text{TP}}{\text{TP} + \text{FN}}$</td>
+          <td>Out of all actual Positive cases, how many did the model catch?</td>
+          <td>Cancer screening, fraud detection (Minimize Missed Detections).</td>
+        </tr>
+        <tr>
+          <td><strong>Specificity (TNR)</strong></td>
+          <td>$\frac{\text{TN}}{\text{TN} + \text{FP}}$</td>
+          <td>Out of all actual Negative cases, how many were correctly identified?</td>
+          <td>Baseline population filtering.</td>
+        </tr>
+        <tr>
+          <td><strong>$F_1$ Score</strong></td>
+          <td>$2 \cdot \frac{\text{Precision} \cdot \text{Recall}}{\text{Precision} + \text{Recall}}$</td>
+          <td>Harmonic mean balancing precision and recall.</td>
+          <td>Penalizes extreme disparities (if Precision=1.0 but Recall=0.01, $F_1 \approx 0.02$).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- SECTION 2: ROC-AUC & MANN-WHITNEY U -->
+    <h3>2. Receiver Operating Characteristic (ROC) &amp; The Mann-Whitney U Theorem</h3>
+    <p>Most binary classifiers output a continuous score or probability $s \in [0, 1]$. To make a hard binary decision, we must choose a decision threshold $\tau$. The <strong>ROC Curve</strong> plots the True Positive Rate ($\text{TPR} = \frac{\text{TP}}{P}$) against the False Positive Rate ($\text{FPR} = \frac{\text{FP}}{N}$) across all possible thresholds $\tau \in [0, 1]$.</p>
+
+    <div class="real-world-box">
+      <h4>🏆 The Mann-Whitney U Equivalence Theorem</h4>
+      <p>The Area Under the ROC Curve ($\text{ROC-AUC}$) is not merely a geometric area. It has a profound statistical identity:</p>
+      $$\text{ROC-AUC} = P(S_+ &gt; S_-)$$
+      <p><em>The ROC-AUC is the exact probability that a randomly drawn positive instance receives a higher predicted score than a randomly drawn negative instance!</em></p>
+      <p>Furthermore, it is mathematically identical to the normalized <strong>Mann-Whitney $U$ Rank-Sum Statistic</strong>:</p>
+      $$\text{ROC-AUC} = \frac{U}{N_+ N_-} = \frac{1}{N_+ N_-} \sum_{i=1}^{N_+} \sum_{j=1}^{N_-} \mathbb{I}(s_i^+ &gt; s_j^-)$$
+    </div>
+
+    <!-- SECTION 3: PROBABILITY CALIBRATION -->
+    <h3>3. Probability Calibration: Expected Calibration Error (ECE)</h3>
+    <p>In safety-critical AI (autonomous driving, medical triage, real-time ad bidding), ranking order is insufficient. We require <strong>well-calibrated probabilities</strong>: if a weather model predicts a 70% chance of rain across 100 days, it must rain on exactly 70 of those days.</p>
+
+    <h4>Expected Calibration Error (ECE)</h4>
+    <p>To measure calibration, predictions are grouped into $M$ equally spaced confidence bins $B_1, \dots, B_M$ (e.g. $[0, 0.1], [0.1, 0.2], \dots$). For each bin, we compute its empirical accuracy and average confidence:</p>
+    $$\text{acc}(B_m) = \frac{1}{|B_m|} \sum_{i \in B_m} \mathbb{I}(y_i = \hat{y}_i), \quad \text{conf}(B_m) = \frac{1}{|B_m|} \sum_{i \in B_m} \hat{p}_i$$
+    <p>The <strong>Expected Calibration Error (ECE)</strong> is the weighted average absolute difference:</p>
+    $$\text{ECE} = \sum_{m=1}^M \frac{|B_m|}{N} \left| \text{acc}(B_m) - \text{conf}(B_m) \right|$$
+    <p>Modern deep neural networks (unlike classical logistic regression) are notoriously uncalibrated: due to overparameterization and cross-entropy loss, they produce overconfident predictions ($p \approx 0.999$) even when wrong! Engineers apply <strong>Platt Scaling</strong> or <strong>Isotonic Regression</strong> as post-processing calibration layers.</p>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Evaluation &amp; Metrics</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.9.1</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove that the Area Under the Receiver Operating Characteristic Curve ($\text{ROC-AUC}$) is mathematically equivalent to the normalized Mann-Whitney $U$ statistic:</p>
+        $$\text{AUC} = \frac{1}{N_+ N_-} \sum_{i \in \text{Pos}} \sum_{j \in \text{Neg}} \mathbb{I}(s_i &gt; s_j)$$
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Express AUC as an Integral:</strong><br>
+        Let $F_-(s) = P(S_- \le s)$ be the cumulative distribution function (CDF) of scores for negative samples. The False Positive Rate as a function of threshold $\tau$ is $\text{FPR}(\tau) = P(S_- &gt; \tau) = 1 - F_-(\tau)$.<br>
+        The True Positive Rate is $\text{TPR}(\tau) = P(S_+ &gt; \tau) = 1 - F_+(\tau)$.<br>
+        The area under the curve $\text{TPR}(\text{FPR})$ is defined by the Riemann-Stieltjes integral:
+        $$\text{AUC} = \int_{0}^1 \text{TPR} \, d(\text{FPR})$$
+        Change integration variable from $\text{FPR}$ to threshold $\tau \in (-\infty, +\infty)$:<br>
+        Notice that when $\tau = -\infty$, $\text{FPR} = 1$; when $\tau = +\infty$, $\text{FPR} = 0$.<br>
+        Furthermore, $d(\text{FPR}) = d(1 - F_-(\tau)) = -f_-(\tau) d\tau$, where $f_-(\tau)$ is the probability density function (PDF) of negative scores.</p>
+
+        <p class="step"><strong>Step 2: Evaluate the Integral:</strong>
+        $$\text{AUC} = \int_{+\infty}^{-\infty} \text{TPR}(\tau) (-f_-(\tau) d\tau) = \int_{-\infty}^{+\infty} \text{TPR}(\tau) f_-(\tau) d\tau$$
+        Substitute $\text{TPR}(\tau) = P(S_+ &gt; \tau)$:
+        $$\text{AUC} = \int_{-\infty}^{+\infty} P(S_+ &gt; \tau) f_-(\tau) d\tau$$</p>
+
+        <p class="step"><strong>Step 3: Recognize as an Expectation:</strong><br>
+        By definition of expected value over a continuous random variable $S_-$ with density $f_-(\tau)$:
+        $$\int_{-\infty}^{+\infty} P(S_+ &gt; \tau) f_-(\tau) d\tau = \mathbb{E}_{S_-}[P(S_+ &gt; S_-)] = P(S_+ &gt; S_-)$$
+        For an empirical dataset of $N_+$ positive samples with scores $\{s_i^+\}$ and $N_-$ negative samples with scores $\{s_j^-\}$, the empirical probability is the fraction of all $N_+ \times N_-$ pairs where the positive score exceeds the negative score:
+        $$\text{AUC} = \frac{1}{N_+ N_-} \sum_{i=1}^{N_+} \sum_{j=1}^{N_-} \mathbb{I}(s_i^+ &gt; s_j^-)$$
+        <strong>Q.E.D. ROC-AUC is exactly equal to the probability of correct pairwise ranking!</strong></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.9: ROC-AUC, PR-AUC &amp; ECE from Scratch</h3>
+    <p>Below is a pure Python implementation of ROC-AUC via the Mann-Whitney $U$ rank formula, Precision-Recall AUC, and Expected Calibration Error (ECE).</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.9 — High-Precision Metric &amp; Calibration Evaluator</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch29_model_evaluation/metrics_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch29_model_evaluation/metrics_scratch.py</a></p>
+<pre><code>import numpy as np
+
+def compute_roc_auc_mann_whitney(y_true, y_scores):
+    """
+    Computes exact ROC-AUC via Mann-Whitney U rank statistic in O(N log N) time.
+    """
+    pos_scores = y_scores[y_true == 1]
+    neg_scores = y_scores[y_true == 0]
+    n_pos, n_neg = len(pos_scores), len(neg_scores)
+    if n_pos == 0 or n_neg == 0:
+        return 0.5
+
+    # Combine and rank all scores (1-indexed ranks)
+    all_scores = np.concatenate([pos_scores, neg_scores])
+    ranks = np.argsort(np.argsort(all_scores)) + 1
+    pos_ranks = ranks[:n_pos]
+
+    # Mann-Whitney U formula: U = sum(R_pos) - n_pos*(n_pos + 1)/2
+    u_stat = np.sum(pos_ranks) - (n_pos * (n_pos + 1)) / 2.0
+    return u_stat / (n_pos * n_neg)
+
+def compute_ece(y_true, y_probs, n_bins=10):
+    """
+    Computes Expected Calibration Error (ECE) across n_bins.
+    """
+    bins = np.linspace(0.0, 1.0, n_bins + 1)
+    ece = 0.0
+    N = len(y_true)
+
+    for i in range(n_bins):
+        bin_mask = (y_probs > bins[i]) & (y_probs <= bins[i + 1])
+        bin_count = np.sum(bin_mask)
+        if bin_count > 0:
+            bin_acc = np.mean(y_true[bin_mask])
+            bin_conf = np.mean(y_probs[bin_mask])
+            ece += (bin_count / N) * np.abs(bin_acc - bin_conf)
+
+    return float(ece)
+
+if __name__ == "__main__":
+    y_true = np.array([1, 0, 1, 1, 0, 0, 1, 0])
+    y_scores = np.array([0.9, 0.2, 0.8, 0.65, 0.4, 0.1, 0.85, 0.3])
+
+    auc = compute_roc_auc_mann_whitney(y_true, y_scores)
+    ece = compute_ece(y_true, y_scores, n_bins=5)
+    print(f"Mann-Whitney ROC-AUC : {auc:.4f}")
+    print(f"Calibration Error ECE : {ece:.4f}")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.9 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.9: Production Credit Risk &amp; Fraud Scoring Engine with Threshold Optimization</h3>
+        <p class="project-desc">Architect and implement a production credit risk and fraud evaluation service that sweeps cost-matrix matrices, computes optimal operating thresholds under asymmetric misclassification penalties (where false negatives cost 50x false positives), and applies Platt calibration.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch29_model_evaluation/metrics_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch29_model_evaluation/metrics_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In financial underwriting (PayPal, Affirm), a threshold of 0.5 is meaningless: approving a fraudulent loan costs the company $\$5,000$ in chargebacks, while rejecting a valid customer costs $\$25$ in lost interest fees. In this project, you build an automated threshold optimizer that maps ROC-AUC and PR-AUC curves to expected business profit equations, finding the exact mathematical threshold $\tau^*$ that maximizes revenue.</p>
+      </div>
+    </div>
+  </div>
+</div>

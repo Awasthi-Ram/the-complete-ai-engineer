@@ -1,0 +1,222 @@
+<!-- ======================================================================
+     CHAPTER 2.4 — DECISION TREES & INFORMATION GAIN
+     ====================================================================== -->
+<div class="chapter" id="chapter-2-4">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.4</span>
+    <h2 class="chapter-title">Decision Trees &amp; Information Gain</h2>
+    <span class="chapter-subtitle">CART, Gini Impurity, Axis-Aligned Partitioning &amp; Cost-Complexity Pruning</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"In a forest of a hundred thousand trees, no two leaves are alike. And no two journeys along the same path are alike."</p>
+    <p class="attribution">— Paulo Coelho</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE CART ALGORITHM -->
+    <h3>1. The Recursive Axis-Aligned Partitioning Paradigm</h3>
+    <p>Linear models divide the feature space with a single flat hyperplane ($\mathbf{w}^T \mathbf{x} + b = 0$). While computationally efficient, linear boundaries fail on non-linear geometries (such as the XOR problem or concentric circles) without manual polynomial feature expansion.</p>
+
+    <p><strong>Decision Trees</strong> abandon the global parametric assumption entirely. Instead, they apply a <strong>greedy, top-down recursive partitioning</strong> strategy that divides the feature space $\mathbb{R}^d$ into a collection of mutually exclusive hyper-rectangles using axis-aligned orthogonal cuts ($x_j \le \theta$):</p>
+    $$\hat{y}(\mathbf{x}) = \sum_{m=1}^{|T|} c_m \mathbb{I}(\mathbf{x} \in R_m)$$
+    <p>Where $R_m$ is region $m$ associated with leaf node $m$, and $c_m$ is the leaf output (majority class in classification, or mean target in regression).</p>
+
+    <!-- SECTION 2: IMPURITY METRICS -->
+    <h3>2. Splitting Criteria: Gini Impurity vs. Entropy</h3>
+    <p>At each internal node, the tree must choose the feature $j$ and split threshold $\theta$ that maximizes the purity of the resulting child nodes.</p>
+
+    <h4>Gini Impurity (Breiman's CART)</h4>
+    <p>Let $p_k$ be the proportion of training instances in node $S$ belonging to class $k \in \{1,\dots,C\}$. The <strong>Gini Impurity</strong> measures the probability that a randomly chosen element from the set would be incorrectly labeled if it were randomly labeled according to the distribution of labels in the subset:</p>
+    $$I_G(S) = \sum_{k=1}^C p_k (1 - p_k) = \sum_{k=1}^C (p_k - p_k^2) = \sum_{k=1}^C p_k - \sum_{k=1}^C p_k^2 = 1 - \sum_{k=1}^C p_k^2$$
+    <ul>
+      <li><strong>Pure Node ($p_1 = 1, p_{k \ne 1} = 0$):</strong> $I_G = 1 - 1^2 = 0$ (Minimum impurity).</li>
+      <li><strong>Maximum Impurity (Balanced 2-class, $p_1 = p_2 = 0.5$):</strong> $I_G = 1 - (0.5^2 + 0.5^2) = 0.5$.</li>
+    </ul>
+
+    <h4>Information Gain</h4>
+    <p>When a candidate split partitions dataset $S$ of size $N$ into Left subset $S_L$ of size $N_L$ and Right subset $S_R$ of size $N_R$, the <strong>Information Gain</strong> is the reduction in impurity:</p>
+    $$\Delta I_G = I_G(S) - \left[ \frac{N_L}{N} I_G(S_L) + \frac{N_R}{N} I_G(S_R) \right]$$
+    <p>The CART algorithm selects the optimal split $(j^*, \theta^*)$ by maximizing $\Delta I_G$ across all features and all unique candidate thresholds.</p>
+
+    <!-- SECTION 3: PRUNING -->
+    <h3>3. Overfitting &amp; Minimal Cost-Complexity Pruning</h3>
+    <p>An unconstrained decision tree will grow until every training point sits in its own isolated leaf node ($100\%$ training accuracy). However, such trees have massive variance, capturing random data noise rather than true structural signal.</p>
+
+    <h4>Minimal Cost-Complexity Pruning ($L_0$ Regularization)</h4>
+    <p>Breiman et al. introduced <strong>Cost-Complexity Pruning</strong>, defining a regularized loss function that balances training misclassification rate $\mathcal{R}(T)$ with tree complexity (number of terminal leaves $|T|$):</p>
+    $$\mathcal{R}_\alpha(T) = \mathcal{R}(T) + \alpha |T|$$
+    <p>Where $\alpha \ge 0$ is the regularization parameter:</p>
+    <ul>
+      <li>$\alpha = 0$: The original, unconstrained full tree.</li>
+      <li>$\alpha \to \infty$: The simplest possible tree (a single root node).</li>
+    </ul>
+    <p>For every internal node $t$, collapsing its entire subtree $T_t$ into a single leaf increases error by $\mathcal{R}(t) - \mathcal{R}(T_t)$ while reducing leaf count by $|T_t| - 1$. The node where the cost of complexity reduction is minimized is identified by:</p>
+    $$\alpha_{\text{eff}}(t) = \frac{\mathcal{R}(t) - \mathcal{R}(T_t)}{|T_t| - 1}$$
+    <p>Pruning the node with the smallest $\alpha_{\text{eff}}$ produces a nested sequence of optimal subtrees $T_0 \supset T_1 \supset T_2 \dots$, from which the best subtree is chosen via cross-validation.</p>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Decision Trees</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.4.1</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A parent node $S$ contains $N = 10$ samples: $6$ Positive ($+$) and $4$ Negative ($-$). A candidate split partitions the data into:</p>
+        <ul>
+          <li><strong>Left Child ($S_L$):</strong> $4$ Positive ($+$), $0$ Negative ($-$). ($N_L = 4$).</li>
+          <li><strong>Right Child ($S_R$):</strong> $2$ Positive ($+$), $4$ Negative ($-$). ($N_R = 6$).</li>
+        </ul>
+        <ol>
+          <li>Calculate the initial Gini impurity $I_G(S)$ of the parent node.</li>
+          <li>Calculate the Gini impurities of the Left and Right child nodes.</li>
+          <li>Calculate the exact weighted Information Gain $\Delta I_G$ of this candidate split.</li>
+          <li>Why does high-throughput production software (e.g. XGBoost, scikit-learn) default to Gini Impurity instead of Shannon Entropy?</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+
+        <p class="step"><strong>Step 1: Parent Gini Impurity:</strong><br>
+        $p_+ = \frac{6}{10} = 0.6, \quad p_- = \frac{4}{10} = 0.4$.
+        $$I_G(S) = 1 - (p_+^2 + p_-^2) = 1 - (0.6^2 + 0.4^2) = 1 - (0.36 + 0.16) = 1 - 0.52 = 0.48$$</p>
+
+        <p class="step"><strong>Step 2: Child Node Impurities:</strong><br>
+        <strong>Left Node ($S_L$):</strong> $p_+ = \frac{4}{4} = 1.0, \quad p_- = 0.0$.
+        $$I_G(S_L) = 1 - (1.0^2 + 0.0^2) = 1 - 1 = \mathbf{0.0} \quad (\text{Pure Node!})$$
+        <strong>Right Node ($S_R$):</strong> $p_+ = \frac{2}{6} = \frac{1}{3}, \quad p_- = \frac{4}{6} = \frac{2}{3}$.
+        $$I_G(S_R) = 1 - \left( \left(\frac{1}{3}\right)^2 + \left(\frac{2}{3}\right)^2 \right) = 1 - \left( \frac{1}{9} + \frac{4}{9} \right) = 1 - \frac{5}{9} = \frac{4}{9} \approx \mathbf{0.4444}$$</p>
+
+        <p class="step"><strong>Step 3: Calculate Weighted Information Gain:</strong><br>
+        The weighted child impurity is:
+        $$I_G(\text{Children}) = \frac{N_L}{N} I_G(S_L) + \frac{N_R}{N} I_G(S_R) = \frac{4}{10}(0.0) + \frac{6}{10}\left(\frac{4}{9}\right) = 0 + \frac{24}{90} = \frac{4}{15} \approx 0.2667$$
+        Subtract from parent impurity:
+        $$\Delta I_G = I_G(S) - I_G(\text{Children}) = 0.48 - 0.2667 = \mathbf{0.2133}$$
+        <strong>Result: The split achieves an Information Gain of $0.2133$.</strong></p>
+
+        <p class="step"><strong>Step 4: Why Gini Dominates Production Engines:</strong><br>
+        Shannon Entropy requires evaluating logarithms: $-\sum p_k \log_2(p_k)$. In CPU microcode, evaluating a transcendental logarithmic instruction ($\text{FYL2X}$ or SIMD $\ln$) requires between <strong>20 and 50 clock cycles</strong>. In contrast, Gini impurity requires only multiplication and addition ($1 - \sum p_k^2$), which modern CPU ALUs execute in <strong>1 single clock cycle</strong>! When evaluating billions of candidate splits across millions of samples, Gini runs up to <strong>10x faster</strong> while producing statistically indistinguishable trees.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.4: CART Decision Tree from First Principles</h3>
+    <p>Below is an educational, production-style implementation of a binary CART Decision Tree classifier written in pure Python without scikit-learn.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.4 — Recursive Binary CART Classifier</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch24_decision_trees/decision_tree_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch24_decision_trees/decision_tree_scratch.py</a></p>
+<pre><code>import numpy as np
+
+class TreeNode:
+    def __init__(self, feature=None, threshold=None, left=None, right=None, *, value=None):
+        self.feature = feature
+        self.threshold = threshold
+        self.left = left
+        self.right = right
+        self.value = value
+
+    @property
+    def is_leaf(self):
+        return self.value is not None
+
+class DecisionTreeClassifierScratch:
+    def __init__(self, max_depth=5, min_samples_split=2):
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.root = None
+
+    def _gini(self, y):
+        counts = np.bincount(y)
+        probs = counts / len(y)
+        return 1.0 - np.sum(probs ** 2)
+
+    def _best_split(self, X, y):
+        best_gain = -1.0
+        split_feat, split_thresh = None, None
+        parent_gini = self._gini(y)
+
+        n_samples, n_features = X.shape
+        for feat in range(n_features):
+            thresholds = np.unique(X[:, feat])
+            for thresh in thresholds:
+                left_mask = X[:, feat] <= thresh
+                right_mask = ~left_mask
+
+                if np.sum(left_mask) == 0 or np.sum(right_mask) == 0:
+                    continue
+
+                # Weighted Gini impurity
+                n_l, n_r = np.sum(left_mask), np.sum(right_mask)
+                gini_l = self._gini(y[left_mask])
+                gini_r = self._gini(y[right_mask])
+                weighted_gini = (n_l / n_samples) * gini_l + (n_r / n_samples) * gini_r
+                gain = parent_gini - weighted_gini
+
+                if gain > best_gain:
+                    best_gain = gain
+                    split_feat, split_thresh = feat, thresh
+
+        return split_feat, split_thresh, best_gain
+
+    def _build_tree(self, X, y, depth=0):
+        n_samples, n_labels = X.shape[0], len(np.unique(y))
+        
+        # Base cases: pure node, max depth reached, or min samples threshold
+        if depth >= self.max_depth or n_labels == 1 or n_samples < self.min_samples_split:
+            leaf_val = np.argmax(np.bincount(y))
+            return TreeNode(value=leaf_val)
+
+        feat, thresh, gain = self._best_split(X, y)
+        if gain <= 0:
+            return TreeNode(value=np.argmax(np.bincount(y)))
+
+        left_mask = X[:, feat] <= thresh
+        left_child = self._build_tree(X[left_mask], y[left_mask], depth + 1)
+        right_child = self._build_tree(X[~left_mask], y[~left_mask], depth + 1)
+
+        return TreeNode(feature=feat, threshold=thresh, left=left_child, right=right_child)
+
+    def fit(self, X, y):
+        self.root = self._build_tree(X, y)
+
+    def _predict_sample(self, node, x):
+        if node.is_leaf:
+            return node.value
+        if x[node.feature] <= node.threshold:
+            return self._predict_sample(node.left, x)
+        return self._predict_sample(node.right, x)
+
+    def predict(self, X):
+        return np.array([self._predict_sample(self.root, x) for x in X])
+
+if __name__ == "__main__":
+    from sklearn.datasets import make_moons
+    X, y = make_moons(n_samples=300, noise=0.2, random_state=42)
+    clf = DecisionTreeClassifierScratch(max_depth=4)
+    clf.fit(X, y)
+    preds = clf.predict(X)
+    print(f"Training Accuracy: {np.mean(preds == y) * 100:.2f}%")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.4 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.4: Medical Triage Decision Support &amp; Cost-Complexity Pruning Engine</h3>
+        <p class="project-desc">Build an interpretable clinical decision support system that produces auditable medical triage decision trees, calculates empirical $\alpha_{\text{eff}}$ pruning paths, and generates human-readable diagnostic rules for intensive care units.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch24_decision_trees/decision_tree_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch24_decision_trees/decision_tree_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In clinical medicine and legal compliance, deep neural networks are often rejected as "black boxes" because doctors cannot explain why a patient was denied ICU admission. In this project, you build an interpretable CART engine that outputs human-verifiable rule logic (e.g. <code>IF Troponin &gt; 0.04 AND Systolic_BP &lt; 90 THEN High_Risk</code>) while applying cost-complexity pruning to eliminate spurious edge branches.</p>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,201 @@
+<!-- ======================================================================
+     CHAPTER 2.5 — ENSEMBLE METHODS: RANDOM FORESTS & BAGGING
+     ====================================================================== -->
+<div class="chapter" id="chapter-2-5">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.5</span>
+    <h2 class="chapter-title">Ensemble Methods: Random Forests &amp; Bagging</h2>
+    <span class="chapter-subtitle">Variance Reduction, The 63.2% Bootstrap Theorem, Out-of-Bag Error &amp; Feature Importance</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"None of us is as smart as all of us."</p>
+    <p class="attribution">— Ken Blanchard</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE VARIANCE REDUCTION THEOREM -->
+    <h3>1. The Mathematics of Ensemble Variance Reduction</h3>
+    <p>Individual decision trees are high-variance, low-bias estimators: a slight change in the training dataset completely alters the split thresholds throughout the tree. How can we eliminate this variance without compromising predictive power?</p>
+
+    <h4>The Variance of Averaged Correlated Estimators</h4>
+    <p>Suppose we train $B$ separate decision tree estimators $\hat{f}_1, \hat{f}_2, \dots, \hat{f}_B$, each with variance $\sigma^2$ and positive pairwise correlation $\rho \in [0, 1]$. Consider the ensemble average $\bar{f} = \frac{1}{B} \sum_{i=1}^B \hat{f}_i$. The variance of this ensemble is:</p>
+    $$\text{Var}(\bar{f}) = \text{Var}\left( \frac{1}{B} \sum_{i=1}^B \hat{f}_i \right) = \frac{1}{B^2} \left[ \sum_{i=1}^B \text{Var}(\hat{f}_i) + \sum_{i \neq j} \text{Cov}(\hat{f}_i, \hat{f}_j) \right]$$
+    <p>Since $\text{Var}(\hat{f}_i) = \sigma^2$ and $\text{Cov}(\hat{f}_i, \hat{f}_j) = \rho \sigma^2$, and there are $B(B-1)$ pairwise cross-terms:</p>
+    $$\text{Var}(\bar{f}) = \frac{1}{B^2} \left[ B \sigma^2 + B(B - 1) \rho \sigma^2 \right] = \frac{\sigma^2}{B} + \frac{B - 1}{B} \rho \sigma^2$$
+    $$\text{Var}(\bar{f}) = \rho \sigma^2 + \frac{1 - \rho}{B} \sigma^2$$
+
+    <div class="key-insight">
+      <p><strong>The Fundamental Law of Ensembles:</strong></p>
+      <ul>
+        <li>As the number of trees $B \to \infty$, the second term $\frac{1 - \rho}{B} \sigma^2 \to 0$.</li>
+        <li>The remaining variance is strictly bounded by the correlation term: $\lim_{B \to \infty} \text{Var}(\bar{f}) = \mathbf{\rho \sigma^2}$.</li>
+      </ul>
+      <em>Crucial Engineering Deduction:</em> If your trees are identical ($\rho = 1$), averaging 1,000 trees achieves <strong>zero variance reduction</strong>! To slash variance, Leo Breiman realized that the algorithm must actively <strong>decorrelate the trees (minimize $\rho$)</strong>!
+    </div>
+
+    <!-- SECTION 2: BAGGING & THE 63.2% THEOREM -->
+    <h3>2. Bootstrap Aggregation (Bagging) &amp; The 63.2% Theorem</h3>
+    <p><strong>Bootstrap Aggregation (Bagging)</strong> decorrelates trees by training each tree on an independently drawn <em>bootstrap sample</em>: drawing $N$ samples from dataset $\mathcal{D}$ of size $N$ <strong>with replacement</strong>.</p>
+
+    <div class="real-world-box">
+      <h4>📐 The 63.2% Bootstrap Theorem Dissected</h4>
+      <p>When sampling $N$ items with replacement from a dataset of size $N$, what is the probability that any specific sample $i$ is NEVER selected?</p>
+      <ol>
+        <li>On any individual random draw, the probability of NOT selecting sample $i$ is:
+        $$P(\text{Not picked in 1 draw}) = 1 - \frac{1}{N}$$</li>
+        <li>Since all $N$ draws are mutually independent, the probability of NOT being picked in all $N$ draws is:
+        $$P(\text{Excluded from bootstrap}) = \left( 1 - \frac{1}{N} \right)^N$$</li>
+        <li>Taking the calculus limit as dataset size $N \to \infty$ (using the definition of the mathematical constant $e$):
+        $$\lim_{N \to \infty} \left( 1 - \frac{1}{N} \right)^N = e^{-1} = \frac{1}{e} \approx 0.367879 = \mathbf{36.8\%}$$</li>
+      </ol>
+      <p>Conversely, the probability that sample $i$ appears at least once in the bootstrap sample is $1 - e^{-1} \approx \mathbf{63.2\%}$!</p>
+    </div>
+
+    <h4>Out-of-Bag (OOB) Validation Error</h4>
+    <p>Because each tree leaves out approximately $36.8\%$ of the dataset, these unselected samples are called <strong>Out-of-Bag (OOB) samples</strong>. For every training sample $\mathbf{x}_i$, we can evaluate its prediction using <em>only the subset of trees that never saw $\mathbf{x}_i$ during training</em>!</p>
+    <p>This provides an unbiased, built-in cross-validation score without setting aside an explicit validation set or running costly $K$-Fold cross-validation.</p>
+
+    <!-- SECTION 3: RANDOM FORESTS -->
+    <h3>3. Random Forests: Random Feature Subspaces</h3>
+    <p>Bagging alone is insufficient when one feature is overwhelmingly strong (e.g. income in credit scoring): every single bootstrap tree will pick that same dominant feature at the root node, causing high tree correlation $\rho$.</p>
+
+    <p><strong>Random Forests (Breiman, 2001)</strong> introduce a second layer of randomization: at every candidate split, the tree is forbidden from searching across all $d$ features. Instead, it randomly selects a small subset of $m$ features:</p>
+    $$m = \lfloor \sqrt{d} \rfloor \quad (\text{for Classification})$$
+    $$m = \lfloor d / 3 \rfloor \quad (\text{for Regression})$$
+    <p>By forcing trees to split on suboptimal surrogate features, Random Forests drastically reduce pairwise tree correlation $\rho$, driving ensemble variance down to near zero.</p>
+
+    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Ensembles</h3>
+
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.5.1</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are training an ensemble of $B = 100$ classifiers to predict fraudulent financial transactions. Each individual classifier has an independent error rate of $\epsilon = 0.35$. The final prediction is determined by simple majority vote.</p>
+        <ol>
+          <li>Calculate the probability that the ensemble produces an incorrect majority vote.</li>
+          <li>If the classifiers are not independent, but have pairwise correlation $\rho = 0.20$, calculate the variance of the ensemble prediction compared to an individual classifier with variance $\sigma^2 = 1.0$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+
+        <p class="step"><strong>Step 1: Majority Vote Error Under Independence:</strong><br>
+        Let $X$ be the number of classifiers that make an erroneous prediction. Under independence, $X$ follows a Binomial distribution: $X \sim \text{Binomial}(B = 100, p = 0.35)$.<br>
+        The ensemble makes an error if at least 51 classifiers vote incorrectly ($X \ge 51$):
+        $$P(\text{Ensemble Error}) = \sum_{k=51}^{100} \binom{100}{k} (0.35)^k (0.65)^{100 - k}$$
+        Approximating via the Central Limit Theorem:
+        $$\mu = B p = 100 \times 0.35 = 35$$
+        $$\sigma = \sqrt{B p (1 - p)} = \sqrt{100 \times 0.35 \times 0.65} = \sqrt{22.75} \approx 4.7697$$
+        With continuity correction ($X \ge 50.5$):
+        $$Z = \frac{50.5 - 35}{4.7697} = \frac{15.5}{4.7697} \approx 3.25$$
+        From standard normal tables:
+        $$P(Z \ge 3.25) = 1 - \Phi(3.25) \approx \mathbf{0.000577} = \mathbf{0.058\%}$$
+        <em>The Power of Ensembles:</em> Combining 100 mediocre models (35% error each) reduces overall error to <strong>less than 0.06%</strong>!</p>
+
+        <p class="step"><strong>Step 2: Variance Under Correlation $\rho = 0.20$:</strong><br>
+        Apply the ensemble variance formula with $B = 100$, $\sigma^2 = 1.0$, and $\rho = 0.20$:
+        $$\text{Var}(\bar{f}) = \rho \sigma^2 + \frac{1 - \rho}{B} \sigma^2 = (0.20)(1.0) + \frac{1 - 0.20}{100}(1.0)$$
+        $$\text{Var}(\bar{f}) = 0.20 + \frac{0.80}{100} = 0.20 + 0.008 = \mathbf{0.208}$$
+        Notice that even with an infinite number of trees ($B \to \infty$), the variance can never drop below $0.20$. Correlation creates an irreducible variance floor.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 2.5: Random Forest with OOB Scoring from Scratch</h3>
+    <p>Below is a production implementation of a Random Forest Classifier implementing row bootstrapping, random feature subspace selection, and Out-of-Bag validation.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.5 — Random Forest &amp; Out-of-Bag Evaluator</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch25_random_forests/random_forest_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch25_random_forests/random_forest_scratch.py</a></p>
+<pre><code>import numpy as np
+from collections import Counter
+
+class RandomForestClassifierScratch:
+    def __init__(self, n_estimators=20, max_depth=6, min_samples_split=2):
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.trees = []
+        self.tree_features = []
+        self.oob_score_ = None
+
+    def _bootstrap_sample(self, X, y):
+        N = X.shape[0]
+        indices = np.random.choice(N, size=N, replace=True)
+        oob_indices = np.setdiff1d(np.arange(N), np.unique(indices))
+        return X[indices], y[indices], oob_indices
+
+    def fit(self, X, y):
+        from sklearn.tree import DecisionTreeClassifier
+        N, d = X.shape
+        max_features = max(1, int(np.sqrt(d)))
+        
+        oob_predictions = {i: [] for i in range(N)}
+
+        for _ in range(self.n_estimators):
+            X_boot, y_boot, oob_idx = self._bootstrap_sample(X, y)
+            
+            # Select random feature subspace
+            feat_idx = np.random.choice(d, size=max_features, replace=False)
+            
+            tree = DecisionTreeClassifier(max_depth=self.max_depth, min_samples_split=self.min_samples_split)
+            tree.fit(X_boot[:, feat_idx], y_boot)
+
+            self.trees.append(tree)
+            self.tree_features.append(feat_idx)
+
+            # Record predictions for OOB samples
+            if len(oob_idx) > 0:
+                preds = tree.predict(X[oob_idx][:, feat_idx])
+                for idx, pred in zip(oob_idx, preds):
+                    oob_predictions[idx].append(pred)
+
+        # Calculate Out-of-Bag Score
+        correct = 0
+        total_eval = 0
+        for i in range(N):
+            if len(oob_predictions[i]) > 0:
+                majority_vote = Counter(oob_predictions[i]).most_common(1)[0][0]
+                if majority_vote == y[i]:
+                    correct += 1
+                total_eval += 1
+        
+        self.oob_score_ = correct / total_eval if total_eval > 0 else 0.0
+
+    def predict(self, X):
+        tree_preds = np.array([tree.predict(X[:, feats]) for tree, feats in zip(self.trees, self.tree_features)])
+        # Majority vote across axis 0 (trees)
+        y_pred = [Counter(tree_preds[:, i]).most_common(1)[0][0] for i in range(X.shape[0])]
+        return np.array(y_pred)
+
+if __name__ == "__main__":
+    from sklearn.datasets import make_classification
+    X, y = make_classification(n_samples=500, n_features=20, n_informative=10, random_state=42)
+    rf = RandomForestClassifierScratch(n_estimators=30, max_depth=5)
+    rf.fit(X, y)
+    print(f"Random Forest Out-of-Bag (OOB) Accuracy: {rf.oob_score_ * 100:.2f}%")</code></pre>
+    </div>
+
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.5 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.5: High-Frequency Credit Default Random Forest &amp; Out-of-Bag Sentinel</h3>
+        <p class="project-desc">Build a production credit risk scoring engine that trains an ensemble of 500 decorrelated decision trees, estimates live Out-of-Bag generalization bounds, and outputs Permutation Feature Importance scores to satisfy fair lending regulatory audits.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch25_random_forests/random_forest_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch25_random_forests/random_forest_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In banking credit approval (JPMorgan Chase, Capital One), regulations mandate that models must explain feature importances without bias. In this project, you construct a high-throughput Random Forest service that scores loan applications, generates Out-of-Bag error margins, and evaluates permutation importance to identify risky predictors.</p>
+      </div>
+    </div>
+  </div>
+</div>
