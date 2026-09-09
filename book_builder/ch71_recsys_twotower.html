@@ -5,7 +5,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 7.1</span>
     <h2 class="chapter-title">Billion-Scale Recommendation Systems</h2>
-    <span class="chapter-subtitle">The Multi-Stage Funnel, Two-Tower Dual Encoders, Meta DLRM &amp; In-Batch Sampled Softmax</span>
+    <span class="chapter-subtitle">The Multi-Stage Funnel, Two-Tower Dual Encoders, Meta DLRM, All-to-All Communication &amp; LogQ Popularity De-biasing</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -17,20 +17,55 @@
   <div class="chapter-body">
     <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <!-- SECTION 1: THE SCALE CHALLENGE -->
-    <h3>1. The Scale Challenge of Modern Information Filtering</h3>
+    <!-- SECTION 1: THE MULTI-STAGE FUNNEL -->
+    <h3>1. The Industrial Multi-Stage Recommendation Funnel</h3>
     <p>On platforms like YouTube, TikTok, Instagram, and Netflix, the catalog contains <strong>hundreds of millions or billions of items</strong>, consumed by hundreds of millions of active users. Running a complex deep neural network over 1,000,000,000 items for every user interaction is physically impossible (requiring millions of GPU hours per second).</p>
 
-    <h4>The Industrial Multi-Stage Recommendation Funnel</h4>
-    <ol>
-      <li><strong>Stage 1: Candidate Generation (Retrieval):</strong> Slashes the catalog from <strong>1,000,000,000 items down to 1,000 candidates in &lt;10 ms</strong> using lightweight, highly scalable retrieval mechanisms (Two-Tower vector search, Graph walks, collaborative filtering). High recall is the primary metric.</li>
-      <li><strong>Stage 2: Scoring &amp; Ranking:</strong> Applies a heavy, complex deep neural network (e.g. Meta DLRM, DeepFM) computing fine-grained Click-Through Rate (CTR) and Watch-Time predictions over the 1,000 candidates in <strong>&lt;25 ms</strong>. High precision is the primary metric.</li>
-      <li><strong>Stage 3: Re-Ranking, Business Logic &amp; Diversity:</strong> Filters out previously seen items, enforces creator diversity, applies freshness boosting, and suppresses policy violations in <strong>&lt;5 ms</strong> before delivering the top 10 items to the user interface.</li>
-    </ol>
+    <div class="table-container" style="overflow-x: auto; margin: 1.5em 0;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em;">
+        <thead>
+          <tr style="background-color: #1b4965; color: #ffffff;">
+            <th style="padding: 10px; border: 1px solid #ccc;">Stage</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Input $\to$ Output Scale</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Latency SLA</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Architecture &amp; Objective</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Stage 1: Retrieval (Candidate Generation)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$10^9 \to 10^3\text{ items}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$&lt; 10\text{ ms}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Two-Tower Dual Encoders, ScaNN/HNSW MIPS vector search. High Recall@K.</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Stage 2: Scoring (Heavy Ranking)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$10^3 \to 50\text{ items}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$&lt; 25\text{ ms}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Meta DLRM, DeepFM, Transformer Cross-Networks. High GAUC, LogLoss on CTR.</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Stage 3: Re-Ranking &amp; Diversity</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$50 \to 10\text{ items}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$&lt; 5\text{ ms}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Maximal Marginal Relevance (MMR), DPP, freshness boosting, deduplication.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-    <!-- SECTION 2: TWO-TOWER DUAL ENCODERS -->
+    <!-- SECTION 2: TWO-TOWER ARCHITECTURE -->
     <h3>2. Two-Tower Neural Networks (Google YouTube 2016, 2019)</h3>
     <p>How does Stage 1 retrieve 1,000 items from 1,000,000,000 candidates in under 10 milliseconds? The solution is the <strong>Two-Tower Neural Architecture</strong>:</p>
+
+    <!-- FIGURE 7.1.1: two_tower_recsys_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="two_tower_recsys_diagram.png" alt="Figure 7.1.1: two_tower_recsys_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 7.1.1:</em> Two-Tower deep retrieval architecture. The User/Query Tower and Item/Candidate Tower project disparate feature spaces into a shared $d$-dimensional embedding space, enabling sub-10ms candidate retrieval across billions of candidate items via Approximate Nearest Neighbor (HNSW) search.
+      </p>
+    </div>
+
 
     <div class="real-world-box">
       <h4>📐 Mathematical Formulation of the Two-Tower Architecture</h4>
@@ -50,67 +85,654 @@
       </ol>
     </div>
 
-    <!-- SECTION 3: IN-BATCH NEGATIVE SAMPLING -->
-    <h3>3. In-Batch Negative Sampling &amp; Sampled Softmax</h3>
-    <p>In recommendation training, we have positive interactions (videos watched), but true negative interactions (videos the user hated) are rarely explicit. If a user did not watch a video, did they dislike it, or was it simply never shown to them?</p>
+    <!-- SECTION 3: META DLRM -->
+    <h3>3. Meta DLRM: Hybrid Parallelism &amp; Feature Interactions</h3>
+    <p>While Two-Tower models excel at retrieval, they cannot model explicit cross-features (e.g. <code>user.device == item.target_os</code>). In Stage 2, platforms deploy <strong>Meta DLRM (Deep Learning Recommendation Model)</strong>:</p>
+    <ul>
+      <li><strong>Categorical Features:</strong> Millions of IDs (User ID, Video ID, Channel ID) map to giant <strong>Embedding Tables</strong> containing billions of parameters (often $200\text{ GB}$ to $1\text{ TB}$ of memory).</li>
+      <li><strong>Dense Numerical Features:</strong> Fed into a <strong>Bottom MLP</strong> producing a dense latent vector $\mathbf{x}_{\text{dense}} \in \mathbb{R}^D$.</li>
+      <li><strong>Feature Interaction Layer:</strong> Computes the pairwise dot products between the dense representation and all $K$ retrieved categorical embedding vectors:
+        $$\mathbf{z}_{i, j} = \mathbf{e}_i^T \mathbf{e}_j \quad \forall 0 \le i < j \le K$$
+        producing $\frac{K(K+1)}{2}$ interaction scalars, concatenated with $\mathbf{x}_{\text{dense}}$ and processed by the <strong>Top MLP</strong>.
+      </li>
+      <li><strong>Hybrid Parallelism Architecture:</strong> Because embedding tables are too massive to fit on one GPU, DLRM distributes tables across GPUs via <strong>Model Parallelism</strong>, while replicating the MLPs via <strong>Data Parallelism</strong>. The two halves communicate across NVLink via an <strong>All-to-All collective communication primitive</strong>.</li>
+    </ul>
 
-    <p>We treat unobserved items as negatives using <strong>In-Batch Negative Sampling</strong>. Within a mini-batch of $B$ positive pairs $\{(\mathbf{u}_i, \mathbf{v}_i)\}_{i=1}^B$, the item $\mathbf{v}_j$ ($j \neq i$) serves as a random negative for user $\mathbf{u}_i$!</p>
-
-    <p>The batch similarity matrix is computed via a single matrix multiplication:</p>
-    $$S = U \cdot V^T \in \mathbb{R}^{B \times B}, \quad \text{where } U, V \in \mathbb{R}^{B \times d}$$
-    <p>The diagonal elements $S_{i, i} = \mathbf{u}_i^T \mathbf{v}_i$ represent positive pairs, while all off-diagonal elements $S_{i, j}$ ($i \neq j$) represent negative pairs! The loss is standard multi-class cross-entropy with temperature $\tau$:</p>
+    <!-- SECTION 4: IN-BATCH NEGATIVE SAMPLING -->
+    <h3>4. In-Batch Negative Sampling &amp; LogQ De-biasing</h3>
+    <p>In recommendation training, true negative interactions (videos a user hated) are rarely explicit. We treat unobserved items as negatives using <strong>In-Batch Negative Sampling</strong>. In a mini-batch of $B$ positive pairs $\{(\mathbf{u}_i, \mathbf{v}_i)\}_{i=1}^B$, item $\mathbf{v}_j$ ($j \neq i$) serves as a negative for user $\mathbf{u}_i$:</p>
     $$\mathcal{L} = -\frac{1}{B} \sum_{i=1}^B \ln \frac{\exp(\mathbf{u}_i^T \mathbf{v}_i / \tau)}{\sum_{j=1}^B \exp(\mathbf{u}_i^T \mathbf{v}_j / \tau)}$$
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Recommendation Systems</h3>
+    <p><strong>The Popularity Bias Trap:</strong> Viral videos watched by 10% of users appear in 10% of training batches. Consequently, popular videos are sampled as negatives <strong>far more frequently</strong> than niche videos! The model penalizes popular items excessively.</p>
+    <p><strong>The LogQ Correction (Yi et al., Google 2019):</strong> Let $p_j$ be the marginal sampling frequency of item $j$. We subtract $\ln p_j$ from logits prior to Softmax:</p>
+    $$s'_{i, j} = \frac{\mathbf{u}_i^T \mathbf{v}_j}{\tau} - \ln p_j$$
+    <p>By subtracting $\ln p_j$, popular items receive a corrective positive offset during probability calculation, restoring unbiased maximum likelihood estimation across both viral and long-tail niche items!</p>
 
+    <!-- ======================================================================
+         SECTION 5: 4-TIER GRADED PRACTICE SUITE
+         ====================================================================== -->
+    <h3>4-Tier Graded Practice Suite — Billion-Scale Recommendation Systems</h3>
+    <p>Eight rigorous, step-by-step problems spanning hardware memory sizing, All-to-All bandwidth math, LogQ arithmetic, funnel latency traces, DLRM feature interaction traces, importance sampling proofs, MMR submodularity proofs, and false negative traps.</p>
+
+    <!-- TIER 1: NUMERICAL DRILLS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+    <!-- Problem 7.1.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 7.1.1</span>
         <span class="difficulty difficulty-hard">Hard</span>
         <span class="company-tag company-meta">Meta</span>
-        <span class="company-tag company-netflix">Netflix</span>
+        <span class="company-tag company-google">Google</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> You are designing Meta's Instagram Reels recommendation retrieval engine. The platform has $100,000,000$ active videos. Each video is represented by a $d = 128$ dimensional embedding in FP16 ($2 \text{ bytes}$). Calculate the exact RAM required to store the full index, and explain why naive in-batch negative sampling introduces severe <strong>Selection Bias (Popularity Bias)</strong> and how LogQ correction resolves it.</p>
+        <p><strong>QUESTION:</strong> You are architecting a Meta DLRM recommendation ranking cluster to serve an active catalog of items across billions of users. The model features 20 sparse categorical embedding tables:</p>
+        <ul>
+          <li><strong>4 Ultra-High Cardinality Tables</strong> (User ID, Video ID, Creator ID, Channel ID): Cardinality $C_1 = 50,000,000$ entities each, embedding dimension $D_1 = 128$.</li>
+          <li><strong>16 Medium Cardinality Tables</strong> (Device, Country, Language, Topic tags): Cardinality $C_2 = 2,000,000$ entities each, embedding dimension $D_2 = 64$.</li>
+        </ul>
+        <p><strong>Training &amp; Cluster Specifications:</strong></p>
+        <ul>
+          <li>Weights are stored in 16-bit half-precision (FP16, 2 bytes/param) for forward inference.</li>
+          <li>Training utilizes the Adam optimizer in mixed precision: requires FP32 master weights (4 bytes), first moment $m$ (4 bytes), second moment $v$ (4 bytes), plus FP16 gradients (2 bytes) = $14\text{ bytes per parameter}$ total training footprint.</li>
+          <li>Worker nodes are NVIDIA H100 SXM5 servers with $V_{\text{gpu}} = 80\text{ GB}$ VRAM. To avoid CUDA Out-Of-Memory (OOM) errors during backward propagation, system headroom limits usable memory per GPU to $70\%$ ($V_{\text{usable}} = 56\text{ GB}$).</li>
+          <li>Training mini-batch size is $B = 65,536$.</li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the total number of parameters in the 20 embedding tables.</li>
+          <li>Calculate the raw parameter footprint in Gigabytes, and the total memory required during distributed Adam training.</li>
+          <li>Determine the minimum number of NVIDIA H100 GPUs required to host the embedding tables during training.</li>
+          <li>Calculate the total tensor payload size in Megabytes exchanged across GPUs during the Model-Parallel to Data-Parallel All-to-All collective communication step for a mini-batch of $B = 65,536$.</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+        <div class="solution-label">✓ Step-by-Step DLRM Sizing &amp; Communication Solution</div>
 
-        <p class="step"><strong>Step 1: RAM Calculation for 100M Video Index:</strong><br>
-        Raw vector memory:
-        $$\text{Memory} = 100 \times 10^6 \times 128 \times 2 \text{ bytes} = 25,600,000,000 \text{ bytes} \approx \mathbf{25.6 \text{ Gigabytes}}$$
-        An index of $25.6\text{ GB}$ fits comfortably in the RAM of a single high-memory cloud instance (e.g. AWS <code>r6i.xlarge</code> with 32GB RAM)!</p>
+        <p class="step"><strong>Step 1: Total Parameter Count:</strong><br>
+        For the 4 large tables:
+        $$P_{\text{large}} = 4 \times (C_1 \times D_1) = 4 \times (50 \times 10^6 \times 128) = 4 \times 6.4 \times 10^9 = 25.6 \times 10^9\text{ parameters}$$
+        For the 16 medium tables:
+        $$P_{\text{medium}} = 16 \times (C_2 \times D_2) = 16 \times (2 \times 10^6 \times 64) = 16 \times 1.28 \times 10^8 = 2.048 \times 10^9\text{ parameters}$$
+        Total parameters across all 20 tables:
+        $$P_{\text{total}} = 25.6 \times 10^9 + 2.048 \times 10^9 = \mathbf{27.648 \times 10^9\text{ parameters (27.648 Billion parameters)}}$$</p>
 
-        <p class="step"><strong>Step 2: The Popularity Bias in In-Batch Negatives:</strong><br>
-        In streaming batch sampling, a viral video watched by 10% of users appears in 10% of training batches. Consequently, the viral video is sampled as a negative <strong>far more frequently</strong> than niche videos! The model penalizes popular items excessively, artificially suppressing them in recommendations.</p>
+        <p class="step"><strong>Step 2: Memory Footprint (Inference &amp; Adam Training):</strong><br>
+        Raw model weights footprint (FP16, 2 bytes/param):
+        $$M_{\text{raw}} = 27.648 \times 10^9 \times 2\text{ bytes} = 55,296,000,000\text{ bytes} = \mathbf{55.296\text{ GB}}$$
+        Total memory footprint during mixed-precision Adam training ($14\text{ bytes/param}$):
+        $$M_{\text{train}} = 27.648 \times 10^9 \times 14\text{ bytes} = 387,072,000,000\text{ bytes} = \mathbf{387.072\text{ GB}}$$</p>
 
-        <p class="step"><strong>Step 3: The LogQ Correction (Yi et al., Google 2019):</strong><br>
-        Let $p_j$ be the marginal sampling frequency of item $j$. We subtract $\ln p_j$ from the logits prior to Softmax:</p>
-        $$S'_{i, j} = \frac{\mathbf{u}_i^T \mathbf{v}_j}{\tau} - \ln p_j$$
-        <p>By subtracting $\ln p_j$, popular items receive a corrective positive offset during probability calculation, restoring unbiased maximum likelihood estimation across both viral and long-tail niche items!</p>
+        <p class="step"><strong>Step 3: Minimum GPU Provisioning:</strong><br>
+        Usable memory per H100 GPU after 30% headroom deduction:
+        $$V_{\text{usable}} = 0.70 \times 80\text{ GB} = 56.0\text{ GB}$$
+        Minimum GPUs required:
+        $$N_{\text{GPUs}} = \left\lceil \frac{M_{\text{train}}}{V_{\text{usable}}} \right\rceil = \left\lceil \frac{387.072\text{ GB}}{56.0\text{ GB}} \right\rceil = \lceil 6.912 \rceil = \mathbf{8\text{ NVIDIA H100 GPUs}}$$
+        <em>Engineering insight: Exactly one 8-GPU HGX H100 server node is required to house the sparse embedding tables of this recommendation model!</em></p>
+
+        <p class="step"><strong>Step 4: All-to-All Communication Volume per Mini-Batch:</strong><br>
+        In DLRM, each sample gathers its embedding vectors from all 20 tables.<br>
+        Concatenated embedding dimension per sample:
+        $$D_{\text{sample}} = (4 \times D_1) + (16 \times D_2) = (4 \times 128) + (16 \times 64) = 512 + 1,024 = 1,536\text{ elements}$$
+        Data size per sample in FP16 (2 bytes):
+        $$S_{\text{sample}} = 1,536 \times 2\text{ bytes} = 3,072\text{ bytes} = 3.0\text{ KB}$$
+        For a mini-batch of $B = 65,536$ samples:
+        $$V_{\text{all-to-all}} = B \times S_{\text{sample}} = 65,536 \times 3,072\text{ bytes} = 201,326,592\text{ bytes} \approx \mathbf{201.33\text{ MB (192.0 MiB)}}$$
+        <em>At 100 training iterations per second, the inter-GPU All-to-All bandwidth demand is $20.13\text{ GB/sec}$, which is comfortably handled by NVLink 4.0 ($900\text{ GB/s}$ bidirectional bandwidth).</em></p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 7.1: Two-Tower Recommendation Model in PyTorch</h3>
-    <p>Below is a clean, production-grade PyTorch implementation of a Two-Tower Dual Encoder with in-batch negative cross-entropy loss.</p>
+    <!-- Problem 7.1.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-netflix">Netflix</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A Two-Tower retrieval model is trained using in-batch sampled softmax on a mini-batch of $B = 3$ users and items. The temperature is $\tau = 0.5$.</p>
+        <p>The raw dot-product similarity matrix $S = U V^T$ is:</p>
+        $$S = \begin{bmatrix}
+        0.80 & 0.60 & 0.20 \\
+        0.50 & 0.90 & 0.10 \\
+        0.70 & 0.40 & 0.85
+        \end{bmatrix}$$
+        <p>The item background sampling probabilities are $p = [0.60, 0.30, 0.10]$ (Item 1 is a viral video, Item 2 is moderately popular, Item 3 is a long-tail niche video).</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>For User 1 (Row 1), calculate the uncorrected softmax probabilities $P_{\text{uncorr}}(y = j \mid u_1)$ across the 3 items.</li>
+          <li>Compute the logarithmic sampling penalties $\ln p_j$ for each item to 4 decimal places.</li>
+          <li>Apply the LogQ correction: $s'_{i, j} = \frac{S_{i, j}}{\tau} - \ln p_j$. Calculate the corrected logits for User 1.</li>
+          <li>Calculate the LogQ-corrected softmax probabilities $P_{\text{corr}}(y = j \mid u_1)$ and demonstrate how LogQ resolves popularity bias.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step LogQ Correction Arithmetic</div>
+
+        <p class="step"><strong>Step 1: Uncorrected Softmax Probabilities for User 1:</strong><br>
+        Raw logits for User 1 scaled by temperature $\tau = 0.5$:
+        $$z_{1, j} = \frac{S_{1, j}}{\tau} = \frac{S_{1, j}}{0.5} = 2 \times S_{1, j}$$
+        $$z_{1, 1} = 2 \times 0.80 = 1.60$$
+        $$z_{1, 2} = 2 \times 0.60 = 1.20$$
+        $$z_{1, 3} = 2 \times 0.20 = 0.40$$
+        Exponentiating scaled logits:
+        $$e^{1.60} \approx 4.9530, \quad e^{1.20} \approx 3.3201, \quad e^{0.40} \approx 1.4918$$
+        Sum of exponentials:
+        $$\Sigma_{\text{uncorr}} = 4.9530 + 3.3201 + 1.4918 = 9.7649$$
+        Uncorrected probabilities:
+        $$P_{\text{uncorr}}(1) = \frac{4.9530}{9.7649} \approx \mathbf{0.5072} \quad (50.72\%)$$
+        $$P_{\text{uncorr}}(2) = \frac{3.3201}{9.7649} \approx \mathbf{0.3400} \quad (34.00\%)$$
+        $$P_{\text{uncorr}}(3) = \frac{1.4918}{9.7649} \approx \mathbf{0.1528} \quad (15.28\%)$$</p>
+
+        <p class="step"><strong>Step 2: Logarithmic Sampling Penalties:</strong><br>
+        Given marginal frequencies $p = [0.60, 0.30, 0.10]$:
+        $$\ln p_1 = \ln(0.60) \approx -0.5108$$
+        $$\ln p_2 = \ln(0.30) \approx -1.2040$$
+        $$\ln p_3 = \ln(0.10) \approx -2.3026$$</p>
+
+        <p class="step"><strong>Step 3: Corrected Logits Calculation:</strong><br>
+        The LogQ correction subtracts $\ln p_j$ from each logit:
+        $$s'_{1, j} = z_{1, j} - \ln p_j$$
+        $$s'_{1, 1} = 1.60 - (-0.5108) = 1.60 + 0.5108 = \mathbf{2.1108}$$
+        $$s'_{1, 2} = 1.20 - (-1.2040) = 1.20 + 1.2040 = \mathbf{2.4040}$$
+        $$s'_{1, 3} = 0.40 - (-2.3026) = 0.40 + 2.3026 = \mathbf{2.7026}$$
+        <em>Crucial Observation: Notice that because Item 3 is rare ($p_3 = 0.10$), $-\ln(p_3) = +2.3026$ adds a massive corrective boost, elevating Item 3's logit from the lowest ($0.40$) to the highest ($2.7026$)!</em></p>
+
+        <p class="step"><strong>Step 4: LogQ-Corrected Softmax Probabilities:</strong><br>
+        Exponentiating corrected logits:
+        $$e^{2.1108} \approx 8.2548$$
+        $$e^{2.4040} \approx 11.0674$$
+        $$e^{2.7026} \approx 14.9182$$
+        Sum of corrected exponentials:
+        $$\Sigma_{\text{corr}} = 8.2548 + 11.0674 + 14.9182 = 34.2404$$
+        Corrected probabilities:
+        $$P_{\text{corr}}(1) = \frac{8.2548}{34.2404} \approx \mathbf{0.2411} \quad (24.11\%)$$
+        $$P_{\text{corr}}(2) = \frac{11.0674}{34.2404} \approx \mathbf{0.3232} \quad (32.32\%)$$
+        $$P_{\text{corr}}(3) = \frac{14.9182}{34.2404} \approx \mathbf{0.4357} \quad (43.57\%)$$
+        <strong>Conclusion:</strong> In uncorrected training, the viral item's raw dot product dominated ($50.72\%$). The LogQ correction accounts for the fact that Item 1 appeared in the batch primarily due to high background popularity, whereas Item 3's co-occurrence with User 1 is a strong, genuine personalized preference signal, appropriately boosting Item 3's probability to $43.57\%$!</p>
+      </div>
+    </div>
+
+    <!-- TIER 2: APPLIED ENGINEERING TRACES -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+    <!-- Problem 7.1.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-tiktok">ByteDance (TikTok)</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An engineering team designs an end-to-end recommendation retrieval and ranking pipeline for an online video feed with 500,000,000 items. A client app requests recommendations with a strict p99 total latency SLA of $T_{\text{SLA}} \le 40.0\text{ ms}$.</p>
+        <p>The pipeline consists of three sequential stages:</p>
+        <ol>
+          <li><strong>Stage 1 (Two-Tower Vector Retrieval via ScaNN):</strong> Evaluates User Tower on GPU, executes MIPS search against 500M item index, retrieves top $K_1 = 1,000$ candidates.</li>
+          <li><strong>Stage 2 (DLRM Heavy Ranker):</strong> Fetches feature vectors from online feature store for the 1,000 candidates, evaluates DLRM neural network on GPU, scores CTR, selects top $K_2 = 50$ items.</li>
+          <li><strong>Stage 3 (Maximal Marginal Relevance Re-Ranking &amp; Deduplication):</strong> Applies greedy MMR diversification with trade-off parameter $\lambda = 0.65$ over the 50 items, filtering previously watched videos and selecting the final top $K_3 = 10$ items.</li>
+        </ol>
+        <p>Construct an engineering trace table detailing: (a) Stage name, (b) Hardware &amp; subsystem executing, (c) Input $\to$ Output candidate count, (d) Component latency breakdown, (e) Cumulative latency, and (f) Primary failure mode / mitigation strategy.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ End-to-End Recommendation Pipeline Trace Table</div>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Pipeline Stage</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Subsystem &amp; Hardware</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Candidate Volume</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Step Latency</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Cumulative Latency</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Failure Mode &amp; Mitigation</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1a. User Tower Inference</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Triton / TensorRT (NVIDIA L4)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1\text{ user context} \to 1\times 128\text{ vector}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$2.2\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$2.2\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">GPU context thrashing. Mitigated by persistent pinned CUDA streams.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1b. ScaNN Vector Search</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Distributed ScaNN (32-node CPU cluster)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$500,000,000 \to 1,000\text{ candidates}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$5.8\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$8.0\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Straggler worker node. Mitigated by hedged requests ($95\text{th}$ percentile timeout).</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2a. Feature Store Hydration</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Redis Cluster (MGET across 1000 items)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1,000\text{ item IDs} \to 1,000\text{ feature sets}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$4.5\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$12.5\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Redis hot-key network saturation. Mitigated by local client cache (TTL = 60s).</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2b. DLRM Scoring</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">NVIDIA H100 Tensor Core (Batch = 1000)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1,000 \to 50\text{ top candidates}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$14.0\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$26.5\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">PCIe batch transfer bottleneck. Mitigated by pre-allocating GPU pinned host buffers.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3a. Seen Video Filter</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">In-Memory Bloom Filter / Redis Set</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$50 \to 42\text{ unseen candidates}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1.1\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$27.6\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Bloom filter false positives suppressing fresh content. Calibrated at $p = 0.001$.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3b. MMR Diversification</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">C++ SIMD Vectorized Kernel</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$42 \to 10\text{ diversified items}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1.8\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$29.4\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Echo-chamber trap. Mitigated by MMR parameter $\lambda = 0.65$.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>4. JSON Serialization &amp; Network</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">API Gateway (Envoy / gRPC)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$10\text{ final items delivered to client}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$2.5\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>31.9 ms (Well within 40ms SLA!)</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Mobile network packet loss. Mitigated by HTTP/2 stream multiplexing.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Problem 7.1.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Meta's DLRM architecture, dense numerical features are transformed by a Bottom MLP into a representation vector $\mathbf{v}_0 \in \mathbb{R}^D$, while $K$ categorical sparse features are mapped via embedding lookups into vectors $\mathbf{v}_1, \mathbf{v}_2, \dots, \mathbf{v}_K \in \mathbb{R}^D$. All vectors share dimension $D = 16$.</p>
+        <p>The Feature Interaction layer stacks these $K+1$ vectors into matrix $V \in \mathbb{R}^{(K+1) \times D}$ and computes the cross-feature dot product matrix:</p>
+        $$A = V V^T \in \mathbb{R}^{(K+1) \times (K+1)}$$
+        <p>Because $A$ is symmetric and self-interactions $A_{i, i} = \|\mathbf{v}_i\|^2$ are redundant with dense MLP activations, DLRM extracts *only* the strictly lower triangular elements $A_{i, j}$ for $0 \le j < i \le K$.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>For $K = 5$ sparse features, derive the exact number of unique pairwise interaction scalars $N_{\text{interact}}$ extracted from $A$.</li>
+          <li>Write the mathematical concatenation expression for the complete interaction output tensor $\mathbf{z}_{\text{out}}$ fed into the Top MLP, and compute its exact dimensionality.</li>
+          <li>Construct an algorithmic trace mapping pair indices $(i, j)$ to the flattened 1D index $k \in \{0, \dots, N_{\text{interact}}-1\}$ using standard row-major triangular linearization.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Algorithmic Feature Interaction Trace</div>
+
+        <p class="step"><strong>Step 1: Unique Pairwise Interaction Count:</strong><br>
+        The total number of vectors participating in the interaction is $M = K + 1$. For $K = 5$:
+        $$M = 5 + 1 = 6\text{ vectors } (\mathbf{v}_0, \mathbf{v}_1, \mathbf{v}_2, \mathbf{v}_3, \mathbf{v}_4, \mathbf{v}_5)$$
+        The number of strictly lower-triangular elements in an $M \times M$ matrix is:
+        $$N_{\text{interact}} = \frac{M(M - 1)}{2} = \frac{6 \times 5}{2} = \mathbf{15\text{ interaction scalars}}$$</p>
+
+        <p class="step"><strong>Step 2: Top MLP Input Tensor Formulation:</strong><br>
+        DLRM concatenates the original dense representation vector $\mathbf{v}_0 \in \mathbb{R}^D$ with the 15 flattened interaction scalars:
+        $$\mathbf{z}_{\text{out}} = \Big[ \mathbf{v}_0 \;\Vert\; \text{vec}\big(\{A_{i, j} \mid 0 \le j < i \le 5\}\big) \Big] \in \mathbb{R}^{D + N_{\text{interact}}}$$
+        For $D = 16$ and $N_{\text{interact}} = 15$:
+        $$\text{dim}(\mathbf{z}_{\text{out}}) = 16 + 15 = \mathbf{31\text{ scalar features}}$$
+        <em>This compact 31-dimensional representation captures all second-order multiplicative feature crossings with minimal memory footprint!</em></p>
+
+        <p class="step"><strong>Step 3: Triangular Linearization Mapping Trace Table:</strong><br>
+        The mapping formula for row-major strictly lower triangular indexing is:
+        $$\text{Index}(i, j) = \frac{i(i - 1)}{2} + j \quad \text{for } 0 \le j < i \le 5$$</p>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Flat Index ($k$)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Vector Pair $(i, j)$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Physical Semantics of Cross Feature</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Mathematical Operation</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(1, 0)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 1 $\times$ Dense Bottom MLP</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_1^T \mathbf{v}_0$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(2, 0)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 2 $\times$ Dense Bottom MLP</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_2^T \mathbf{v}_0$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(2, 1)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 2 $\times$ Sparse Feature 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_2^T \mathbf{v}_1$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$3$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(3, 0)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 3 $\times$ Dense Bottom MLP</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_3^T \mathbf{v}_0$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$4$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(3, 1)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 3 $\times$ Sparse Feature 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_3^T \mathbf{v}_1$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(3, 2)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 3 $\times$ Sparse Feature 2</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_3^T \mathbf{v}_2$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(4, 0)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 4 $\times$ Dense Bottom MLP</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_4^T \mathbf{v}_0$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$7$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(4, 1)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 4 $\times$ Sparse Feature 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_4^T \mathbf{v}_1$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$8$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(4, 2)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 4 $\times$ Sparse Feature 2</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_4^T \mathbf{v}_2$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$9$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(4, 3)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 4 $\times$ Sparse Feature 3</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_4^T \mathbf{v}_3$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$10$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(5, 0)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 5 $\times$ Dense Bottom MLP</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_5^T \mathbf{v}_0$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$11$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(5, 1)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 5 $\times$ Sparse Feature 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_5^T \mathbf{v}_1$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$12$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(5, 2)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 5 $\times$ Sparse Feature 2</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_5^T \mathbf{v}_2$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$13$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(5, 3)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 5 $\times$ Sparse Feature 3</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_5^T \mathbf{v}_3$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$14$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(5, 4)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 5 $\times$ Sparse Feature 4</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_5^T \mathbf{v}_4$</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TIER 3: MATHEMATICAL PROOFS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 3: FAANG Tier-1 / Research Lab Mathematical Proofs</h4>
+
+    <!-- Problem 7.1.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.5</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In extreme multi-class classification and Two-Tower retrieval over a catalog of $N$ items ($N \gg 10^8$), computing the exact partition function $\sum_{j=1}^N \exp(s(u, v_j))$ is computationally intractable. To train the model, we draw a small subset of $K$ negative items from a proposal distribution $Q$ with probabilities $q(j) > 0$.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>State the full-catalog cross-entropy loss $\mathcal{L}_{\text{full}}(u, v_+)$ for positive interaction $(u, v_+)$.</li>
+          <li>Formulate the importance sampling estimator of the partition function $Z(u) = \sum_{j=1}^N \exp(s(u, v_j))$.</li>
+          <li>Prove that setting corrected logits $s'(u, v_j) = s(u, v_j) - \ln q(j)$ in the Sampled Softmax loss yields an asymptotically unbiased estimator of the true gradient $\nabla_\theta \mathcal{L}_{\text{full}}$ as sample size $K \to \infty$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Proof of LogQ Asymptotic Unbiasedness</div>
+
+        <p class="step"><strong>Step 1: Full-Catalog Cross-Entropy Loss:</strong><br>
+        For user vector $u$ and true positive item $v_+$:
+        $$\mathcal{L}_{\text{full}}(u, v_+) = -\ln P(y = + \mid u) = -s(u, v_+) + \ln \sum_{j=1}^N \exp(s(u, v_j))$$
+        The gradient with respect to model parameters $\theta$ is:
+        $$\nabla_\theta \mathcal{L}_{\text{full}} = -\nabla_\theta s(u, v_+) + \sum_{j=1}^N P(j \mid u) \nabla_\theta s(u, v_j)$$
+        where $P(j \mid u) = \frac{\exp(s(u, v_j))}{\sum_{k=1}^N \exp(s(u, v_k))}$.</p>
+
+        <p class="step"><strong>Step 2: Importance Sampling Formulation of the Partition Function:</strong><br>
+        Rewrite the partition function $Z(u)$ as an expectation under proposal distribution $Q$:
+        $$Z(u) = \sum_{j=1}^N \exp(s(u, v_j)) = \sum_{j=1}^N q(j) \cdot \frac{\exp(s(u, v_j))}{q(j)} = \mathbb{E}_{j \sim Q} \left[ \frac{\exp(s(u, v_j))}{q(j)} \right]$$
+        Given $K$ independent negative samples $\mathcal{S}_{\text{neg}} = \{v_{(1)}, \dots, v_{(K)}\}$ drawn from $Q$, plus the positive item $v_+$:
+        The unbiased Monte Carlo importance sampling estimator of $Z(u)$ is:
+        $$\widehat{Z}(u) = \frac{1}{K} \sum_{k=1}^K \frac{\exp(s(u, v_{(k)}))}{q(k)}$$</p>
+
+        <p class="step"><strong>Step 3: Derivation of the LogQ Corrected Logit:</strong><br>
+        Observe that:
+        $$\frac{\exp(s(u, v_j))}{q(j)} = \exp\big( s(u, v_j) - \ln q(j) \big)$$
+        Define the corrected logit as:
+        $$s'(u, v_j) \triangleq s(u, v_j) - \ln q(j)$$
+        Then the Monte Carlo estimator becomes:
+        $$\widehat{Z}(u) = \frac{1}{K} \sum_{k=1}^K \exp(s'(u, v_{(k)}))$$
+        Substituting this estimator into the Sampled Softmax probability for item $i \in \{+\} \cup \mathcal{S}_{\text{neg}}$:
+        $$\widehat{P}(i \mid u) = \frac{\exp(s'(u, v_i))}{\sum_{j \in \{+\} \cup \mathcal{S}_{\text{neg}}} \exp(s'(u, v_j))}$$
+        By the Strong Law of Large Numbers, as $K \to \infty$:
+        $$\frac{1}{K} \sum_{k=1}^K \exp(s'(u, v_{(k)})) \xrightarrow{a.s.} \sum_{j=1}^N \exp(s(u, v_j)) = Z(u)$$
+        Consequently:
+        $$\lim_{K \to \infty} \nabla_\theta \mathcal{L}_{\text{sampled}} = -\nabla_\theta s(u, v_+) + \sum_{j=1}^N \frac{\exp(s(u, v_j))}{Z(u)} \nabla_\theta s(u, v_j) = \nabla_\theta \mathcal{L}_{\text{full}}$$
+        <em>Q.E.D. Subtracting $\ln q(j)$ from the raw dot-product logits exactly counteracts the non-uniform proposal sampling bias, guaranteeing asymptotically unbiased gradient convergence!</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 7.1.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.6</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-netflix">Netflix</span>
+        <span class="company-tag company-spotify">Spotify</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Stage 3 re-ranking, platforms maximize user satisfaction by balancing individual item relevance with catalog diversity using <strong>Maximal Marginal Relevance (MMR)</strong>.</p>
+        <p>Let $\mathcal{V}$ be the candidate set of items. For a selected subset $S \subseteq \mathcal{V}$, consider the Facility Location diversity formulation:</p>
+        $$F(S) = \sum_{i \in \mathcal{V}} \max_{j \in S} \text{Sim}(i, j)$$
+        <p>where $\text{Sim}(i, j) \ge 0$ is a symmetric similarity measure.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>State the formal definition of a <strong>Monotone Submodular Set Function</strong>.</li>
+          <li>Prove that $F(S)$ is monotone increasing and submodular on $2^{\mathcal{V}}$.</li>
+          <li>Using the Nemhauser-Wolsey-Fisher (1978) theorem, prove that the greedy MMR selection algorithm:
+            $$v^* = \arg\max_{v \in \mathcal{V} \setminus S} \left( F(S \cup \{v\}) - F(S) \right)$$
+            is guaranteed to achieve at least a $(1 - 1/e) \approx 63.2\%$ approximation of the globally optimal diverse subset under cardinality constraint $|S| \le k$.
+          </li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Proof of Submodularity &amp; Greedy Approximation Bound</div>
+
+        <p class="step"><strong>Step 1: Definition of Monotone Submodularity:</strong><br>
+        A set function $F: 2^{\mathcal{V}} \to \mathbb{R}$ is:
+        <ul>
+          <li><strong>Monotone:</strong> If for all $A \subseteq B \subseteq \mathcal{V}$, $F(A) \le F(B)$.</li>
+          <li><strong>Submodular:</strong> If for all $A \subseteq B \subseteq \mathcal{V}$ and all elements $x \in \mathcal{V} \setminus B$, the marginal gain satisfies the diminishing returns property:
+            $$F(A \cup \{x\}) - F(A) \ge F(B \cup \{x\}) - F(B)$$
+          </li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2: Proof that $F(S)$ is Monotone Submodular:</strong><br>
+        Recall $F(S) = \sum_{i \in \mathcal{V}} f_i(S)$, where $f_i(S) = \max_{j \in S} \text{Sim}(i, j)$.<br>
+        Since a non-negative linear combination of submodular functions is submodular, it suffices to prove that each component $f_i(S)$ is submodular.<br><br>
+        <strong>Proof of Monotonicity:</strong><br>
+        Let $A \subseteq B$. Since $A \subseteq B$, the candidate pool for the maximum is larger in $B$:
+        $$f_i(A) = \max_{j \in A} \text{Sim}(i, j) \le \max_{j \in B} \text{Sim}(i, j) = f_i(B)$$
+        Thus $f_i(S)$ is monotone non-decreasing.<br><br>
+        <strong>Proof of Diminishing Returns (Submodularity):</strong><br>
+        Let $A \subseteq B$ and $x \notin B$. The marginal gain of adding $x$ to set $S$ is:
+        $$\Delta_i(x \mid S) = f_i(S \cup \{x\}) - f_i(S) = \max\left( \max_{j \in S} \text{Sim}(i, j), \text{Sim}(i, x) \right) - \max_{j \in S} \text{Sim}(i, j)$$
+        Let $m_S = \max_{j \in S} \text{Sim}(i, j)$. Then:
+        $$\Delta_i(x \mid S) = \max(m_S, \text{Sim}(i, x)) - m_S = \max(0, \text{Sim}(i, x) - m_S)$$
+        Since $A \subseteq B$, monotonicity implies $m_A \le m_B$.<br>
+        Observe that the function $g(m) = \max(0, c - m)$ is non-increasing with respect to $m$.<br>
+        Since $m_A \le m_B$:
+        $$\max(0, \text{Sim}(i, x) - m_A) \ge \max(0, \text{Sim}(i, x) - m_B)$$
+        $$\Delta_i(x \mid A) \ge \Delta_i(x \mid B)$$
+        Summing over all $i \in \mathcal{V}$:
+        $$F(A \cup \{x\}) - F(A) \ge F(B \cup \{x\}) - F(B)$$
+        <em>Q.E.D. $F(S)$ is strictly monotone submodular!</em></p>
+
+        <p class="step"><strong>Step 3: Proof of the $(1 - 1/e)$ Greedy Approximation Bound:</strong><br>
+        Let $S^*$ be the optimal subset of size $k$ that maximizes $F(S)$, and let $S_t$ be the set chosen by the greedy algorithm at step $t \in \{0, 1, \dots, k\}$ ($S_0 = \emptyset$).<br>
+        By submodularity and monotonicity, for any set $S$:
+        $$F(S^*) \le F(S) + \sum_{v \in S^* \setminus S} \big(F(S \cup \{v\}) - F(S)\big)$$
+        Since $|S^* \setminus S| \le k$, by the pigeonhole principle there exists at least one element $v \in S^*$ such that:
+        $$F(S \cup \{v\}) - F(S) \ge \frac{F(S^*) - F(S)}{k}$$
+        Because the greedy algorithm selects the element $v^*$ that maximizes this marginal gain:
+        $$F(S_{t+1}) - F(S_t) \ge \frac{1}{k}\big(F(S^*) - F(S_t)\big)$$
+        Rearranging:
+        $$F(S^*) - F(S_{t+1}) \le \left(1 - \frac{1}{k}\right) \big(F(S^*) - F(S_t)\big)$$
+        Applying this recurrence relation inductively from $t = 0$ to $k$:
+        $$F(S^*) - F(S_k) \le \left(1 - \frac{1}{k}\right)^k \big(F(S^*) - F(S_0)\big)$$
+        Using the fundamental calculus limit inequality $(1 - 1/k)^k \le e^{-1}$ for all $k \ge 1$, and since $F(S_0) = F(\emptyset) \ge 0$:
+        $$F(S^*) - F(S_k) \le e^{-1} F(S^*)$$
+        $$F(S_k) \ge \left(1 - \frac{1}{e}\right) F(S^*) \approx 0.6321 \cdot F(S^*)$$
+        <em>Q.E.D. The greedy MMR selection algorithm is mathematically guaranteed to achieve at least 63.2% of the globally optimal recommendation diversity!</em></p>
+      </div>
+    </div>
+
+    <!-- TIER 4: CONCEPTUAL TRAPS & ASSERTION-REASONING -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+    <!-- Problem 7.1.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.7</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A machine learning engineer proposes upgrading a YouTube Two-Tower retrieval model (Stage 1) by adding an explicit cross-feature: <code>match_country = (user_country == video_uploader_country)</code> directly into the neural network architecture. The engineer concatenates this binary indicator feature into the early hidden layers of both the User Tower and Item Tower.</p>
+        <p>Which of the following statements correctly identifies the architectural consequence of this change?</p>
+        <ol type="A">
+          <li>The model will achieve higher recall with zero impact on serving latency because the feature is a simple boolean scalar that compiles into a single bitwise instruction in TensorRT.</li>
+          <li>The change fundamentally breaks the Two-Tower serving paradigm: item embeddings $g_\phi(\mathbf{y}_{\text{item}})$ can no longer be pre-computed offline because the item vector now depends on dynamic user runtime context (<code>user_country</code>). Offline vector indexing collapses, forcing the system into an intractable $O(N)$ real-time brute force scan over 1 billion items.</li>
+          <li>The change causes gradient explosion in the Adam optimizer due to embedding table rank deficiency.</li>
+          <li>The change succeeds, but only if the vector database uses HNSW rather than IVF-PQ.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: B (Exhaustive Distractor Analysis)</div>
+
+        <p class="step"><strong>Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Option A is Catastrophically False:</strong> While bitwise comparisons are computationally cheap in isolation, embedding user state into the item encoder violates the mathematical separation of variables:
+            $$s(\mathbf{u}, \mathbf{v}) = f_\theta(\mathbf{x}_{\text{user}})^T g_\phi(\mathbf{y}_{\text{item}})$$
+          </li>
+          <li><strong>Option B is Correct:</strong>
+            <ul>
+              <li>The entire computational feasibility of Stage 1 candidate retrieval relies on the invariant that the Item Tower $g_\phi(\mathbf{y}_{\text{item}})$ is a function <em>strictly of item attributes</em>.</li>
+              <li>This allows 1,000,000,000 video embeddings to be computed once overnight, normalized, and indexed into ScaNN/HNSW vector databases.</li>
+              <li>The moment an item's embedding depends on <code>user_country</code>, an item no longer has a single vector; it has 195 different vectors (one per country)! If more user features are crossed, the number of vectors explodes combinatorially.</li>
+              <li>Offline indexing is destroyed. At query time, the system would be forced to execute 1,000,000,000 forward passes on the fly, causing query latency to spike from $8\text{ ms}$ to $800\text{ seconds}$!</li>
+              <li><em>System Design Rule: Cross-features belong strictly in Stage 2 (Heavy Ranking / DLRM), where the candidate set is already pruned to $\le 1,000$ items!</em></li>
+            </ul>
+          </li>
+          <li><strong>Option C is False:</strong> Boolean scalar features do not affect embedding table rank or cause Adam optimizer instability.</li>
+          <li><strong>Option D is False:</strong> Neither HNSW nor IVF-PQ can index dynamic vectors whose coordinates mutate depending on which user is issuing the query.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Problem 7.1.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-tiktok">ByteDance (TikTok)</span>
+        <span class="company-tag company-netflix">Netflix</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>ASSERTION-REASONING:</strong></p>
+        <p><strong>Assertion (A):</strong> When training Two-Tower retrieval models with In-Batch Negative Sampling, increasing the mini-batch size $B$ from 128 to 65,536 consistently improves negative sampling coverage and retrieval recall up to an empirical threshold, beyond which further batch expansion causes severe performance degradation unless False Negative Masking is applied.</p>
+        <p><strong>Reason (R):</strong> In billion-scale recommendation platforms with skewed power-law consumption, ultra-large mini-batches dramatically increase the probability of <strong>False Negative Collisions</strong>—where two distinct users in the same mini-batch have both genuinely consumed and enjoyed the same viral item, forcing the contrastive loss to treat a legitimate positive recommendation as a negative sample and penalizing correct predictions.</p>
+        <p><strong>Options:</strong></p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A (Comprehensive Contrastive Collisions Analysis)</div>
+
+        <p class="step"><strong>Deep Architectural Analysis:</strong></p>
+        <p><strong>Evaluation of Assertion (A): True.</strong><br>
+        In contrastive learning and Two-Tower retrieval, each sample in a batch uses the other $B - 1$ items as negatives. Increasing $B$ provides a closer approximation to the full catalog partition function. However, as $B$ scales to tens of thousands (e.g. $B = 65,536$), recall degrades unless collision masking is deployed.</p>
+
+        <p class="step"><strong>Evaluation of Reason (R): True &amp; Explanatory.</strong><br>
+        Consider a viral video consumed by $15\%$ of the entire user base.<br>
+        In a mini-batch of $B = 65,536$ random user interactions:
+        The expected number of times this viral video appears in the batch is:
+        $$\mathbb{E}[\text{Count}] = 65,536 \times 0.15 \approx 9,830\text{ instances}!$$
+        Under standard In-Batch Negative Sampling, the loss assumes that for user $i$, ALL items $j \neq i$ in the batch are negative.<br>
+        Consequently, for thousands of users who legitimately loved this viral video, the model treats the video as a negative sample, pushing its embedding <em>away</em> from the user's vector:
+        $$\nabla_\theta \mathcal{L} \implies -\frac{\partial \mathbf{u}_i^T \mathbf{v}_j}{\partial \theta} \quad \text{where } j \text{ is actually a true positive!}$$
+        This gradient collision severely degrades model training.<br>
+        <strong>Mitigation:</strong> Modern production systems implement <strong>False Negative Masking</strong>: a bitmask matrix $M \in \{0, 1\}^{B \times B}$ constructed by querying user historical interaction graphs; if user $i$ has previously interacted with item $j$, $M_{i, j} = 0$, completely zeroing out the negative loss contribution for that pair.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 6: PRODUCTION CODE LAB -->
+    <h3>5. Production Code Lab 7.1: Two-Tower Dual Encoder with LogQ Correction</h3>
+    <p>Below is an enterprise-grade PyTorch implementation of a Two-Tower retrieval model featuring in-batch negative sampled softmax, dynamic temperature scaling, and LogQ popularity de-biasing.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 7.1 — Two-Tower Dual Encoder Architecture</div>
+      <div class="code-lab-header">Code Lab 7.1 — Two-Tower Dual Encoder with LogQ De-biasing</div>
       <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch71_recsys/twotower_model.py" target="_blank">🔗 View in GitHub: part7_system_design/ch71_recsys/twotower_model.py</a></p>
 <pre><code>import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class TwoTowerRecSys(nn.Module):
-    def __init__(self, user_dim, item_dim, embed_dim=128, temperature=0.07):
+class LogQTwoTowerRecSys(nn.Module):
+    def __init__(self, user_dim: int, item_dim: int, embed_dim: int = 128, temperature: float = 0.07):
         super().__init__()
         self.temperature = temperature
 
         # User Tower MLP
         self.user_tower = nn.Sequential(
             nn.Linear(user_dim, 256),
+            nn.BatchNorm1d(256),
             nn.ReLU(),
             nn.Linear(256, embed_dim)
         )
@@ -118,46 +740,59 @@ class TwoTowerRecSys(nn.Module):
         # Item Tower MLP
         self.item_tower = nn.Sequential(
             nn.Linear(item_dim, 256),
+            nn.BatchNorm1d(256),
             nn.ReLU(),
             nn.Linear(256, embed_dim)
         )
 
-    def forward(self, user_features, item_features):
+    def forward(self, user_features: torch.Tensor, item_features: torch.Tensor, 
+                item_sampling_probs: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor]:
         # 1. Project into shared embedding space & L2-normalize
         u = F.normalize(self.user_tower(user_features), p=2, dim=-1)
         v = F.normalize(self.item_tower(item_features), p=2, dim=-1)
 
         # 2. Compute similarity matrix: (B, B)
-        # S[i, j] is similarity between user i and item j
-        logits = torch.matmul(u, v.T) / self.temperature
+        # S[i, j] represents similarity between user i and item j
+        raw_logits = torch.matmul(u, v.T) / self.temperature
 
-        # 3. Targets: Diagonal elements are positive pairs!
+        # 3. Apply LogQ Correction: logits'[i, j] = logits[i, j] - ln(p_j)
+        if item_sampling_probs is not None:
+            # item_sampling_probs has shape (B,)
+            log_q = torch.log(item_sampling_probs.clamp(min=1e-8)).unsqueeze(0) # (1, B)
+            corrected_logits = raw_logits - log_q
+        else:
+            corrected_logits = raw_logits
+
+        # 4. In-batch targets: Diagonal elements are true positive pairs!
         labels = torch.arange(user_features.size(0), device=user_features.device)
-        loss = F.cross_entropy(logits, labels)
-        return loss, logits
+        loss = F.cross_entropy(corrected_logits, labels)
+        
+        return loss, corrected_logits
 
 if __name__ == "__main__":
     torch.manual_seed(42)
-    B = 4 # Batch size of 4 users and 4 items
+    B = 4
     user_feats = torch.randn(B, 32)
     item_feats = torch.randn(B, 64)
+    # Background sampling probabilities (Item 0 is viral, Item 3 is niche)
+    sampling_probs = torch.tensor([0.60, 0.25, 0.10, 0.05])
 
-    model = TwoTowerRecSys(user_dim=32, item_dim=64, embed_dim=128)
-    loss, logits = model(user_feats, item_feats)
-    print(f"Two-Tower In-Batch Loss: {loss.item():.4f}")
-    print(f"Logits Matrix Shape     : {logits.shape} (4x4 User-Item Similarity)")</code></pre>
+    model = LogQTwoTowerRecSys(user_dim=32, item_dim=64, embed_dim=128)
+    loss, logits = model(user_feats, item_feats, item_sampling_probs=sampling_probs)
+    print(f"Two-Tower LogQ-Corrected Loss: {loss.item():.4f}")
+    print(f"Corrected Logits Shape        : {logits.shape} (4x4)")</code></pre>
     </div>
 
-    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 7.1 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 7.1: Industrial Two-Tower Recommender with Approximate Vector Retrieval</h3>
-        <p class="project-desc">Architect, train, and deploy an end-to-end two-tower video recommendation retrieval engine, pre-computing millions of item embeddings into a FAISS/HNSW index, and serving sub-10ms candidate retrieval queries via FastAPI.</p>
+        <h3 class="project-title">Project 7.1: Industrial Multi-Stage Video Recommendation Retrieval Engine</h3>
+        <p class="project-desc">Architect, train, and deploy an end-to-end multi-stage video recommendation system: training a PyTorch Two-Tower Dual Encoder with LogQ popularity de-biasing, exporting pre-computed item embeddings into a FAISS/HNSW vector index, scoring top-1000 candidates with a DLRM ranker, and re-ranking top-10 results via Maximal Marginal Relevance in sub-30ms.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch71_recsys/twotower_model.py" target="_blank">🔗 Full Project Code: part7_system_design/ch71_recsys/twotower_model.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In high-throughput streaming video platforms (YouTube, Twitch), candidate retrieval systems must ingest continuous user interaction clicks and return personalized candidates from a 50-million video catalog in under 8 milliseconds. In this project, you build an asynchronous two-tower pipeline that streams user click events into online User Towers, queries GPU-accelerated HNSW vector indices, and benchmarks retrieval recall at scale.</p>
+        <p><strong>Case Study Architecture:</strong> In high-throughput streaming video platforms (YouTube, Twitch, TikTok), candidate retrieval systems must ingest continuous user interaction clicks and return personalized candidates from a 100-million video catalog in under 30 milliseconds. In this project, you construct an asynchronous recommendation pipeline that streams user click events into online User Towers, queries GPU-accelerated HNSW vector indices, evaluates DLRM ranking MLPs, and benchmarks retrieval recall at scale.</p>
       </div>
     </div>
   </div>

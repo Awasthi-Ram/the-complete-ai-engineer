@@ -39,7 +39,7 @@ PART0_HTML = """
     </div>
 
     <h3>The Learning Philosophy of This Book</h3>
-    <p>This book is modeled after the legendary R.D. Sharma mathematics series that taught millions of engineers not merely how to memorize equations, but how to <em>think</em>:</p>
+    <p>This book is designed as an exhaustive, first-principles masterwork that teaches engineers not merely how to memorize equations, but how to <em>think</em>:</p>
     <ol>
       <li><strong>Concept First:</strong> Physical intuition and mental imagery before mathematical formalism.</li>
       <li><strong>Why It Exists:</strong> Every algorithm was invented because an earlier approach broke in the real world. We examine that breakdown.</li>

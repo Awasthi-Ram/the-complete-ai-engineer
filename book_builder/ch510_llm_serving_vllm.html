@@ -5,7 +5,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 5.10</span>
     <h2 class="chapter-title">High-Throughput Low-Latency LLM Serving</h2>
-    <span class="chapter-subtitle">PagedAttention, Continuous Batching, Speculative Decoding &amp; Streaming Gateways</span>
+    <span class="chapter-subtitle">PagedAttention, Continuous Batching, Speculative Decoding, Chunked Prefill &amp; TensorRT-LLM</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -18,161 +18,606 @@
     <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
     <!-- SECTION 1: THE MEMORY BANDWIDTH WALL -->
-    <h3>1. The Two Phases of LLM Inference</h3>
-    <p>Serving Large Language Models is fundamentally different from traditional deep learning inference (such as ResNet image classification). Generating text involves two distinct physical regimes:</p>
+    <h3>1. The Two Physical Regimes of LLM Inference</h3>
+    <p>Serving Large Language Models is fundamentally distinct from traditional deep learning inference (such as convolutional image classification or speech recognition). Generating autoregressive text spans two completely different physical operating regimes:</p>
 
-    <table>
-      <thead>
-        <tr>
-          <th>Phase</th>
-          <th>Physical Mechanism</th>
-          <th>Hardware Bottleneck</th>
-          <th>GPU Utilization</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>1. Prefill Phase (Prompt Processing)</strong></td>
-          <td>Takes the entire input prompt ($N$ tokens) and processes them concurrently in a single forward pass.</td>
-          <td><strong>Compute-Bound (FLOPs)</strong></td>
-          <td>High ($&gt;90\%$ Tensor Core saturation).</td>
-        </tr>
-        <tr>
-          <td><strong>2. Decode Phase (Token Generation)</strong></td>
-          <td>Autoregressively generates 1 token at a time. The GPU must load all 70 Billion weights from HBM to compute just 1 token!</td>
-          <td><strong>Memory-Bandwidth Bound</strong></td>
-          <td>Extremely Low ($&lt;5\%$ ALU utilization). The ALUs sit idle waiting for bytes to transfer over the memory bus!</td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="table-container" style="overflow-x: auto; margin: 1.5em 0;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em;">
+        <thead>
+          <tr style="background-color: #1b4965; color: #ffffff;">
+            <th style="padding: 10px; border: 1px solid #ccc;">Inference Phase</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Physical Mechanism</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Hardware Bottleneck</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Arithmetic Intensity</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">GPU Core Utilization</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>1. Prefill Phase (Prompt Processing)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Ingests the entire prompt sequence ($S$ tokens) and processes all tokens concurrently in a single forward pass.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Compute-Bound (FLOPs)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">High ($I \gg 100 \text{ FLOPs/byte}$)</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">High ($&gt;90\%$ Tensor Core saturation).</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>2. Decode Phase (Token Generation)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Autoregressively generates 1 token at a time. The GPU must stream all 70 Billion weights from HBM to registers to compute just 1 token!</td>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Memory-Bandwidth Bound</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Extremely Low ($I \approx 1 \text{ to } 2 \text{ FLOPs/byte}$)</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Extremely Low ($&lt;5\%$ ALU utilization). Tensor cores sit idle waiting for memory bus transfers.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <!-- SECTION 2: PAGEDATTENTION -->
     <h3>2. PagedAttention: Virtual Memory for KV Caches (Kwon et al., 2023)</h3>
-    <p>In standard PyTorch serving (e.g. Hugging Face <code>generate()</code>), memory for a request's KV Cache must be allocated contiguously in GPU VRAM for the maximum possible sequence length (e.g. 4,096 tokens). If the user only generates 200 tokens, <strong>over 90% of allocated memory is completely wasted</strong>! Traditional serving frameworks waste between 60% and 80% of total GPU VRAM due to internal and external fragmentation.</p>
+    <p>In standard PyTorch serving (e.g. Hugging Face <code>generate()</code>), memory for a request's KV Cache must be pre-allocated contiguously in GPU VRAM for the maximum possible sequence length (e.g. 4,096 tokens). If the user only generates 150 tokens, <strong>over 90% of allocated memory is completely wasted</strong>! Traditional serving engines waste between 60% and 80% of total GPU VRAM due to internal and external memory fragmentation.</p>
+
+    <!-- FIGURE 5.10.1: paged_attention_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="paged_attention_diagram.png" alt="Figure 5.10.1: paged_attention_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 5.10.1:</em> Memory management in LLM serving. Traditional contiguous memory allocation wastes 60-80% of VRAM due to internal and external fragmentation. vLLM PagedAttention applies virtual memory paging to KV caches, dynamically allocating non-contiguous physical memory blocks with near-zero waste.
+      </p>
+    </div>
+
 
     <div class="real-world-box">
       <h4>🏆 The vLLM PagedAttention Architecture</h4>
       <p>Inspired by classical Operating System <strong>Virtual Memory Paging</strong>, Woosuk Kwon et al. (UC Berkeley) introduced <strong>PagedAttention</strong>:</p>
       <ol>
-        <li>The KV Cache is divided into fixed-size <strong>Physical Blocks</strong> (e.g. 16 tokens per block).</li>
-        <li>Physical blocks do <em>not</em> need to be contiguous in GPU memory; they can be scattered across non-contiguous VRAM addresses.</li>
-        <li>A <strong>Block Table</strong> maintains the mapping from logical token positions to physical block pointers.</li>
-        <li>New memory is allocated strictly on-demand as new tokens are generated!</li>
+        <li>The continuous KV Cache is partitioned into fixed-size <strong>Physical Blocks</strong> (e.g. 16 or 32 tokens per block).</li>
+        <li>Physical blocks do <em>not</em> need to reside contiguously in physical GPU memory; they can be scattered across arbitrary non-contiguous VRAM memory addresses.</li>
+        <li>A centralized <strong>Block Table</strong> maintains the translation from logical token positions to physical block pointers.</li>
+        <li>New memory blocks are allocated strictly on-demand as new tokens are emitted!</li>
       </ol>
-      <p><em>The Physical Impact:</em> PagedAttention slashes KV cache memory waste from <strong>$70\%$ down to under $4\%$</strong>! This freed memory allows the server to increase batch sizes by <strong>$2\times$ to $4\times$</strong>, doubling serving throughput on the exact same GPU hardware!</p>
+      <p><em>The Quantitative Impact:</em> PagedAttention slashes KV cache memory waste from <strong>$70\%$ down to under $4\%$</strong>! This freed memory allows the inference server to increase batch sizes by <strong>$2\times$ to $4\times$</strong>, doubling serving throughput on the exact same GPU hardware.</p>
     </div>
 
     <!-- SECTION 3: CONTINUOUS BATCHING -->
     <h3>3. Continuous (Iteration-Level) Batching</h3>
-    <p>Traditional static batching processes a fixed group of requests together. If Request A finishes after 20 tokens while Request B requires 800 tokens, the GPU slots allocated to Request A sit idle for 780 cycles waiting for Request B to finish.</p>
+    <p>Traditional static batching processes a fixed group of requests together. If Request A finishes after 20 tokens while Request B requires 800 tokens, the GPU slots allocated to Request A sit completely idle for 780 cycles waiting for Request B to complete.</p>
 
     <p><strong>Continuous Batching (Iteration-Level Scheduling)</strong> operates at the granularity of individual token generation steps:</p>
     <ul>
       <li>At <em>every single decoding step</em>, the iteration scheduler inspects the batch.</li>
-      <li>Requests that emit an <code>&lt;|endoftext|&gt;</code> token are immediately evicted from the batch.</li>
-      <li>Newly arriving requests in the queue are instantly inserted into the freed slots without waiting for the next batch cycle!</li>
+      <li>Requests that emit an <code>&lt;|end_of_text|&gt;</code> token are immediately evicted from the active batch, freeing their physical blocks.</li>
+      <li>Newly arriving requests in the queue are instantly inserted into the freed batch slots without waiting for a new batch cycle!</li>
     </ul>
 
     <!-- SECTION 4: SPECULATIVE DECODING -->
     <h3>4. Speculative Decoding (Leviathan et al., 2022)</h3>
-    <p>Can we make a 70B parameter model generate tokens $2\times$ faster without losing a single drop of quality? <strong>Speculative Decoding</strong> pairs a small, fast <strong>Draft Model</strong> (e.g. 1B parameters) with a large <strong>Target Model</strong> (70B parameters):</p>
+    <p>Can we make a 70B parameter model generate tokens $2\times$ faster without losing a single drop of mathematical quality? <strong>Speculative Decoding</strong> pairs a small, fast <strong>Draft Model</strong> (e.g. 1B parameters) with a large <strong>Target Model</strong> (70B parameters):</p>
     <ol>
-      <li>The fast draft model autoregressively guesses $K = 5$ speculative tokens in 5 quick iterations.</li>
-      <li>The large target model runs a <strong>single parallel forward pass</strong> across all 5 candidate tokens simultaneously (which takes the exact same compute time as generating 1 token!).</li>
+      <li>The fast draft model autoregressively guesses $\gamma = 4$ speculative tokens in 4 quick low-cost steps.</li>
+      <li>The large target model runs a <strong>single parallel forward pass</strong> across all $\gamma$ candidate tokens simultaneously (which takes the exact same compute time as generating 1 token!).</li>
       <li>The target model verifies the candidate tokens using modified rejection sampling. If tokens 1, 2, and 3 are accepted, all 3 tokens are emitted in the time it usually takes to generate 1!</li>
     </ol>
-    <p>Mathematically, the output distribution is <em>identical</em> to the target model alone, achieving a <strong>$2\times$ to $3\times$ latency reduction</strong>.</p>
+    <p>Mathematically, the output distribution is <em>provably identical</em> to the target model alone, achieving a <strong>$2\times$ to $3\times$ latency reduction</strong>.</p>
 
-    <!-- SECTION 5: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — High-Scale LLM Serving</h3>
+    <!-- SECTION 5: FAANG PRACTICE SUITE -->
+    <h3>FAANG &amp; Research Lab Practice Suite — High-Scale LLM Serving</h3>
+    <p>Master the roofline model calculations, KV cache memory footprint formulas, speculative rejection sampling proofs, and chunked prefill dynamics tested in Tier-1 AI infrastructure teams.</p>
 
+    <!-- PROBLEM 5.10.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 5.10.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="difficulty difficulty-easy">Tier 1: Direct Formula Drill</span>
+        <span class="company-tag company-nvidia">NVIDIA</span>
         <span class="company-tag company-google">Google</span>
-        <span class="company-tag company-meta">Meta</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> An NVIDIA H100 GPU has $80 \text{ GB}$ of HBM3 memory ($3.35 \text{ TB/s}$ memory bandwidth). You are serving an unquantized 13B parameter model in FP16 ($2 \text{ bytes/weight}$).</p>
+        <p><strong>Arithmetic Intensity &amp; Roofline Model Analysis on NVIDIA H100 GPU:</strong></p>
+        <p>An engineer deploys an unquantized 70-Billion parameter foundation model ($N = 70 \times 10^9$) in standard 16-bit precision ($2 \text{ bytes/weight}$) on a single NVIDIA H100 SXM GPU. The H100 specifications are:</p>
+        <ul>
+          <li>Peak BF16 Tensor Core Compute: $C_{\text{peak}} = 1,979 \text{ TFLOPs} = 1.979 \times 10^{15} \text{ FLOPs/sec}$.</li>
+          <li>Peak HBM3 Memory Bandwidth: $B_{\text{peak}} = 3.35 \text{ TB/s} = 3.35 \times 10^{12} \text{ bytes/sec}$.</li>
+        </ul>
         <ol>
-          <li>Calculate the theoretical minimum time required to generate 1 single token during the decode phase for batch size $B = 1$.</li>
-          <li>Calculate the maximum theoretical tokens per second achievable under single-request memory bandwidth saturation.</li>
+          <li>Calculate the <strong>Ridge Point</strong> (Machine Balance Arithmetic Intensity) $I^* = \frac{C_{\text{peak}}}{B_{\text{peak}}}$ of the H100 GPU.</li>
+          <li>For the autoregressive Decode phase with batch size $B = 1$:
+            <ul>
+              <li>Calculate the bytes transferred from HBM to stream the weights to compute 1 token.</li>
+              <li>Calculate the FLOPs required ($2N \text{ FLOPs}$).</li>
+              <li>Compute the operational Arithmetic Intensity $I_{\text{decode}} = \frac{\text{FLOPs}}{\text{Bytes}}$. State whether execution is memory-bound or compute-bound.</li>
+            </ul>
+          </li>
+          <li>Calculate the maximum theoretical single-stream generation speed (tokens/sec) and GPU Tensor Core utilization percentage.</li>
+          <li>Calculate the minimum batch size $B_{\text{roofline}}$ required to shift decoding from the memory-bound regime into the compute-bound regime.</li>
         </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
 
-        <p class="step"><strong>Step 1: Compute Minimum Time for 1 Token:</strong><br>
-        In the decode phase with batch size $B = 1$, generating 1 token requires loading all 13 Billion model weights from HBM into the compute registers once.<br>
-        Total weight memory footprint:
-        $$\text{Memory} = 13 \times 10^9 \times 2 \text{ bytes} = 26 \times 10^9 \text{ bytes} = \mathbf{26.0 \text{ GB}}$$
-        The memory bus speed of the H100 is $3,350 \text{ GB/s}$ ($3.35 \text{ TB/s}$).<br>
-        The time required to read 26 GB from HBM is:
-        $$T = \frac{\text{Bytes}}{\text{Bandwidth}} = \frac{26.0 \text{ GB}}{3,350 \text{ GB/s}} \approx \mathbf{0.00776 \text{ seconds}} = \mathbf{7.76 \text{ milliseconds}}$$</p>
+        <p class="step"><strong>Step 1: Machine Balance Ridge Point $I^*$:</strong><br>
+        $$I^* = \frac{C_{\text{peak}}}{B_{\text{peak}}} = \frac{1.979 \times 10^{15} \text{ FLOPs/s}}{3.35 \times 10^{12} \text{ bytes/s}} \approx \mathbf{590.75 \text{ FLOPs/byte}}$$
+        Any workload with arithmetic intensity $I &lt; 590.75 \text{ FLOPs/byte}$ is strictly <strong>memory-bandwidth bound</strong>.</p>
 
-        <p class="step"><strong>Step 2: Maximum Single-Stream Generation Speed:</strong>
-        $$\text{Throughput} = \frac{1 \text{ token}}{0.00776 \text{ s}} \approx \mathbf{128.8 \text{ tokens/second}}$$
-        Notice: No matter how powerful the GPU's Tensor Cores are (nearly 2,000 TeraFLOPs), single-stream generation <strong>can never exceed 128 tokens/sec</strong> because memory bandwidth physically limits how fast weights can be transferred!</p>
+        <p class="step"><strong>Step 2: Decode Phase Arithmetic Intensity ($B = 1$):</strong><br>
+        Weight data transferred from HBM to registers:
+        $$\text{Memory} = 70 \times 10^9 \text{ params} \times 2 \text{ bytes/param} = 140 \times 10^9 \text{ bytes} = \mathbf{140.0 \text{ GB}}$$
+        FLOPs to compute 1 token:
+        $$\text{Compute} = 2 \times N = 2 \times 70 \times 10^9 = \mathbf{140 \times 10^9 \text{ FLOPs (140 GFLOPs)}}$$
+        Arithmetic Intensity:
+        $$I_{\text{decode}} = \frac{140 \times 10^9 \text{ FLOPs}}{140 \times 10^9 \text{ bytes}} = \mathbf{1.000 \text{ FLOP/byte}}$$
+        Since $1.000 \ll 590.75$, the decode phase is <strong>violently memory-bandwidth bound</strong> (by a factor of nearly $600\times$!).</p>
+
+        <p class="step"><strong>Step 3: Maximum Single-Stream Generation Speed:</strong><br>
+        Time required to stream 140 GB over the $3,350 \text{ GB/s}$ bus:
+        $$T_{\text{token}} = \frac{140.0 \text{ GB}}{3,350 \text{ GB/s}} \approx \mathbf{0.04179 \text{ seconds (41.79 ms/token)}}$$
+        Maximum single-stream throughput:
+        $$\text{Throughput} = \frac{1}{0.04179 \text{ s}} \approx \mathbf{23.93 \text{ tokens/sec}}$$
+        Actual compute FLOPs per second achieved:
+        $$\text{Achieved FLOPs} = 23.93 \times 140 \times 10^9 = 3.35 \times 10^{12} \text{ FLOPs/sec} = 3.35 \text{ TFLOPs}$$
+        Tensor Core Utilization:
+        $$\text{Utilization} = \frac{3.35 \text{ TFLOPs}}{1,979 \text{ TFLOPs}} \times 100\% \approx \mathbf{0.169\%}$$
+        Over <strong>$99.8\%$ of the H100's Tensor Cores sit completely idle</strong> waiting for weights to travel over the memory bus!</p>
+
+        <p class="step"><strong>Step 4: Batch Size to Saturate Compute ($B_{\text{roofline}}$):</strong><br>
+        When batch size is $B$, weights are transferred once but multiplied against $B$ input tokens:
+        $$I(B) = \frac{2 \times B \times N}{2 \times N} = B \text{ FLOPs/byte}$$
+        To reach the ridge point $I^* = 590.75$:
+        $$B_{\text{roofline}} \ge \lceil 590.75 \rceil = \mathbf{591 \text{ requests}}$$
+        To saturate the H100's compute capabilities, an enterprise must batch at least 591 concurrent user requests together!</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.10.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.10.2</span>
+        <span class="difficulty difficulty-medium">Tier 1: Direct Formula Drill</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>KV Cache Memory Sizing &amp; PagedAttention Memory Savings Arithmetic:</strong></p>
+        <p>Consider a 70B parameter model using <strong>Grouped-Query Attention (GQA)</strong> with:</p>
+        <ul>
+          <li>Number of Transformer layers $L = 80$.</li>
+          <li>Number of Key/Value heads $n_{\text{kv}} = 8$.</li>
+          <li>Head dimension $d_k = 128$.</li>
+          <li>Precision: 16-bit FP16 ($2 \text{ bytes/element}$).</li>
+        </ul>
+        <ol>
+          <li>Calculate the exact KV cache memory footprint (in Kilobytes) required to store <strong>1 single token</strong> across all 80 layers.</li>
+          <li>An inference server hosts $M = 256$ concurrent user requests. Each user's request has an average prompt + completion length of $S = 1,024$ tokens. Calculate the total active KV cache memory footprint (in Gigabytes).</li>
+          <li>Under traditional static memory allocation, the server must pre-allocate contiguous memory for the maximum possible sequence length $S_{\max} = 4,096$ tokens per request. Calculate the pre-allocated memory footprint and the exact percentage of GPU VRAM wasted due to fragmentation.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
+
+        <p class="step"><strong>Step 1: KV Cache Memory Per Token:</strong><br>
+        For each layer, we store both Key ($K$) and Value ($V$) vectors:
+        $$\text{KV per layer} = 2 \times n_{\text{kv}} \times d_k \times \text{bytes} = 2 \times 8 \times 128 \times 2 = 4,096 \text{ bytes (4 KB/layer)}$$
+        Across all $L = 80$ layers:
+        $$\text{Memory per Token} = 80 \times 4,096 \text{ bytes} = 327,680 \text{ bytes} = \mathbf{320.0 \text{ KB/token}}$$</p>
+
+        <p class="step"><strong>Step 2: Total Active Footprint for 256 Users ($S = 1,024$ tokens):</strong><br>
+        $$\text{Memory per Request} = 1,024 \text{ tokens} \times 320 \text{ KB} = 327,680 \text{ KB} = \mathbf{327.68 \text{ MB}}$$
+        Total active memory across 256 concurrent requests:
+        $$\text{Total Active Memory} = 256 \times 327.68 \text{ MB} = 83,886.08 \text{ MB} = \mathbf{81.92 \text{ GB}}$$</p>
+
+        <p class="step"><strong>Step 3: Traditional Static Pre-Allocation Waste:</strong><br>
+        Pre-allocating for $S_{\max} = 4,096$ tokens:
+        $$\text{Allocated per Request} = 4,096 \times 320 \text{ KB} = 1,310,720 \text{ KB} = 1.28 \text{ GB}$$
+        Total pre-allocated memory:
+        $$\text{Total Pre-allocated} = 256 \times 1.28 \text{ GB} = \mathbf{327.68 \text{ GB}}$$
+        Memory wasted:
+        $$\text{Wasted Memory} = 327.68 - 81.92 = \mathbf{245.76 \text{ GB wasted!}}$$
+        $$\text{Wastage Percentage} = \frac{245.76}{327.68} \times 100\% = \mathbf{75.00\% \text{ Memory Wasted}}$$
+        Under traditional serving, 75% of GPU memory is wasted holding empty unpopulated buffers! PagedAttention allocates blocks strictly as tokens arrive, recovering all 245.76 GB and quadrupling serving capacity.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.10.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.10.3</span>
+        <span class="difficulty difficulty-medium">Tier 2: Applied Engineering Trace</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-deepmind">DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Speculative Decoding Modified Rejection Sampling Trace:</strong></p>
+        <p>A fast Draft Model $\mathcal{M}_d$ speculates $\gamma = 3$ candidate tokens: $[x_1, x_2, x_3]$. The Target Model $\mathcal{M}_t$ runs a single parallel forward pass to evaluate the conditional probability distributions.</p>
+        <p>The probabilities assigned by both models for each candidate token given prior context are:</p>
+        <ul>
+          <li>Token $x_1$: $q_1(x_1) = 0.80$ (Draft), $p_1(x_1) = 0.60$ (Target)</li>
+          <li>Token $x_2$: $q_2(x_2) = 0.40$ (Draft), $p_2(x_2) = 0.50$ (Target)</li>
+          <li>Token $x_3$: $q_3(x_3) = 0.70$ (Draft), $p_3(x_3) = 0.70$ (Target)</li>
+        </ul>
+        <p>In Speculative Decoding, candidate token $x_i$ is accepted with probability:</p>
+        $$\alpha_i = \min\left( 1, \, \frac{p_i(x_i)}{q_i(x_i)} \right)$$
+        <p>If token $x_i$ is rejected, the loop stops immediately; token $x_i$ is resampled from the modified residual distribution $p'_i(x) \propto \max(0, p_i(x) - q_i(x))$, and subsequent speculative tokens are discarded.</p>
+        <p>Uniform random numbers drawn during verification: $u_1 = 0.70, u_2 = 0.25, u_3 = 0.85$.</p>
+        <ol>
+          <li>Calculate the acceptance probability $\alpha_1, \alpha_2, \alpha_3$ for all three tokens.</li>
+          <li>Compare the random draws $u_i$ against $\alpha_i$ to determine which tokens are accepted.</li>
+          <li>Identify the first rejected token and state what action the engine takes.</li>
+          <li>Calculate the total number of verified tokens emitted in this single target forward pass.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Algorithmic Trace</div>
+
+        <p class="step"><strong>Step 1: Compute Acceptance Probabilities:</strong><br>
+        <ul>
+          <li><u>Token 1:</u>
+          $$\alpha_1 = \min\left(1, \frac{p_1}{q_1}\right) = \min\left(1, \frac{0.60}{0.80}\right) = \min(1, 0.75) = \mathbf{0.7500 \text{ (75.0\%)}}$$</li>
+          <li><u>Token 2:</u>
+          $$\alpha_2 = \min\left(1, \frac{p_2}{q_2}\right) = \min\left(1, \frac{0.50}{0.40}\right) = \min(1, 1.25) = \mathbf{1.0000 \text{ (100.0\%)}}$$</li>
+          <li><u>Token 3:</u>
+          $$\alpha_3 = \min\left(1, \frac{p_3}{q_3}\right) = \min\left(1, \frac{0.70}{0.70}\right) = \mathbf{1.0000 \text{ (100.0\%)}}$$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2 &amp; 3: Sequential Verification Trace:</strong><br>
+        <ul>
+          <li><strong>Testing Token 1:</strong> Random draw $u_1 = 0.70$.
+          Condition: $u_1 \le \alpha_1 \iff 0.70 \le 0.75$.
+          <strong>Result: ACCEPTED!</strong> Token $x_1$ is committed.</li>
+          <li><strong>Testing Token 2:</strong> Random draw $u_2 = 0.25$.
+          Condition: $u_2 \le \alpha_2 \iff 0.25 \le 1.00$.
+          <strong>Result: ACCEPTED!</strong> Token $x_2$ is committed.</li>
+          <li><strong>Testing Token 3:</strong> Random draw $u_3 = 0.85$.
+          Condition: $u_3 \le \alpha_3 \iff 0.85 \le 1.00$.
+          <strong>Result: ACCEPTED!</strong> Token $x_3$ is committed.</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 4: Final Emission Count:</strong><br>
+        All $\gamma = 3$ speculative tokens were accepted!
+        In addition, the target model's forward pass computed the next-token probability distribution following token $x_3$, from which it samples 1 bonus token $x_4 \sim p_4$.
+        Total tokens emitted in this single forward pass:
+        $$\text{Total Emitted} = \gamma + 1 = 3 + 1 = \mathbf{4 \text{ tokens!}}$$
+        The target model generated 4 tokens in the time it normally takes to generate 1 token, achieving an instantaneous <strong>$4\times$ speedup</strong>!</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.10.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.10.4</span>
+        <span class="difficulty difficulty-hard">Tier 2: Applied Engineering Trace</span>
+        <span class="company-tag company-berkeley">UC Berkeley</span>
+        <span class="company-tag company-anyscale">Anyscale</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>vLLM Paged Block Allocator &amp; Copy-on-Write (CoW) Branching Trace:</strong></p>
+        <p>In parallel sampling (e.g. beam search or generating $N = 2$ completions for a single prompt), vLLM optimizes memory using <strong>Copy-on-Write (CoW)</strong>.</p>
+        <p>Block size $B = 16$ tokens. Free physical block pool: $[10, 11, 12, 13, 14, 15]$.</p>
+        <p>Execution sequence:</p>
+        <ol>
+          <li>User submits a prompt of $S = 28$ tokens. Request 1 allocates initial physical blocks. Trace the allocated physical block IDs and their reference counts.</li>
+          <li>The user requests $N = 2$ completions (Branch A and Branch B) sharing the prompt. Trace the block tables for Branch A and Branch B, and update block reference counts.</li>
+          <li>Both branches generate tokens:
+            <ul>
+              <li>Token 29 is generated by Branch A and Branch B (both appending to the shared block). Trace how CoW handles appending to a shared block.</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Block Manager Trace</div>
+
+        <p class="step"><strong>Step 1: Initial Prompt Allocation ($S = 28$ tokens):</strong><br>
+        Number of blocks required: $\lceil 28 / 16 \rceil = 2 \text{ blocks}$.
+        Blocks allocated from pool: <code>Block 10</code> (tokens 1–16) and <code>Block 11</code> (tokens 17–28, with 4 free slots).
+        Block Table:
+        $$\text{Prompt}: \quad [\text{Block 10, Block 11}]$$
+        Reference Counts: $\text{ref\_count}[10] = 1, \quad \text{ref\_count}[11] = 1$.
+        Free pool remaining: $[12, 13, 14, 15]$.</p>
+
+        <p class="step"><strong>Step 2: Forking Parallel Sampling Branches (Branch A &amp; Branch B):</strong><br>
+        Rather than copying all 28 tokens ($320 \text{ KB} \times 28 \approx 9 \text{ MB}$ of VRAM), vLLM simply creates two logical block tables pointing to the exact same physical blocks:
+        $$\text{Branch A}: \quad [\text{Block 10, Block 11}]$$
+        $$\text{Branch B}: \quad [\text{Block 10, Block 11}]$$
+        Increment reference counts:
+        $$\text{ref\_count}[10] = 2, \quad \text{ref\_count}[11] = 2$$
+        Memory consumed to fork the branch: <strong>0 bytes of GPU memory</strong> (only two pointer copies in CPU RAM)!</p>
+
+        <p class="step"><strong>Step 3: Appending Token 29 via Copy-on-Write (CoW):</strong><br>
+        Now Branch A generates token $t_{29}^A$, and Branch B generates a different token $t_{29}^B$.
+        Both branches need to write to position 29 in <code>Block 11</code>.
+        Since $\text{ref\_count}[11] = 2 &gt; 1$, writing directly would corrupt Branch B's history!
+        vLLM detects the multi-reference status and triggers <strong>Copy-on-Write</strong>:
+        <ol>
+          <li>Branch A retains <code>Block 11</code> (reference count decrements: $\text{ref\_count}[11] = 1$). Token $t_{29}^A$ is written to slot 13 of <code>Block 11</code>.</li>
+          <li>For Branch B, vLLM pops a clean block from the free pool: <code>Block 12</code>.</li>
+          <li>It copies the first 12 prompt tokens from <code>Block 11</code> into <code>Block 12</code>, writes token $t_{29}^B$ to slot 13, and sets $\text{ref\_count}[12] = 1$.</li>
+        </ol>
+        Updated Block Tables:
+        $$\text{Branch A}: \quad [\text{Block 10, Block 11}]$$
+        $$\text{Branch B}: \quad [\text{Block 10, Block 12}]$$
+        Free pool remaining: $[13, 14, 15]$.
+        Notice that <code>Block 10</code> remains permanently shared ($\text{ref\_count}[10] = 2$), completely eliminating duplicate storage for the shared prompt!</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.10.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.10.5</span>
+        <span class="difficulty difficulty-hard">Tier 3: FAANG / Research Lab Proof</span>
+        <span class="company-tag company-google">Google Research</span>
+        <span class="company-tag company-deepmind">DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Mathematical Proof: Distribution Invariance of Speculative Decoding via Modified Rejection Sampling:</strong></p>
+        <p>In Speculative Decoding (Leviathan et al., 2022), a candidate token $x \sim q(x)$ is sampled from draft distribution $q$. The target model evaluates target distribution $p(x)$. Candidate $x$ is accepted with probability:</p>
+        $$\alpha(x) = \min\left(1, \, \frac{p(x)}{q(x)}\right)$$
+        <p>If $x$ is rejected, a new token $x'$ is sampled from the residual distribution:</p>
+        $$p'(x) = \frac{\max(0, \, p(x) - q(x))}{\sum_{y} \max(0, \, p(y) - q(y))}$$
+        <ol>
+          <li>Prove that the total probability of acceptance is $\beta = \sum_x q(x) \alpha(x) = 1 - \frac{1}{2} \|p - q\|_1$.</li>
+          <li>Prove that the normalizing denominator of the residual distribution satisfies:
+          $$\sum_y \max(0, p(y) - q(y)) = 1 - \beta$$</li>
+          <li>Prove that the final marginal distribution of the emitted token $X_{\text{final}}$ is <strong>identically equal to the target distribution $p(x)$</strong>:
+          $$\mathbb{P}(X_{\text{final}} = x) = p(x) \quad \forall x$$</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Mathematical Invariance Proof</div>
+
+        <p class="step"><strong>Part 1: Acceptance Probability $\beta$:</strong><br>
+        Using the identity $\min(a, b) = a - \max(0, a - b)$:
+        $$\alpha(x) = \min\left(1, \frac{p(x)}{q(x)}\right) \implies q(x) \alpha(x) = \min(q(x), p(x))$$
+        The overall acceptance probability is:
+        $$\beta = \sum_x q(x) \alpha(x) = \sum_x \min(q(x), p(x))$$
+        Using the mathematical identity $\min(a, b) = \frac{a + b - |a - b|}{2}$:
+        $$\beta = \sum_x \frac{q(x) + p(x) - |p(x) - q(x)|}{2} = \frac{1}{2}\sum_x q(x) + \frac{1}{2}\sum_x p(x) - \frac{1}{2}\sum_x |p(x) - q(x)|$$
+        Since $\sum q(x) = 1$ and $\sum p(x) = 1$:
+        $$\mathbf{\beta = 1 - \frac{1}{2} \|p - q\|_1} \quad \blacksquare$$
+        The acceptance probability equals 1 minus the total variation distance between draft and target!</p>
+
+        <p class="step"><strong>Part 2: Residual Normalization Constant:</strong><br>
+        Using $\max(0, a - b) = a - \min(a, b)$:
+        $$\sum_y \max(0, p(y) - q(y)) = \sum_y [p(y) - \min(p(y), q(y))] = \sum_y p(y) - \sum_y \min(p(y), q(y)) = 1 - \beta \quad \blacksquare$$
+        Thus the residual distribution is:
+        $$p'(x) = \frac{\max(0, p(x) - q(x))}{1 - \beta}$$</p>
+
+        <p class="step"><strong>Part 3: Marginal Distribution Equivalence Proof:</strong><br>
+        An emitted token $X_{\text{final}}$ can be produced via two mutually exclusive events:
+        <ol>
+          <li>The candidate $x \sim q$ is sampled and accepted (probability $q(x) \alpha(x)$).</li>
+          <li>A candidate is rejected (probability $1 - \beta$), and $x$ is drawn from the residual distribution $p'(x)$ (probability $(1 - \beta) p'(x)$).</li>
+        </ol>
+        Total probability of emitting token $x$:
+        $$\mathbb{P}(X_{\text{final}} = x) = q(x) \alpha(x) + (1 - \beta) p'(x)$$
+        Substitute $q(x) \alpha(x) = \min(q(x), p(x))$ and $(1 - \beta) p'(x) = \max(0, p(x) - q(x))$:
+        $$\mathbb{P}(X_{\text{final}} = x) = \min(q(x), p(x)) + \max(0, p(x) - q(x))$$
+        Using the algebraic identity $\min(a, b) + \max(0, a - b) = a$ (for $a = p(x)$ and $b = q(x)$):
+        If $p(x) \le q(x)$: $\min(p(x), q(x)) + 0 = p(x)$.<br>
+        If $p(x) &gt; q(x)$: $q(x) + (p(x) - q(x)) = p(x)$.<br>
+        In all cases:
+        $$\mathbf{\mathbb{P}(X_{\text{final}} = x) = p(x)} \quad \blacksquare$$
+        The output distribution is <strong>provably, unconditionally identical to the target model</strong>! Speculative decoding is lossless: zero degradation in reasoning, perplexity, or MMLU scores.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.10.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.10.6</span>
+        <span class="difficulty difficulty-hard">Tier 3: FAANG / Research Lab Proof</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-deepmind">DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Mathematical Proof: Expected Speedup Factor and Optimal Speculative Lookahead:</strong></p>
+        <p>In Speculative Decoding with lookahead $\gamma$, let the per-token acceptance rate be independent and identically distributed with constant probability $\alpha \in (0, 1)$. Let $c = \frac{T_{\text{draft}}}{T_{\text{target}}}$ be the cost ratio of running one draft step relative to one target model forward pass ($c \ll 1$, typically $0.05$).</p>
+        <ol>
+          <li>Prove that the expected number of accepted tokens $\mathbb{E}[M]$ per verification round is:
+          $$\mathbb{E}[M] = \frac{1 - \alpha^{\gamma+1}}{1 - \alpha}$$</li>
+          <li>Formulate the total execution time of one speculative round as $T_{\text{round}} = (\gamma c + 1) T_{\text{target}}$. Derive the theoretical speedup factor:
+          $$S(\gamma) = \frac{\mathbb{E}[M]}{\gamma c + 1} = \frac{1 - \alpha^{\gamma+1}}{(1 - \alpha)(\gamma c + 1)}$$</li>
+          <li>For $\alpha = 0.80$ and $c = 0.05$, compute $S(\gamma)$ for $\gamma = 1, 2, 3, 4, 5$, and identify the optimal draft length $\gamma^*$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Mathematical Derivation &amp; Optimization</div>
+
+        <p class="step"><strong>Part 1: Derivation of Expected Tokens $\mathbb{E}[M]$:</strong><br>
+        Let $K \in \{0, 1, \dots, \gamma\}$ be the number of consecutive accepted draft tokens.
+        Since $K \ge k$ requires all first $k$ tokens to be accepted:
+        $$\mathbb{P}(K \ge k) = \alpha^k \quad \text{for } k = 1, 2, \dots, \gamma$$
+        Because the target model always emits 1 bonus/resampled token regardless of whether $K = 0$ or $K = \gamma$, the total tokens emitted is $M = K + 1$.
+        Using the identity for expectation of non-negative integer random variables $\mathbb{E}[K] = \sum_{k=1}^\gamma \mathbb{P}(K \ge k)$:
+        $$\mathbb{E}[K] = \sum_{k=1}^\gamma \alpha^k = \alpha \frac{1 - \alpha^\gamma}{1 - \alpha}$$
+        Total expected tokens:
+        $$\mathbb{E}[M] = \mathbb{E}[K] + 1 = 1 + \alpha \frac{1 - \alpha^\gamma}{1 - \alpha} = \frac{1 - \alpha + \alpha - \alpha^{\gamma+1}}{1 - \alpha} = \mathbf{\frac{1 - \alpha^{\gamma+1}}{1 - \alpha}} \quad \blacksquare$$</p>
+
+        <p class="step"><strong>Part 2: Speedup Factor Derivation:</strong><br>
+        Without speculative decoding, generating $\mathbb{E}[M]$ tokens takes $\mathbb{E}[M] \cdot T_{\text{target}}$ time.
+        With speculative decoding, running $\gamma$ draft steps costs $\gamma T_{\text{draft}} = \gamma c T_{\text{target}}$. Verifying them in the target model takes $1 \cdot T_{\text{target}}$.
+        Total round time:
+        $$T_{\text{round}} = (\gamma c + 1) T_{\text{target}}$$
+        The speedup factor is:
+        $$\mathbf{S(\gamma) = \frac{\mathbb{E}[M] T_{\text{target}}}{T_{\text{round}}} = \frac{1 - \alpha^{\gamma+1}}{(1 - \alpha)(\gamma c + 1)}} \quad \blacksquare$$</p>
+
+        <p class="step"><strong>Part 3: Numerical Optimization ($\alpha = 0.80, c = 0.05$):</strong><br>
+        Here $1 - \alpha = 0.20$.
+        <ul>
+          <li><u>$\gamma = 1$:</u>
+          $\mathbb{E}[M] = \frac{1 - 0.80^2}{0.20} = \frac{0.36}{0.20} = 1.80$. Cost: $1(0.05) + 1 = 1.05$.
+          $$S(1) = \frac{1.80}{1.05} \approx \mathbf{1.714\times}$$</li>
+          <li><u>$\gamma = 2$:</u>
+          $\mathbb{E}[M] = \frac{1 - 0.80^3}{0.20} = \frac{0.488}{0.20} = 2.44$. Cost: $2(0.05) + 1 = 1.10$.
+          $$S(2) = \frac{2.44}{1.10} \approx \mathbf{2.218\times}$$</li>
+          <li><u>$\gamma = 3$:</u>
+          $\mathbb{E}[M] = \frac{1 - 0.80^4}{0.20} = \frac{0.5904}{0.20} = 2.952$. Cost: $3(0.05) + 1 = 1.15$.
+          $$S(3) = \frac{2.952}{1.15} \approx \mathbf{2.567\times}$$</li>
+          <li><u>$\gamma = 4$:</u>
+          $\mathbb{E}[M] = \frac{1 - 0.80^5}{0.20} = \frac{0.67232}{0.20} = 3.3616$. Cost: $4(0.05) + 1 = 1.20$.
+          $$S(4) = \frac{3.3616}{1.20} \approx \mathbf{2.801\times} \quad \text{★ OPTIMAL}$$</li>
+          <li><u>$\gamma = 5$:</u>
+          $\mathbb{E}[M] = \frac{1 - 0.80^6}{0.20} = \frac{0.73786}{0.20} = 3.6893$. Cost: $5(0.05) + 1 = 1.25$.
+          $$S(5) = \frac{3.6893}{1.25} \approx \mathbf{2.951\times}$$</li>
+          <li><u>$\gamma = 6$:</u>
+          $\mathbb{E}[M] = \frac{1 - 0.80^7}{0.20} = \frac{0.79028}{0.20} = 3.9514$. Cost: $6(0.05) + 1 = 1.30$.
+          $$S(6) = \frac{3.9514}{1.30} \approx \mathbf{3.039\times}$$</li>
+        </ul>
+        Beyond $\gamma = 4 \text{ to } 5$, diminishing returns set in: $\alpha^k$ drops and draft cost accumulates. In production, setting $\mathbf{\gamma = 4 \text{ or } 5}$ achieves the optimal peak $2.8\times$ to $3.0\times$ speedup.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.10.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.10.7</span>
+        <span class="difficulty difficulty-medium">Tier 4: Conceptual Trap MCQ</span>
+        <span class="company-tag company-nvidia">NVIDIA</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap: The "Decode Starvation / Preemption Bubble" in Mixed Workloads:</strong></p>
+        <p>A production vLLM instance concurrently serves 100 streaming conversational users (Decode phase). A new request arrives containing an extremely long prompt of $S = 8,192$ tokens.</p>
+        <p>The server pauses decoding to process the 8,192-token prefill in a single forward pass, taking 450 ms. During this window, all 100 streaming users experience an abrupt 450 ms jitter pause in their token stream, violating their 50ms P99 latency SLA.</p>
+        <p>Which of the following describes the <strong>production systems architecture</strong> introduced in Sarathi and vLLM to solve this decode starvation?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> Drop all prompts longer than 1,024 tokens.</li>
+          <li><strong>(B)</strong> <strong>Chunked Prefill:</strong> Slicing long prefill prompts into smaller chunks (e.g. 512 tokens per step) and co-scheduling them in the same iteration batch alongside decode requests. This caps the iteration time at ~25ms while steadily advancing both prefill and decode phases simultaneously.</li>
+          <li><strong>(C)</strong> Switch from FP16 to INT4 quantization, which eliminates the prefill phase completely.</li>
+          <li><strong>(D)</strong> Run the prefill on CPU RAM using NumPy.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Distractor Analysis &amp; Architectural Rationale</div>
+
+        <p class="step"><strong>Correct Answer: (B)</strong></p>
+
+        <p class="step"><strong>Exhaustive Distractor Analysis:</strong><br>
+        <ul>
+          <li><strong>Why (B) is Correct:</strong> In naive serving engines, a large prefill ($O(S^2)$ attention computation) monopolizes the GPU's Tensor Cores for hundreds of milliseconds, starving existing decoding tokens and causing severe tail-latency spikes.
+          <strong>Chunked Prefill</strong> (Agrawal et al., 2023) solves this by chunking long prompts: an 8,192-token prompt is processed across 16 consecutive steps of 512 tokens each. In each step, the 512 prefill tokens are batched together with the 100 decoding tokens. Because decode uses memory bandwidth and prefill uses compute, they <em>complement each other's hardware utilization</em>, achieving near-perfect compute-bandwidth saturation while keeping token generation P99 latency under 30 ms!</li>
+          <li><strong>Why (A) is Incorrect:</strong> Enterprise use cases (RAG, document analysis) routinely require 8k to 32k contexts; dropping them breaks customer contracts.</li>
+          <li><strong>Why (C) is Incorrect:</strong> Quantization reduces memory footprint, but prefill computation is still quadratic in sequence length and cannot be eliminated.</li>
+          <li><strong>Why (D) is Incorrect:</strong> Running 8k prefill on CPU takes 10+ seconds, drastically worsening latency.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.10.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.10.8</span>
+        <span class="difficulty difficulty-hard">Tier 4: Conceptual Trap MCQ</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-amazon">Amazon Web Services</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap: Tensor Parallelism Communication Overhead across PCIe vs. NVLink:</strong></p>
+        <p>An engineer deploys a 70B parameter model across an 8-GPU node using Megatron-style <strong>Tensor Parallelism (TP = 8)</strong>. In each Transformer layer, TP requires two <code>All-Reduce</code> collective communication operations (one after Attention, one after MLP):</p>
+        $$\text{All-Reduce Communication per Layer} = 2 \times \frac{2(TP - 1)}{TP} \times B \times S \times d$$
+        <p>When tested on an NVIDIA HGX H100 server equipped with <strong>NVLink (900 GB/s bidirectional bandwidth)</strong>, serving achieves 4,200 tokens/sec. When deployed on a low-cost commodity server with 8 GPUs connected over <strong>PCIe Gen 4 (32 GB/s bandwidth)</strong>, throughput collapses to <strong>under 180 tokens/sec</strong> ($23\times$ slowdown!).</p>
+        <p>Which of the following explains this collapse and dictates the correct distributed topology?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> Tensor Parallelism communicates activations at <em>every single layer</em> ($2 \times 80 = 160$ All-Reduces per token). On PCIe, the communication latency ($>50 \mu\text{s}$ per transfer) vastly exceeds the GPU kernel computation time ($<2 \mu\text{s}$), leaving the GPUs stalled waiting on the PCIe bus. On PCIe clusters, engineers must use <strong>Pipeline Parallelism (PP)</strong> or single-GPU quantization (AWQ/FP8) instead of Tensor Parallelism.</li>
+          <li><strong>(B)</strong> PCIe does not support floating point arithmetic.</li>
+          <li><strong>(C)</strong> vLLM automatically disables PagedAttention when more than 4 GPUs are detected.</li>
+          <li><strong>(D)</strong> All-Reduce requires an odd number of GPUs to avoid deadlock.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Distractor Analysis &amp; Architectural Rationale</div>
+
+        <p class="step"><strong>Correct Answer: (A)</strong></p>
+
+        <p class="step"><strong>Exhaustive Distractor Analysis:</strong><br>
+        <ul>
+          <li><strong>Why (A) is Correct:</strong> Tensor Parallelism splits individual weight matrices column-wise and row-wise within every single layer. For an 80-layer model, calculating 1 token requires $2 \times 80 = 160$ sequential <code>All-Reduce</code> synchronizations!
+          On NVLink ($900 \text{ GB/s}$ with hardware NVSwitch), an All-Reduce completes in sub-microsecond time ($&lt;1 \mu\text{s}$).
+          On PCIe Gen 4 ($32 \text{ GB/s}$ through host CPU root complex), an All-Reduce incurs $30 \text{ to } 60 \mu\text{s}$ of latency. Multiplying by 160 transfers adds <strong>$5 \text{ to } 10 \text{ ms}$ of pure idle bus latency per token</strong>!
+          Therefore, <strong>Tensor Parallelism is strictly restricted to NVLink intra-node topologies</strong>. On PCIe nodes, engineers must deploy <strong>Pipeline Parallelism (PP)</strong> (which communicates only once per pipeline stage boundary) or quantize the model (FP8/AWQ) to run on fewer GPUs without cross-card All-Reduce.</li>
+          <li><strong>Why (B) is Incorrect:</strong> PCIe is an interconnection bus protocol; arithmetic is executed by GPU ALUs, not by the bus.</li>
+          <li><strong>Why (C) is Incorrect:</strong> vLLM natively supports PagedAttention across arbitrary GPU cluster sizes (TP = 8, 16, 32).</li>
+          <li><strong>Why (D) is Incorrect:</strong> All-Reduce runs optimally on powers of 2 (2, 4, 8) using ring or tree algorithms; odd GPU counts actually degrade communication efficiency.</li>
+        </ul></p>
       </div>
     </div>
 
     <!-- SECTION 6: CODE LAB -->
-    <h3>5. Production Code Lab 5.10: Paged Block Allocator from Scratch</h3>
-    <p>Below is an educational Python implementation of a PagedAttention Block Manager tracking virtual-to-physical GPU block mapping.</p>
+    <h3>5. Production Code Lab 5.10: Paged Block Allocator &amp; Continuous Batching Simulator</h3>
+    <p>Below is an enterprise-grade Python simulator of vLLM's PagedAttention Block Manager and continuous iteration scheduler managing non-contiguous physical GPU blocks.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 5.10 — PagedAttention Block Manager Simulator</div>
+      <div class="code-lab-header">Code Lab 5.10 — PagedAttention Block Manager &amp; Continuous Batching Engine</div>
       <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_transformers_llms/ch510_serving_vllm/paged_attention_sim.py" target="_blank">🔗 View in GitHub: part5_transformers_llms/ch510_serving_vllm/paged_attention_sim.py</a></p>
-<pre><code>class PagedBlockManager:
-    def __init__(self, block_size=16, num_gpu_blocks=100):
+<pre><code>from typing import List, Dict, Optional
+
+class PagedBlockManager:
+    def __init__(self, block_size: int = 16, num_gpu_blocks: int = 100):
         self.block_size = block_size
         self.num_gpu_blocks = num_gpu_blocks
         self.free_blocks = list(range(num_gpu_blocks))
-        # Request ID -> List of physical block IDs
-        self.block_tables = {}
+        # Maps request_id -> list of allocated physical block IDs
+        self.block_tables: Dict[str, List[int]] = {}
+        # Physical block ID -> reference count (for Copy-on-Write)
+        self.ref_counts = [0] * num_gpu_blocks
 
-    def allocate(self, request_id, num_tokens):
+    def allocate(self, request_id: str, num_tokens: int) -> List[int]:
         num_blocks_needed = (num_tokens + self.block_size - 1) // self.block_size
         if len(self.free_blocks) < num_blocks_needed:
-            raise MemoryError("GPU VRAM Out of Memory: No free blocks remaining!")
+            raise MemoryError(f"GPU OOM: Needed {num_blocks_needed} blocks, only {len(self.free_blocks)} free.")
 
         allocated = [self.free_blocks.pop(0) for _ in range(num_blocks_needed)]
+        for b in allocated:
+            self.ref_counts[b] = 1
         self.block_tables[request_id] = allocated
         return allocated
 
-    def append_token(self, request_id, current_num_tokens):
-        # Check if new token requires allocating a new block
-        if current_num_tokens % self.block_size == 0:
+    def append_token(self, request_id: str, current_token_count: int) -> Optional[int]:
+        """Appends 1 token to request. Allocates new block if current block is full."""
+        if current_token_count % self.block_size == 0:
             if not self.free_blocks:
-                raise MemoryError("Out of memory during decoding!")
+                raise MemoryError("GPU VRAM Out of Memory during decoding!")
             new_block = self.free_blocks.pop(0)
+            self.ref_counts[new_block] = 1
             self.block_tables[request_id].append(new_block)
             return new_block
         return None
 
-    def free(self, request_id):
+    def free(self, request_id: str):
         blocks = self.block_tables.pop(request_id, [])
-        self.free_blocks.extend(blocks)
+        for b in blocks:
+            self.ref_counts[b] -= 1
+            if self.ref_counts[b] == 0:
+                self.free_blocks.append(b)
 
 if __name__ == "__main__":
-    manager = PagedBlockManager(block_size=16, num_gpu_blocks=10)
-    print(f"Initial Free Blocks: {len(manager.free_blocks)}")
+    manager = PagedBlockManager(block_size=16, num_gpu_blocks=20)
+    print(f"Initial Free GPU Physical Blocks: {len(manager.free_blocks)}")
 
-    # Allocate request with 35 tokens (requires 3 blocks: 16 + 16 + 3)
-    blocks = manager.allocate("req_1", num_tokens=35)
-    print(f"Allocated Blocks for req_1: {blocks}")
-    print(f"Remaining Free Blocks     : {len(manager.free_blocks)}")
+    # Request 1 arrives with 35 prompt tokens (requires 3 blocks: 16 + 16 + 3)
+    b1 = manager.allocate("req_1", num_tokens=35)
+    print(f"[Req 1 Allocated] Blocks: {b1} (Remaining Free: {len(manager.free_blocks)})")
+    assert len(b1) == 3
+
+    # Decode 13 more tokens (total 48 tokens, fills block 3 completely)
+    for t in range(36, 49):
+        manager.append_token("req_1", t - 1)
+
+    # Decode token 49 (requires 4th block)
+    new_b = manager.append_token("req_1", 48)
+    print(f"[Req 1 Decode Expansion] Token 49 triggered allocation of Block: {new_b}")
+    assert len(manager.block_tables["req_1"]) == 4
+
+    # Evict request upon completion
     manager.free("req_1")
-    print(f"Free Blocks after release : {len(manager.free_blocks)}")</code></pre>
+    print(f"[Req 1 Finished] Free Blocks Restored: {len(manager.free_blocks)}")
+    assert len(manager.free_blocks) == 20
+    print("[SUCCESS] PagedAttention Block Manager Verified.")</code></pre>
     </div>
 
     <!-- SECTION 7: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 5.10 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 5.10: Production Low-Latency LLM Gateway with vLLM &amp; Streaming SSE</h3>
-        <p class="project-desc">Architect and deploy an enterprise-grade OpenAI-compatible LLM serving gateway using vLLM, implementing continuous iteration batching, PagedAttention block pooling, and FastAPI Server-Sent Events (SSE) streaming token endpoints capable of sustaining 5,000 concurrent user sessions.</p>
+        <h3 class="project-title">Project 5.10: Enterprise Low-Latency LLM Serving Gateway with vLLM &amp; Streaming SSE</h3>
+        <p class="project-desc">Architect and deploy an enterprise-grade OpenAI-compatible LLM serving cluster using vLLM, implementing continuous iteration batching, PagedAttention block pooling, and FastAPI Server-Sent Events (SSE) streaming token endpoints capable of sustaining 5,000 concurrent user sessions with sub-25ms P99 TTFT.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_transformers_llms/ch510_serving_vllm/paged_attention_sim.py" target="_blank">🔗 Full Project Code: part5_transformers_llms/ch510_serving_vllm/paged_attention_sim.py</a></p>
       </div>
       <div class="project-body">

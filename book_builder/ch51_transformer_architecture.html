@@ -5,7 +5,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 5.1</span>
     <h2 class="chapter-title">The Transformer Architecture from First Principles</h2>
-    <span class="chapter-subtitle">Scaled Dot-Product Attention, Multi-Head Attention, RoPE, KV Cache &amp; FlashAttention</span>
+    <span class="chapter-subtitle">Scaled Dot-Product Attention, Multi-Head Attention, RoPE, KV Cache, SwiGLU, Pre-LN &amp; Distributed Parallelism</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -19,16 +19,45 @@
 
     <!-- SECTION 1: WHY ATTENTION REPLACED RECURRENCE -->
     <h3>1. The Paradigm Shift: From Recurrence to Direct Attention</h3>
-    <p>For decades, sequential modeling was dominated by Recurrent Neural Networks (RNNs, LSTMs, and GRUs). An RNN processes tokens sequentially from left to right, maintaining a hidden state vector $\mathbf{h}_t = f(\mathbf{h}_{t-1}, \mathbf{x}_t)$. This architecture suffered from two fatal physical flaws:</p>
+    <p>For decades, sequential modeling was dominated by Recurrent Neural Networks (RNNs, LSTMs, and GRUs - Chapter 3.8). An RNN processes tokens sequentially from left to right, maintaining a hidden state vector $\mathbf{h}_t = f(\mathbf{h}_{t-1}, \mathbf{x}_t)$. This architecture suffered from two fatal physical flaws:</p>
     <ol>
       <li><strong>Sequential Bottleneck (No Parallelism):</strong> Because computing $\mathbf{h}_t$ strictly requires $\mathbf{h}_{t-1}$, training cannot be parallelized across the time dimension. High-performance GPUs with thousands of compute cores sit idle waiting for step $t-1$ to finish!</li>
-      <li><strong>Information Compression &amp; Vanishing Gradients:</strong> An entire sequence of 10,000 words had to be continuously squeezed through a fixed-size hidden vector $\mathbf{h}_t \in \mathbb{R}^d$. Long-range dependencies decayed exponentially over time.</li>
+      <li><strong>Information Compression &amp; Vanishing Gradients:</strong> An entire sequence of 10,000 words had to be continuously squeezed through a fixed-size hidden vector $\mathbf{h}_t \in \mathbb{R}^d$. Long-range dependencies decayed exponentially over time ($O(T)$ sequential path length).</li>
     </ol>
 
-    <p>In 2017, Vaswani et al. introduced the <strong>Transformer</strong>, completely discarding recurrence. Instead of passing state through time, the Transformer allows <strong>every token to look directly at every other token</strong> in the sequence simultaneously via the Self-Attention mechanism, enabling massive GPU parallelization across millions of tokens.</p>
+    <p>In 2017, Vaswani et al. introduced the <strong>Transformer</strong>, completely discarding recurrence. Instead of passing state sequentially through time, the Transformer allows <strong>every token to look directly at every other token</strong> in the sequence simultaneously via the Self-Attention mechanism ($O(1)$ maximum path length), enabling massive GPU parallelization across millions of tokens.</p>
 
-    <!-- SECTION 2: SCALED DOT-PRODUCT ATTENTION -->
-    <h3>2. Scaled Dot-Product Attention &amp; The $\sqrt{d_k}$ Derivation</h3>
+    <!-- SECTION 2: THE COMPLETE TRANSFORMER BLOCK -->
+    <h3>2. The Modern Transformer Block Architecture</h3>
+    <p>While attention forms the routing engine of the Transformer, a complete production block consists of alternating attention and non-linear feed-forward sub-layers, stabilized by normalization and residual skip connections.</p>
+
+    <!-- DIAGRAM: TRANSFORMER BLOCK -->
+    <div style="text-align: center; margin: 1.8em 0;">
+      <img src="transformer_block_diagram.jpg" alt="Modern Transformer Block Architecture: Pre-LN, Multi-Head Attention, RMSNorm, and SwiGLU MLP" style="max-width: 90%; border-radius: 8px; border: 2px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+      <p style="font-size: 0.9em; color: #555; margin-top: 10px;"><em>Figure 5.1.1:</em> The canonical modern Pre-LN Transformer decoder layer (LLaMA-3 / Mistral style). RMSNorm precedes both the Multi-Head Attention and SwiGLU Feed-Forward blocks, with pure identity residual bypasses.</p>
+    </div>
+
+    <h4>2.1 Normalization Placement: Pre-LN vs Post-LN Stability</h4>
+    <p>The original Vaswani (2017) architecture utilized <strong>Post-LayerNorm</strong>:</p>
+    $$\mathbf{x}^{(l+1)} = \text{LayerNorm}\left( \mathbf{x}^{(l)} + \text{SubLayer}(\mathbf{x}^{(l)}) \right)$$
+    <p>In Post-LN, gradients passing through the residual connection must pass through the derivative of LayerNorm at every single layer. As depth grows ($L \ge 24$), the gradient norm scales as $\mathcal{O}(1/\sqrt{L})$, causing severe gradient vanishing in early layers. Training was fragile and required delicate learning rate warmup schedules to prevent immediate divergence.</p>
+
+    <p>Modern architectures (LLaMA, GPT-3, PaLM) strictly employ <strong>Pre-LayerNorm (Pre-LN)</strong> or <strong>RMSNorm</strong>:</p>
+    $$\mathbf{z}^{(l)} = \mathbf{x}^{(l)} + \text{Attention}\left( \text{RMSNorm}(\mathbf{x}^{(l)}) \right)$$
+    $$\mathbf{x}^{(l+1)} = \mathbf{z}^{(l)} + \text{FFN}\left( \text{RMSNorm}(\mathbf{z}^{(l)}) \right)$$
+    <p>In Pre-LN, the identity path $\mathbf{x}^{(l+1)} = \mathbf{x}^{(l)} + \dots$ provides an unobstructed <strong>gradient highway</strong> directly from the loss back to the token embeddings: $\frac{\partial \mathbf{x}^{(L)}}{\partial \mathbf{x}^{(l)}} = I + \dots$. This guarantees numerical stability even in 100+ layer architectures.</p>
+
+    <h4>2.2 The Feed-Forward Sub-Layer: SwiGLU Activations</h4>
+    <p>The Feed-Forward Network (FFN) performs token-wise feature transformation. Traditional transformers used a 2-layer MLP with ReLU or GELU:</p>
+    $$\text{FFN}_{\text{GELU}}(\mathbf{x}) = \text{GELU}(\mathbf{x} W_1 + \mathbf{b}_1) W_2 + \mathbf{b}_2$$
+
+    <p>In 2020, Noam Shazeer introduced the <strong>SwiGLU (Swish Gated Linear Unit)</strong> variant, which has become standard across frontier models (LLaMA 3, Mistral, Gemma):</p>
+    $$\text{SwiGLU}(\mathbf{x}) = \left( \text{Swish}(\mathbf{x} W_{\text{gate}}) \odot (\mathbf{x} W_{\text{up}}) \right) W_{\text{down}}$$
+    <p>where $\text{Swish}_\beta(z) = z \cdot \sigma(\beta z)$ (with $\beta=1$, commonly called SiLU: $\text{SiLU}(z) = z \cdot \frac{1}{1 + e^{-z}}$), $\odot$ denotes element-wise multiplication, $W_{\text{gate}}, W_{\text{up}} \in \mathbb{R}^{d_{\text{model}} \times d_{\text{ffn}}}$, and $W_{\text{down}} \in \mathbb{R}^{d_{\text{ffn}} \times d_{\text{model}}}$.</p>
+    <p>To preserve parameter count parity with standard FFNs ($8 d_{\text{model}}^2$), SwiGLU sets the intermediate hidden dimension to $d_{\text{ffn}} \approx \frac{8}{3} d_{\text{model}}$ (often rounded to the nearest multiple of 256 for GPU tensor core alignment, e.g. $11,008$ for $d_{\text{model}} = 4096$).</p>
+
+    <!-- SECTION 3: SCALED DOT-PRODUCT ATTENTION -->
+    <h3>3. Scaled Dot-Product Attention &amp; The $\sqrt{d_k}$ Derivation</h3>
     <p>Given an input sequence of token vectors $X \in \mathbb{R}^{N \times d_{\text{model}}}$, the model projects each token into three distinct semantic vector spaces using learned weight matrices $W_Q, W_K, W_V \in \mathbb{R}^{d_{\text{model}} \times d_k}$:</p>
     $$Q = X W_Q \quad (\text{Queries: "What am I looking for?"})$$
     $$K = X W_K \quad (\text{Keys: "What content do I contain?"})$$
@@ -58,8 +87,8 @@
       <p>Because the derivative of softmax is $\frac{\partial p_i}{\partial z_j} = p_i(\delta_{ij} - p_j)$, when $p_i \to 1$ or $p_j \to 0$, <strong>the gradient drops to EXACT ZERO!</strong> The model suffers catastrophic gradient vanishing and learning completely halts! Dividing by $\sqrt{d_k}$ normalizes the variance back to $1.0$, keeping gradients healthy and flowing.</p>
     </div>
 
-    <!-- SECTION 3: MHA VS MQA VS GQA -->
-    <h3>3. Multi-Head Attention, MQA &amp; Grouped-Query Attention (GQA)</h3>
+    <!-- SECTION 4: MHA VS MQA VS GQA -->
+    <h3>4. Multi-Head Attention, MQA &amp; Grouped-Query Attention (GQA)</h3>
     <p>Rather than performing a single attention function across $d_{\text{model}}$, Multi-Head Attention (MHA) projects queries, keys, and values into $h$ separate representation subspaces of dimension $d_k = d_{\text{model}} / h$:</p>
     $$\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, \dots, \text{head}_h) W_O$$
     $$\text{where } \text{head}_i = \text{Attention}(Q W_i^Q, K W_i^K, V W_i^V)$$
@@ -92,87 +121,125 @@
         </tr>
         <tr>
           <td><strong>Grouped-Query Attention (GQA)</strong></td>
-          <td>$H$ (e.g. 32)</td>
+          <td>$H$ (e.g. 64)</td>
           <td>$G$ groups (e.g. 8)</td>
-          <td><strong>Optimal sweet spot:</strong> $4\times$ memory reduction with 0% quality loss!</td>
+          <td><strong>Optimal sweet spot:</strong> $8\times$ memory reduction with 0% quality loss!</td>
           <td><strong>LLaMA 2/3, Mistral, Gemma</strong></td>
         </tr>
       </tbody>
     </table>
 
-    <!-- SECTION 4: ROTARY POSITION EMBEDDINGS (ROPE) -->
-    <h3>4. Rotary Position Embeddings (RoPE)</h3>
+    <!-- SECTION 5: ROTARY POSITION EMBEDDINGS (ROPE) -->
+    <h3>5. Rotary Position Embeddings (RoPE)</h3>
     <p>Because attention is completely permutation equivariant (reordering words yields the exact same attention distribution), positional information must be injected. While Vaswani used absolute sinusoidal additions ($\mathbf{x} + \mathbf{p}$), modern LLMs use <strong>Rotary Position Embeddings (RoPE - Su et al., 2021)</strong>.</p>
 
     <p>RoPE rotates the 2D slices of query and key vectors in the complex plane by an angle proportional to their sequence position $m$:</p>
-    $$R_{\Theta, m} = \begin{bmatrix} \cos(m\theta_i) & -\sin(m\theta_i) \\ \sin(m\theta_i) & \cos(m\theta_i) \end{bmatrix}$$
+    $$R_{\Theta, m} = \begin{bmatrix} \cos(m\theta_i) & -\sin(m\theta_i) \\ \sin(m\theta_i) & \cos(m\theta_i) \end{bmatrix}, \quad \text{where } \theta_i = 10000^{-2(i-1)/d}$$
     <p>When computing the dot product between query at position $m$ and key at position $n$:</p>
     $$\langle R_{\Theta, m} \mathbf{q}_m, R_{\Theta, n} \mathbf{k}_n \rangle = \mathbf{q}_m^T R_{\Theta, m}^T R_{\Theta, n} \mathbf{k}_n = \mathbf{q}_m^T R_{\Theta, n - m} \mathbf{k}_n$$
-    <p>The inner product depends <em>strictly on the relative distance $n - m$</em>! This allows transformers to generalize gracefully to long context lengths.</p>
+    <p>The inner product depends <em>strictly on the relative distance $n - m$</em>! This allows transformers to generalize gracefully across varying and extended context lengths.</p>
 
-    <!-- SECTION 5: KV CACHE SIZING -->
-    <h3>5. The KV Cache Memory Formula for Production Inference</h3>
+    <!-- SECTION 6: KV CACHE SIZING -->
+    <h3>6. The KV Cache Memory Formula for Production Inference</h3>
     <p>During auto-regressive text generation, generating token $t$ requires computing attention against all previous tokens $1 \dots t-1$. Recalculating keys and values for past tokens requires $O(N^2)$ redundant matrix multiplications.</p>
     <p>The <strong>KV Cache</strong> stores the computed Key and Value vectors in GPU VRAM across decoding steps. The exact static VRAM requirement for the KV Cache is:</p>
     $$\text{Memory}_{\text{KV Cache}} = 2 \times n_{\text{layers}} \times n_{\text{kv\_heads}} \times d_{\text{head}} \times n_{\text{tokens}} \times \text{bytes\_per\_param}$$
     <p><em>Example:</em> For a 70B parameter model ($n_{\text{layers}} = 80$, $n_{\text{kv\_heads}} = 8$, $d_{\text{head}} = 128$) with a 128k context length in FP16 (2 bytes):</p>
     $$\text{Memory} = 2 \times 80 \times 8 \times 128 \times 131,072 \times 2 = \mathbf{42.95 \text{ Gigabytes per concurrent user!}}$$
-    <p>This physical memory bottleneck explains why frameworks like vLLM and Grouped-Query Attention are mandatory for production.</p>
+    <p>This physical memory bottleneck explains why frameworks like vLLM (PagedAttention) and Grouped-Query Attention are mandatory for production.</p>
 
-    <!-- SECTION 6: FAANG PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Transformers</h3>
+    <!-- SECTION 7: TRAINING SCHEDULE & DYNAMICS -->
+    <h3>7. Training Dynamics: Warmup, Cosine Decay &amp; Gradient Clipping</h3>
+    <p>Training a multi-billion parameter Transformer requires precise control of learning rate schedules and gradient stability:</p>
 
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 5.1.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
-        <span class="company-tag company-google">Google</span>
-        <span class="company-tag company-meta">Meta</span>
-      </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> In modern high-throughput LLM inference engines (e.g. Meta LLaMA 3 70B):</p>
-        <ol>
-          <li>Derive the theoretical memory traffic reduction factor of Grouped-Query Attention (GQA with 8 KV heads and 64 Query heads) compared to standard Multi-Head Attention (MHA with 64 KV heads).</li>
-          <li>Explain how <strong>FlashAttention</strong> avoids computing the $N \times N$ attention matrix in GPU High-Bandwidth Memory (HBM) by computing online softmax normalization inside On-Chip SRAM.</li>
-        </ol>
-      </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+    <h4>7.1 Warmup + Cosine Decay Schedule</h4>
+    <p>In early iterations, random weight initialization causes large, noisy gradients. Taking large gradient steps early destabilizes attention maps permanently. Modern LLMs use a two-phase schedule:</p>
+    <ol>
+      <li><strong>Linear Warmup (first $T_{\text{warmup}} \approx 2,000$ to $5,000$ steps):</strong> The learning rate ramps linearly from 0 to $\eta_{\max}$:
+      $$\eta_t = \eta_{\max} \cdot \frac{t}{T_{\text{warmup}}}$$</li>
+      <li><strong>Cosine Annealing Decay ($t > T_{\text{warmup}}$):</strong> The learning rate decays smoothly down to $\eta_{\min} \approx 0.1 \eta_{\max}$:
+      $$\eta_t = \eta_{\min} + \frac{1}{2}(\eta_{\max} - \eta_{\min})\left(1 + \cos\left( \frac{t - T_{\text{warmup}}}{T_{\text{total}} - T_{\text{warmup}}} \pi \right)\right)$$</li>
+    </ol>
 
-        <p class="step"><strong>Step 1: GQA Memory Traffic Reduction Factor:</strong><br>
-        During autoregressive token generation, decoding is strictly <strong>Memory Bandwidth Bound</strong> (the GPU Arithmetic Logic Units wait idle while bytes are fetched from High-Bandwidth Memory HBM into SRAM):
-        <ul>
-          <li>Under MHA: For each token generated, the GPU must fetch $H_Q = 64$ Key heads and $64$ Value heads from HBM:
-          $$\text{Bytes}_{\text{MHA}} \propto 2 \times 64 = 128 \text{ heads}$$</li>
-          <li>Under GQA (8 KV heads): All 64 Query heads share 8 KV heads (each KV head is broadcast to 8 Query heads). The GPU fetches only:
-          $$\text{Bytes}_{\text{GQA}} \propto 2 \times 8 = 16 \text{ heads}$$</li>
-        </ul>
-        $$\text{Memory Bandwidth Reduction Factor} = \frac{128}{16} = \mathbf{8\times}$$
-        The model loads $8\times$ fewer bytes from memory per generated token, speeding up inference generation throughput by up to <strong>$400\%$ to $600\%$</strong> on NVIDIA H100 GPUs!</p>
+    <h4>7.2 Gradient Clipping by Global L2 Norm</h4>
+    <p>To prevent catastrophic gradient explosions (loss spikes caused by corrupted batches or sudden token transitions), gradients across all model parameters $\Theta$ are clipped to a maximum global norm $g_{\max} = 1.0$:</p>
+    $$\mathbf{g} \leftarrow \mathbf{g} \cdot \min\left(1, \frac{g_{\max}}{\|\mathbf{g}\|_2}\right), \quad \text{where } \|\mathbf{g}\|_2 = \sqrt{\sum_{\theta \in \Theta} \|\nabla_\theta \mathcal{L}\|_2^2}$$
 
-        <p class="step"><strong>Step 2: FlashAttention Mechanics:</strong><br>
-        Standard attention materializes the intermediate attention score matrix $S = Q K^T \in \mathbb{R}^{N \times N}$ and its softmax $P = \text{softmax}(S)$ in slow GPU HBM ($O(N^2)$ memory reads and writes). For a sequence length of $N = 32,768$, storing $P$ requires $32,768^2 \times 2 \text{ bytes} \approx 2.14 \text{ GB}$ per head per layer!<br>
-        <strong>FlashAttention (Dao et al., 2022)</strong> splits $Q, K, V$ into small blocks that fit entirely inside ultra-fast <strong>On-Chip SRAM (20 TB/s bandwidth)</strong>. Using an <strong>Online Softmax algorithm</strong>, it maintains running maximums and normalizers across blocks:
-        $$m_{\text{new}} = \max(m_{\text{prev}}, m_{\text{block}}), \quad d_{\text{new}} = d_{\text{prev}} e^{m_{\text{prev}} - m_{\text{new}}} + \sum e^{z_i - m_{\text{new}}}$$
-        It computes the exact mathematical output $O = P V$ <em>without ever writing the $N \times N$ matrix to HBM</em>, reducing memory complexity from $O(N^2)$ to $O(N)$ and achieving a $3\times$ speedup!</p>
-      </div>
+    <!-- SECTION 8: DISTRIBUTED MODEL PARALLELISM -->
+    <h3>8. Distributed Model Parallelism: TP, PP &amp; ZeRO / FSDP</h3>
+    <p>A 70B parameter model requires 140 GB in FP16 for weights alone, plus 280 GB for AdamW optimizer states ($\mathbf{m}$ and $\mathbf{v}$), plus gradients and activations — far exceeding a single 80 GB NVIDIA H100 GPU. Distributed parallelism partitions compute and memory across clusters:</p>
+
+    <div class="table-container" style="overflow-x: auto; margin: 1.5em 0;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em;">
+        <thead>
+          <tr style="background-color: #1b4965; color: #ffffff;">
+            <th style="padding: 10px; border: 1px solid #ccc;">Strategy</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Partitioning Mechanism</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Communication Primitive</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Network Interconnect Requirement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Tensor Parallelism (TP)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Splits individual weight matrices within a layer (Column-Parallel $W_Q, W_K, W_V$; Row-Parallel $W_O$)</td>
+            <td style="padding: 10px; border: 1px solid #ccc;"><code>All-Reduce</code> per attention and MLP block</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Ultra-low latency NVLink (within same 8-GPU node)</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Pipeline Parallelism (PP)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Partitions consecutive layers across GPUs (e.g. layers 1-20 on GPU 0, 21-40 on GPU 1) with 1F1B micro-batch scheduling</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Point-to-point (P2P) activations and gradients transfer</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">InfiniBand / RoCE (inter-node cluster)</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>ZeRO-3 / FSDP</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Shards Optimizer States (ZeRO-1), Gradients (ZeRO-2), and Model Parameters (ZeRO-3) across all data-parallel ranks</td>
+            <td style="padding: 10px; border: 1px solid #ccc;"><code>All-Gather</code> before forward/backward; <code>Reduce-Scatter</code> after backward</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">InfiniBand / RoCE (scales to 10,000+ GPUs)</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <!-- SECTION 7: CODE LAB -->
-    <h3>6. Production Code Lab 5.1: Scaled Dot-Product &amp; Rotary Attention from Scratch</h3>
-    <p>Below is an educational, production-grade PyTorch implementation of Causal Multi-Head Self-Attention with Rotary Position Embeddings (RoPE).</p>
+    <!-- SECTION 9: CODE LAB -->
+    <h3>9. Production Code Lab 5.1: Scaled Dot-Product, SwiGLU &amp; RoPE from Scratch</h3>
+    <p>Below is a production-grade PyTorch implementation of a complete modern Pre-LN Decoder block with SwiGLU activations and Rotary Position Embeddings (RoPE).</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 5.1 — Multi-Head Attention &amp; RoPE from First Principles</div>
+      <div class="code-lab-header">Code Lab 5.1 — Modern Transformer Block from First Principles</div>
       <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_transformers_llms/ch51_transformer/attention_scratch.py" target="_blank">🔗 View in GitHub: part5_transformers_llms/ch51_transformer/attention_scratch.py</a></p>
-<pre><code>import torch
+<pre><code class="language-python">import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import math
 
-class RotaryPositionalEmbedding(nn.Module):
-    def __init__(self, dim, max_seq_len=4096, base=10000.0):
+class RMSNorm(nn.Module):
+    """Root Mean Square Normalization (Zhang & Sennrich, 2019) as used in LLaMA 3."""
+    def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
-        # dim must be even (pairs of coordinates rotated)
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # RMS = sqrt(mean(x^2) + eps)
+        rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * rms * self.weight
+
+class SwiGLUFeedForward(nn.Module):
+    """SwiGLU Feed-Forward Network: Swish(xW_gate) * (xW_up) @ W_down."""
+    def __init__(self, dim: int, hidden_dim: int):
+        super().__init__()
+        self.w_gate = nn.Linear(dim, hidden_dim, bias=False)
+        self.w_up = nn.Linear(dim, hidden_dim, bias=False)
+        self.w_down = nn.Linear(hidden_dim, dim, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.w_down(F.silu(self.w_gate(x)) * self.w_up(x))
+
+class RotaryPositionalEmbedding(nn.Module):
+    def __init__(self, dim: int, max_seq_len: int = 4096, base: float = 10000.0):
+        super().__init__()
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
         self.register_buffer("inv_freq", inv_freq)
         t = torch.arange(max_seq_len, dtype=torch.float32)
@@ -180,21 +247,18 @@ class RotaryPositionalEmbedding(nn.Module):
         self.register_buffer("cos_cached", freqs.cos())
         self.register_buffer("sin_cached", freqs.sin())
 
-    def forward(self, x, seq_len):
+    def forward(self, x: torch.Tensor, seq_len: int):
         return self.cos_cached[:seq_len], self.sin_cached[:seq_len]
 
-def apply_rope(x, cos, sin):
-    # x shape: (batch, n_heads, seq_len, head_dim)
+def apply_rope(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
     head_dim = x.shape[-1]
     x1, x2 = x[..., :head_dim // 2], x[..., head_dim // 2:]
-    cos = cos.unsqueeze(0).unsqueeze(1) # (1, 1, seq_len, head_dim // 2)
+    cos = cos.unsqueeze(0).unsqueeze(1)
     sin = sin.unsqueeze(0).unsqueeze(1)
-    # [x1, x2] rotated by theta
-    rotated_x = torch.cat([x1 * cos - x2 * sin, x1 * sin + x2 * cos], dim=-1)
-    return rotated_x
+    return torch.cat([x1 * cos - x2 * sin, x1 * sin + x2 * cos], dim=-1)
 
 class CausalSelfAttention(nn.Module):
-    def __init__(self, d_model=512, n_heads=8):
+    def __init__(self, d_model: int = 512, n_heads: int = 8):
         super().__init__()
         self.d_model = d_model
         self.n_heads = n_heads
@@ -206,22 +270,17 @@ class CausalSelfAttention(nn.Module):
         self.out_proj = nn.Linear(d_model, d_model, bias=False)
         self.rope = RotaryPositionalEmbedding(self.head_dim)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, T, C = x.shape
-        # Project and reshape into (B, n_heads, T, head_dim)
         q = self.q_proj(x).view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
 
-        # Apply RoPE
         cos, sin = self.rope(x, T)
         q = apply_rope(q, cos, sin)
         k = apply_rope(k, cos, sin)
 
-        # Scaled Dot-Product Attention
         scores = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim)
-
-        # Causal Mask (Lower Triangular)
         mask = torch.tril(torch.ones(T, T, device=x.device)).bool()
         scores = scores.masked_fill(~mask, float("-inf"))
 
@@ -229,15 +288,37 @@ class CausalSelfAttention(nn.Module):
         out = (weights @ v).transpose(1, 2).contiguous().view(B, T, C)
         return self.out_proj(out)
 
+class ModernTransformerBlock(nn.Module):
+    """Complete Pre-LN Modern Transformer Decoder Layer (LLaMA-style)."""
+    def __init__(self, d_model: int = 512, n_heads: int = 8, ffn_mult: float = 8.0 / 3.0):
+        super().__init__()
+        self.attn_norm = RMSNorm(d_model)
+        self.attn = CausalSelfAttention(d_model=d_model, n_heads=n_heads)
+        self.ffn_norm = RMSNorm(d_model)
+        hidden_dim = int(d_model * ffn_mult)
+        # Round to nearest multiple of 256 for tensor cores
+        hidden_dim = ((hidden_dim + 255) // 256) * 256
+        self.ffn = SwiGLUFeedForward(dim=d_model, hidden_dim=hidden_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Pre-LN residual stream for attention
+        x = x + self.attn(self.attn_norm(x))
+        # Pre-LN residual stream for feed-forward
+        x = x + self.ffn(self.ffn_norm(x))
+        return x
+
 if __name__ == "__main__":
     torch.manual_seed(42)
-    x = torch.randn(2, 16, 512) # batch=2, seq_len=16, d_model=512
-    attn = CausalSelfAttention(d_model=512, n_heads=8)
-    out = attn(x)
-    print(f"Output Tensor Shape: {out.shape} (Matches Input Shape!)")</code></pre>
+    x = torch.randn(2, 16, 512)
+    block = ModernTransformerBlock(d_model=512, n_heads=8)
+    out = block(x)
+    print(f"Modern Transformer Block Output Shape: {out.shape}")
+    assert out.shape == x.shape
+    print("[SUCCESS] Modern Pre-LN SwiGLU Transformer Block Verified.")
+</code></pre>
     </div>
 
-    <!-- SECTION 8: END OF CHAPTER PROJECT -->
+    <!-- SECTION 10: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 5.1 Dedicated Project &amp; Case Study</span>
@@ -248,6 +329,457 @@ if __name__ == "__main__":
       <div class="project-body">
         <p><strong>Case Study Architecture:</strong> In frontier AI labs (OpenAI, Anthropic, Mistral), AI engineers do not treat transformers as high-level black boxes. They understand every tensor stride, rotation angle, and memory access pattern. In this project, you construct a complete modern decoder architecture that mirrors LLaMA 3, implementing autoregressive token generation with static KV Cache caching.</p>
       </div>
+    </div>
+
+    <!-- ======================================================================
+         SECTION 11: GRADED PRACTICE SUITE (8 PROBLEMS: 5.1.1 TO 5.1.8)
+         ====================================================================== -->
+    <h3>11. Graded Practice Suite: The Transformer Architecture</h3>
+    <p>Achieving mastery in modern Large Language Models demands rigorous competence in attention mechanics, KV Cache memory calculus, RoPE tensor trigonometry, and distributed model parallelism.</p>
+
+    <!-- PROBLEM 5.1.1 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1.1</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Scaled Dot-Product Attention &amp; Causal Masking Step-by-Step Calculation:</strong></p>
+        <p>Suppose a self-attention layer has key dimension $d_k = 4$ (so scaling factor $\sqrt{d_k} = 2.0$) and value dimension $d_v = 2$. Consider a sequence of 3 tokens. For token 1, its query vector is:</p>
+        $$\mathbf{q}_1 = [1.0, 0.0, -1.0, 2.0]^\top$$
+        <p>The key matrix for all 3 tokens is $K = [\mathbf{k}_1, \mathbf{k}_2, \mathbf{k}_3]^\top$:</p>
+        $$\mathbf{k}_1 = [0.0, 2.0, 1.0, 1.0]^\top, \quad \mathbf{k}_2 = [1.0, -1.0, 0.0, 1.0]^\top, \quad \mathbf{k}_3 = [2.0, 0.0, -1.0, 0.0]^\top$$
+        <p>The value matrix for all 3 tokens is $V = [\mathbf{v}_1, \mathbf{v}_2, \mathbf{v}_3]^\top$:</p>
+        $$\mathbf{v}_1 = [1.0, 0.0]^\top, \quad \mathbf{v}_2 = [0.0, 2.0]^\top, \quad \mathbf{v}_3 = [2.0, 1.0]^\top$$
+        <ol>
+          <li>Calculate the unscaled dot products $\mathbf{q}_1^\top \mathbf{k}_j$ for $j \in \{1, 2, 3\}$.</li>
+          <li>Calculate the scaled attention scores $s_{1j} = \frac{\mathbf{q}_1^\top \mathbf{k}_j}{\sqrt{d_k}}$.</li>
+          <li>Under <strong>bidirectional (unmasked) attention</strong>, compute the softmax attention weights $a_{11}, a_{12}, a_{13}$ and the resulting context vector $\mathbf{o}_1 = \sum_{j=1}^3 a_{1j} \mathbf{v}_j$.</li>
+          <li>Under <strong>causal (autoregressive decoder) masking</strong>, state the masked attention weights and the resulting context vector $\mathbf{o}_{1, \text{causal}}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: Unscaled Dot Products</strong></p>
+        <p>Compute the Euclidean inner products between query $\mathbf{q}_1$ and each key vector $\mathbf{k}_j$:</p>
+        $$\mathbf{q}_1^\top \mathbf{k}_1 = (1.0)(0.0) + (0.0)(2.0) + (-1.0)(1.0) + (2.0)(1.0) = 0 + 0 - 1.0 + 2.0 = \mathbf{1.0}$$
+        $$\mathbf{q}_1^\top \mathbf{k}_2 = (1.0)(1.0) + (0.0)(-1.0) + (-1.0)(0.0) + (2.0)(1.0) = 1.0 + 0 + 0 + 2.0 = \mathbf{3.0}$$
+        $$\mathbf{q}_1^\top \mathbf{k}_3 = (1.0)(2.0) + (0.0)(0.0) + (-1.0)(-1.0) + (2.0)(0.0) = 2.0 + 0 + 1.0 + 0 = \mathbf{3.0}$$
+
+        <p class="step"><strong>Step 2: Scaled Attention Scores</strong></p>
+        <p>Divide by $\sqrt{d_k} = \sqrt{4} = 2.0$:</p>
+        $$s_{11} = \frac{1.0}{2.0} = \mathbf{0.5}, \quad s_{12} = \frac{3.0}{2.0} = \mathbf{1.5}, \quad s_{13} = \frac{3.0}{2.0} = \mathbf{1.5}$$
+
+        <p class="step"><strong>Step 3: Bidirectional (Unmasked) Attention Weights &amp; Context Vector</strong></p>
+        <p>Compute the exponentials:</p>
+        $$e^{s_{11}} = e^{0.5} \approx 1.64872$$
+        $$e^{s_{12}} = e^{1.5} \approx 4.48169$$
+        $$e^{s_{13}} = e^{1.5} \approx 4.48169$$
+        <p>The softmax denominator (partition function) is:</p>
+        $$\Sigma = 1.64872 + 4.48169 + 4.48169 = 10.61210$$
+        <p>The normalized attention probabilities are:</p>
+        $$a_{11} = \frac{1.64872}{10.61210} \approx \mathbf{0.1554}$$
+        $$a_{12} = \frac{4.48169}{10.61210} \approx \mathbf{0.4223}$$
+        $$a_{13} = \frac{4.48169}{10.61210} \approx \mathbf{0.4223}$$
+        <p>Sum check: $0.1554 + 0.4223 + 0.4223 = 1.0000$. The context output vector $\mathbf{o}_1$ is the convex combination of the values:</p>
+        $$\mathbf{o}_1 = 0.1554 \begin{bmatrix} 1.0 \\ 0.0 \end{bmatrix} + 0.4223 \begin{bmatrix} 0.0 \\ 2.0 \end{bmatrix} + 0.4223 \begin{bmatrix} 2.0 \\ 1.0 \end{bmatrix}$$
+        $$\mathbf{o}_1 = \begin{bmatrix} 0.1554 + 0 + 0.8446 \\ 0 + 0.8446 + 0.4223 \end{bmatrix} = \begin{bmatrix} \mathbf{1.0000} \\ \mathbf{1.2669} \end{bmatrix}$$
+
+        <p class="step"><strong>Step 4: Causal Masked Attention</strong></p>
+        <p>In an autoregressive decoder, token 1 sits at sequence position 1 and cannot attend to future tokens ($j > 1$). The mask sets $s_{12} = -\infty$ and $s_{13} = -\infty$:</p>
+        $$a_{11} = \frac{e^{0.5}}{e^{0.5} + e^{-\infty} + e^{-\infty}} = \frac{e^{0.5}}{e^{0.5}} = \mathbf{1.0}, \quad a_{12} = \mathbf{0.0}, \quad a_{13} = \mathbf{0.0}$$
+        <p>The causal output vector is simply value vector $\mathbf{v}_1$:</p>
+        $$\mathbf{o}_{1, \text{causal}} = 1.0 \times \mathbf{v}_1 = \begin{bmatrix} \mathbf{1.0} \\ \mathbf{0.0} \end{bmatrix}$$
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-anthropic">Anthropic</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Production KV Cache Static Memory Calculus &amp; Maximum Serving Concurrency:</strong></p>
+        <p>Consider serving a 70-Billion parameter language model (such as LLaMA 3 70B) in a production cluster with the following specifications:</p>
+        <ul>
+          <li>Number of Transformer layers: $L = 80$</li>
+          <li>Model hidden dimension: $d_{\text{model}} = 8192$</li>
+          <li>Number of Query heads: $H_Q = 64$, Head dimension: $d_{\text{head}} = 128$</li>
+          <li>Attention Architecture: Grouped-Query Attention (GQA) with $H_{KV} = 8$ Key-Value heads</li>
+          <li>Floating-point precision: FP16 (2 bytes per parameter)</li>
+          <li>Context window length: $T = 8192$ tokens</li>
+        </ul>
+        <ol>
+          <li>Calculate the exact KV cache memory footprint in bytes required to store <strong>a single token</strong> across all 80 layers for one user.</li>
+          <li>Calculate the total KV cache VRAM required to store the full $T = 8192$ context for a single user in Gigabytes ($\text{GiB} = 2^{30} \text{ bytes}$).</li>
+          <li>If the model had used standard Multi-Head Attention ($H_{KV} = 64$) instead of GQA, what would the single-user KV cache size be, and what is the exact memory reduction factor?</li>
+          <li>Suppose you deploy this model on a single 8-GPU node consisting of $8 \times \text{NVIDIA H100 80GB}$ GPUs ($640 \text{ GB}$ total VRAM). Model weights occupy $140 \text{ GB}$, and PyTorch CUDA context / activation buffers reserve $40 \text{ GB}$. Calculate the maximum concurrent batch size $B_{\max}$ that can be served at full 8k context before running out of memory (OOM).</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: KV Cache Footprint Per Token Across All Layers</strong></p>
+        <p>At each layer, the model stores one Key vector and one Value vector for each KV head. With $H_{KV} = 8$ and $d_{\text{head}} = 128$:</p>
+        $$\text{Values per token per layer} = 2 \times H_{KV} \times d_{\text{head}} = 2 \times 8 \times 128 = 2,048 \text{ parameters}$$
+        <p>At 2 bytes per parameter (FP16):</p>
+        $$\text{Bytes per token per layer} = 2,048 \times 2 = 4,096 \text{ bytes} = 4 \text{ KiB}$$
+        <p>Across all $L = 80$ layers:</p>
+        $$\text{Bytes per token (total)} = 80 \times 4,096 \text{ bytes} = \mathbf{327,680 \text{ bytes}} = \mathbf{320 \text{ KiB}}$$
+
+        <p class="step"><strong>Step 2: Full Context Footprint Per User</strong></p>
+        <p>For a full context sequence of $T = 8,192$ tokens:</p>
+        $$\text{Total Bytes} = 8,192 \times 327,680 \text{ bytes} = 2,684,354,560 \text{ bytes}$$
+        <p>Converting to Gibibytes ($\text{GiB} = 2^{30} = 1,073,741,824$ bytes):</p>
+        $$\text{VRAM}_{\text{GQA}} = \frac{2,684,354,560}{1,073,741,824} = \mathbf{2.50 \text{ GiB}} \quad (\approx 2.684 \text{ GB in decimal})$$
+
+        <p class="step"><strong>Step 3: Comparison with Standard MHA ($H_{KV} = 64$)</strong></p>
+        <p>Under MHA, $H_{KV} = H_Q = 64$:</p>
+        $$\text{VRAM}_{\text{MHA}} = 2.50 \text{ GiB} \times \frac{64}{8} = 2.50 \times 8 = \mathbf{20.0 \text{ GiB}} \quad (\approx 21.47 \text{ GB})$$
+        $$\text{Memory Reduction Factor} = \frac{64}{8} = \mathbf{8\times}$$
+        <p>Grouped-Query Attention slashes inference memory consumption by an astounding <strong>$87.5\%$</strong>!</p>
+
+        <p class="step"><strong>Step 4: Maximum Serving Concurrency $B_{\max}$</strong></p>
+        <p>Total node memory is $640 \text{ GB}$. The available memory for dynamic KV cache allocation is:</p>
+        $$\text{VRAM}_{\text{available}} = 640 \text{ GB} - 140 \text{ GB (weights)} - 40 \text{ GB (buffers)} = 460 \text{ GB} \approx 428.4 \text{ GiB}$$
+        <p>Under GQA ($2.50 \text{ GiB}$ per user):</p>
+        $$B_{\max, \text{GQA}} = \left\lfloor \frac{428.4 \text{ GiB}}{2.50 \text{ GiB}} \right\rfloor = \mathbf{171 \text{ concurrent users}}$$
+        <p>Under standard MHA ($20.0 \text{ GiB}$ per user):</p>
+        $$B_{\max, \text{MHA}} = \left\lfloor \frac{428.4 \text{ GiB}}{20.0 \text{ GiB}} \right\rfloor = \mathbf{21 \text{ concurrent users}}$$
+        <p>GQA increases serving capacity from 21 to 171 concurrent requests on the identical physical hardware cluster — an over <strong>$800\%$ increase in commercial server throughput</strong>.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+        <span class="company-tag company-nvidia">NVIDIA</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Rotary Position Embeddings (RoPE) Mathematical Construction &amp; Inner Product Invariance Trace:</strong></p>
+        <p>Consider a toy attention head with dimension $d = 4$ and base frequency constant $b = 10,000$. The rotational frequencies for the 2 complex frequency planes ($i \in \{0, 1\}$) are given by:</p>
+        $$\theta_i = b^{-2i/d} = 10000^{-2i/4} = 10000^{-i/2}$$
+        <ol>
+          <li>Calculate the base frequencies $\theta_0$ and $\theta_1$.</li>
+          <li>Construct the explicit $4 \times 4$ block-diagonal rotation matrix $R_m$ for token position $m=2$, and $R_n$ for token position $n=5$.</li>
+          <li>Given query vector $\mathbf{q} = [1, 2, 0, 1]^\top$ at position $m=2$ and key vector $\mathbf{k} = [0, 1, 2, -1]^\top$ at position $n=5$, compute the rotated query $\tilde{\mathbf{q}}_2 = R_2 \mathbf{q}$ and rotated key $\tilde{\mathbf{k}}_5 = R_5 \mathbf{k}$.</li>
+          <li>Evaluate the inner product $\langle \tilde{\mathbf{q}}_2, \tilde{\mathbf{k}}_5 \rangle$ and prove numerically that it strictly equals $\mathbf{q}^\top R_{5-2} \mathbf{k} = \mathbf{q}^\top R_3 \mathbf{k}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: Rotational Frequencies</strong></p>
+        $$\theta_0 = 10000^{-0} = \mathbf{1.0 \text{ rad}}$$
+        $$\theta_1 = 10000^{-1/2} = \frac{1}{\sqrt{10000}} = \frac{1}{100} = \mathbf{0.01 \text{ rad}}$$
+
+        <p class="step"><strong>Step 2: Rotation Matrices $R_m$</strong></p>
+        <p>The RoPE operator is block-diagonal with $2 \times 2$ 2D rotation blocks:</p>
+        $$R_m = \begin{bmatrix} \cos(m\theta_0) & -\sin(m\theta_0) & 0 & 0 \\ \sin(m\theta_0) & \cos(m\theta_0) & 0 & 0 \\ 0 & 0 & \cos(m\theta_1) & -\sin(m\theta_1) \\ 0 & 0 & \sin(m\theta_1) & \cos(m\theta_1) \end{bmatrix}$$
+        <p>For position $m = 2$: $2\theta_0 = 2.0$ rad, $2\theta_1 = 0.02$ rad.</p>
+        $$\cos(2) \approx -0.41615, \quad \sin(2) \approx 0.90930$$
+        $$\cos(0.02) \approx 0.99980, \quad \sin(0.02) \approx 0.019999$$
+        $$R_2 = \begin{bmatrix} -0.41615 & -0.90930 & 0 & 0 \\ 0.90930 & -0.41615 & 0 & 0 \\ 0 & 0 & 0.99980 & -0.02000 \\ 0 & 0 & 0.02000 & 0.99980 \end{bmatrix}$$
+        <p>For position $n = 5$: $5\theta_0 = 5.0$ rad, $5\theta_1 = 0.05$ rad.</p>
+        $$\cos(5) \approx 0.28366, \quad \sin(5) \approx -0.95892$$
+        $$\cos(0.05) \approx 0.99875, \quad \sin(0.05) \approx 0.04998$$
+
+        <p class="step"><strong>Step 3: Rotated Query and Key Vectors</strong></p>
+        <p>Multiply $\tilde{\mathbf{q}}_2 = R_2 \mathbf{q}$ where $\mathbf{q} = [1, 2, 0, 1]^\top$:</p>
+        $$\tilde{q}_{2, 1} = (-0.41615)(1) + (-0.90930)(2) = -0.41615 - 1.81860 = -2.23475$$
+        $$\tilde{q}_{2, 2} = (0.90930)(1) + (-0.41615)(2) = 0.90930 - 0.83230 = 0.07700$$
+        $$\tilde{q}_{2, 3} = (0.99980)(0) + (-0.02000)(1) = -0.02000$$
+        $$\tilde{q}_{2, 4} = (0.02000)(0) + (0.99980)(1) = 0.99980$$
+        $$\tilde{\mathbf{q}}_2 = [-2.23475, \; 0.07700, \; -0.02000, \; 0.99980]^\top$$
+        <p>Multiply $\tilde{\mathbf{k}}_5 = R_5 \mathbf{k}$ where $\mathbf{k} = [0, 1, 2, -1]^\top$:</p>
+        $$\tilde{k}_{5, 1} = (0.28366)(0) + (0.95892)(1) = 0.95892$$
+        $$\tilde{k}_{5, 2} = (-0.95892)(0) + (0.28366)(1) = 0.28366$$
+        $$\tilde{k}_{5, 3} = (0.99875)(2) + (-0.04998)(-1) = 1.99750 + 0.04998 = 2.04748$$
+        $$\tilde{k}_{5, 4} = (0.04998)(2) + (0.99875)(-1) = 0.09996 - 0.99875 = -0.89879$$
+        $$\tilde{\mathbf{k}}_5 = [0.95892, \; 0.28366, \; 2.04748, \; -0.89879]^\top$$
+
+        <p class="step"><strong>Step 4: Inner Product Evaluation and Proof of Relative Invariance</strong></p>
+        $$\langle \tilde{\mathbf{q}}_2, \tilde{\mathbf{k}}_5 \rangle = (-2.23475)(0.95892) + (0.07700)(0.28366) + (-0.02000)(2.04748) + (0.99980)(-0.89879)$$
+        $$= -2.14295 + 0.02184 - 0.04095 - 0.89861 = \mathbf{-3.06067}$$
+        <p>Now evaluate directly via relative distance $n - m = 5 - 2 = 3$ rad:</p>
+        $$\cos(3) \approx -0.98999, \quad \sin(3) \approx 0.14112$$
+        $$\cos(0.03) \approx 0.99955, \quad \sin(0.03) \approx 0.029995$$
+        $$R_3 \mathbf{k} = \begin{bmatrix} (-0.98999)(0) + (-0.14112)(1) \\ (0.14112)(0) + (-0.98999)(1) \\ (0.99955)(2) + (-0.03000)(-1) \\ (0.03000)(2) + (0.99955)(-1) \end{bmatrix} = \begin{bmatrix} -0.14112 \\ -0.98999 \\ 2.02910 \\ -0.93955 \end{bmatrix}$$
+        $$\mathbf{q}^\top (R_3 \mathbf{k}) = (1)(-0.14112) + (2)(-0.98999) + (0)(2.02910) + (1)(-0.93955)$$
+        $$= -0.14112 - 1.97998 + 0 - 0.93955 = \mathbf{-3.06065}$$
+        <p>Matching to within numerical precision of float rounding! This confirms that the rotated dot product is completely invariant to absolute token positions and depends <strong>solely on the relative offset $(n-m) = 3$</strong>.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-apple">Apple</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>SwiGLU vs Standard MLP Parameter &amp; FLOP Parity Engineering Audit:</strong></p>
+        <p>Modern open-weight LLMs (such as LLaMA 2/3) replaced the traditional 2-layer GELU MLP with a 3-matrix SwiGLU block. Let $d_{\text{model}} = 4096$.</p>
+        <ul>
+          <li><strong>Architecture A (Standard 2-layer GELU MLP):</strong>
+          $W_1 \in \mathbb{R}^{d_{\text{model}} \times d_{\text{mlp}}}$, $W_2 \in \mathbb{R}^{d_{\text{mlp}} \times d_{\text{model}}}$, where $d_{\text{mlp}} = 4 d_{\text{model}}$. (No biases).</li>
+          <li><strong>Architecture B (SwiGLU MLP):</strong>
+          $W_{\text{gate}}, W_{\text{up}} \in \mathbb{R}^{d_{\text{model}} \times d_{\text{ffn}}}$, $W_{\text{down}} \in \mathbb{R}^{d_{\text{ffn}} \times d_{\text{model}}}$. To align with GPU tensor core memory strides, $d_{\text{ffn}}$ is set to $\frac{8}{3} d_{\text{model}}$ rounded up to the nearest multiple of 256. (No biases).</li>
+        </ul>
+        <ol>
+          <li>Calculate the exact parameter count of Architecture A.</li>
+          <li>Determine $d_{\text{ffn}}$ for Architecture B, and calculate its exact parameter count. Verify the parameter count difference percentage.</li>
+          <li>Calculate the theoretical forward pass FLOP count per token for both architectures (treating each multiply-accumulate as 2 FLOPs).</li>
+          <li>Explain from first principles why SwiGLU outperforms standard GELU despite having nearly identical parameter and FLOP counts.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: Architecture A (Standard GELU MLP) Parameters</strong></p>
+        <p>Hidden dimension $d_{\text{mlp}} = 4 \times 4096 = 16,384$.</p>
+        $$\text{Params}(W_1) = 4096 \times 16384 = 67,108,864$$
+        $$\text{Params}(W_2) = 16384 \times 4096 = 67,108,864$$
+        $$\text{Total Params}_A = 67,108,864 + 67,108,864 = \mathbf{134,217,728 \text{ parameters}} \quad (\approx 134.22 \text{ M})$$
+
+        <p class="step"><strong>Step 2: Architecture B (SwiGLU MLP) Parameters</strong></p>
+        <p>Compute theoretical $\frac{8}{3} d_{\text{model}}$:</p>
+        $$d_{\text{theoretical}} = \frac{8}{3} \times 4096 = 10,922.67$$
+        <p>Rounding up to the nearest multiple of 256:</p>
+        $$\left\lceil \frac{10922.67}{256} \right\rceil \times 256 = 43 \times 256 = \mathbf{11,008}$$
+        <p>(Notice this matches the exact intermediate size of LLaMA 1 and 2 7B!).</p>
+        <p>Architecture B contains 3 weight matrices ($W_{\text{gate}}, W_{\text{up}}, W_{\text{down}}$):</p>
+        $$\text{Params}(W_{\text{gate}}) = 4096 \times 11008 = 45,088,768$$
+        $$\text{Params}(W_{\text{up}}) = 4096 \times 11008 = 45,088,768$$
+        $$\text{Params}(W_{\text{down}}) = 11008 \times 4096 = 45,088,768$$
+        $$\text{Total Params}_B = 3 \times 45,088,768 = \mathbf{135,266,304 \text{ parameters}} \quad (\approx 135.27 \text{ M})$$
+        <p>Percentage difference:</p>
+        $$\Delta = \frac{135,266,304 - 134,217,728}{134,217,728} \times 100\% = \mathbf{+0.78\%}$$
+        <p>The two architectures achieve virtually perfect parameter parity ($< 1\%$ delta).</p>
+
+        <p class="step"><strong>Step 3: Forward Pass FLOP Calculations</strong></p>
+        <p>For an input vector of size $1 \times d_{\text{in}}$ multiplied by weight matrix $d_{\text{in}} \times d_{\text{out}}$, the number of floating-point operations is $2 \times d_{\text{in}} \times d_{\text{out}}$ (1 multiplication + 1 addition per element):</p>
+        <ul>
+          <li><strong>Architecture A:</strong>
+          $$\text{FLOPs}_A = 2 \times (4096 \times 16384) + 2 \times (16384 \times 4096) = 2 \times 67,108,864 + 2 \times 67,108,864 = \mathbf{268,435,456 \text{ FLOPs}}$$</li>
+          <li><strong>Architecture B:</strong>
+          $$\text{FLOPs}_B = 3 \times (2 \times 4096 \times 11008) = 6 \times 45,088,768 = \mathbf{270,532,608 \text{ FLOPs}}$$</li>
+        </ul>
+        <p>FLOP counts differ by only $0.78\%$, maintaining computational parity.</p>
+
+        <p class="step"><strong>Step 4: Theoretical Justification of SwiGLU Superiority</strong></p>
+        <p>Standard MLP applies a static activation function to linear projections: $\text{GELU}(\mathbf{x} W_1) W_2$. In contrast, SwiGLU computes a <strong>bilinear element-wise gating product</strong>:</p>
+        $$\mathbf{y} = \left( \text{Swish}(\mathbf{x} W_{\text{gate}}) \odot (\mathbf{x} W_{\text{up}}) \right) W_{\text{down}}$$
+        <p>The gate vector $\text{Swish}(\mathbf{x} W_{\text{gate}})$ acts as a <em>continuous, dynamic router</em> that suppresses or amplifies features in $\mathbf{x} W_{\text{up}}$ conditioned on the specific semantic content of token $\mathbf{x}$. Mathematically, this allows the sub-layer to approximate higher-order polynomial interactions between latent dimensions without increasing parameter depth, consistently improving downstream perplexity across all model scales.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1.5</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google Brain</span>
+        <span class="company-tag company-stanford">Stanford</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>First-Principles Mathematical Proof of Softmax Saturation and Variance Preservation under $\sqrt{d_k}$ Scaling:</strong></p>
+        <p>In the original 2017 Transformer paper, Vaswani et al. stated: <em>"We suspect that for large values of $d_k$, the dot products grow large in magnitude, pushing the softmax function into regions where it has extremely small gradients."</em></p>
+        <ol>
+          <li>Let $\mathbf{q}, \mathbf{k} \in \mathbb{R}^{d_k}$ be query and key vectors whose components $q_i, k_i \sim \mathcal{N}(0, 1)$ are independent and identically distributed standard normal random variables. Prove from first principles that:
+          $$\mathbb{E}[\mathbf{q}^\top \mathbf{k}] = 0 \quad \text{and} \quad \operatorname{Var}(\mathbf{q}^\top \mathbf{k}) = d_k$$</li>
+          <li>Prove that the scaled score $z = \frac{\mathbf{q}^\top \mathbf{k}}{\sqrt{d_k}}$ has $\operatorname{Var}(z) = 1$, independent of head dimension $d_k$.</li>
+          <li>Let $\mathbf{z} = [z_1, \dots, z_N]^\top \in \mathbb{R}^N$ and let $\mathbf{p} = \text{softmax}(\mathbf{z})$. Derive the analytical Jacobian matrix $\frac{\partial p_i}{\partial z_j}$.</li>
+          <li>Prove mathematically that when $\operatorname{Var}(z) \to \infty$, the gradient norm $\|\frac{\partial p_i}{\partial z_j}\|_F \to 0$ exponentially fast, causing total gradient vanishing in unscaled attention.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Proof:</div>
+        <p class="step"><strong>Step 1: Expectation and Variance of Unscaled Dot Product</strong></p>
+        <p>The inner product is the sum of $d_k$ random variables: $S = \mathbf{q}^\top \mathbf{k} = \sum_{i=1}^{d_k} X_i$, where $X_i = q_i k_i$. By independence of $q_i$ and $k_i$:</p>
+        $$\mathbb{E}[X_i] = \mathbb{E}[q_i k_i] = \mathbb{E}[q_i] \mathbb{E}[k_i] = (0)(0) = 0$$
+        $$\mathbb{E}[S] = \sum_{i=1}^{d_k} \mathbb{E}[X_i] = 0$$
+        <p>Now compute the variance of $X_i$:</p>
+        $$\operatorname{Var}(X_i) = \mathbb{E}[X_i^2] - (\mathbb{E}[X_i])^2 = \mathbb{E}[q_i^2 k_i^2] - 0 = \mathbb{E}[q_i^2] \mathbb{E}[k_i^2]$$
+        <p>Since $q_i, k_i \sim \mathcal{N}(0, 1)$, their second moments are $\mathbb{E}[q_i^2] = \operatorname{Var}(q_i) + (\mathbb{E}[q_i])^2 = 1 + 0 = 1$. Thus:</p>
+        $$\operatorname{Var}(X_i) = (1)(1) = 1$$
+        <p>Because $X_1, \dots, X_{d_k}$ are mutually independent, the variance of the sum equals the sum of variances:</p>
+        $$\operatorname{Var}(\mathbf{q}^\top \mathbf{k}) = \sum_{i=1}^{d_k} \operatorname{Var}(X_i) = \sum_{i=1}^{d_k} 1 = \mathbf{d_k} \quad \blacksquare$$
+
+        <p class="step"><strong>Step 2: Variance Preservation under $\sqrt{d_k}$ Normalization</strong></p>
+        <p>Let $c = \frac{1}{\sqrt{d_k}}$. Using the property $\operatorname{Var}(a Y) = a^2 \operatorname{Var}(Y)$ for any scalar $a$:</p>
+        $$\operatorname{Var}\left( \frac{\mathbf{q}^\top \mathbf{k}}{\sqrt{d_k}} \right) = \left( \frac{1}{\sqrt{d_k}} \right)^2 \operatorname{Var}(\mathbf{q}^\top \mathbf{k}) = \frac{1}{d_k} \cdot d_k = \mathbf{1} \quad \blacksquare$$
+        <p>The variance of the attention input is strictly normalized to $1.0$ regardless of whether $d_k = 64, 128$, or $256$.</p>
+
+        <p class="step"><strong>Step 3: Analytical Derivation of Softmax Jacobian</strong></p>
+        <p>Let $p_i = \frac{e^{z_i}}{\sum_{k=1}^N e^{z_k}}$. Let $D = \sum_{k=1}^N e^{z_k}$.</p>
+        <p>Case 1: $i = j$:</p>
+        $$\frac{\partial p_i}{\partial z_i} = \frac{e^{z_i} D - e^{z_i} e^{z_i}}{D^2} = \frac{e^{z_i}}{D} - \left(\frac{e^{z_i}}{D}\right)^2 = p_i - p_i^2 = p_i(1 - p_i)$$
+        <p>Case 2: $i \ne j$:</p>
+        $$\frac{\partial p_i}{\partial z_j} = \frac{0 \cdot D - e^{z_i} e^{z_j}}{D^2} = -\frac{e^{z_i}}{D} \frac{e^{z_j}}{D} = -p_i p_j$$
+        <p>Combining both cases using the Kronecker delta $\delta_{ij}$:</p>
+        $$\frac{\partial p_i}{\partial z_j} = p_i (\delta_{ij} - p_j) \quad \blacksquare$$
+
+        <p class="step"><strong>Step 4: Proof of Gradient Annihilation as $\operatorname{Var}(z) \to \infty$</strong></p>
+        <p>When scores are unscaled, their standard deviation scales as $\sigma = \sqrt{d_k}$. For $d_k = 128$, $\sigma \approx 11.31$. With high probability, the maximum score $z_{\max} = \max_k z_k$ exceeds the second highest score by a margin $\Delta = z_{\max} - z_{(2)} \gg 10$.</p>
+        <p>Consider the winning token index $m = \arg\max_k z_k$:</p>
+        $$p_m = \frac{e^{z_m}}{e^{z_m} + \sum_{k \ne m} e^{z_k}} = \frac{1}{1 + \sum_{k \ne m} e^{-(z_m - z_k)}} \ge \frac{1}{1 + (N-1) e^{-\Delta}} \approx 1 - (N-1)e^{-\Delta}$$
+        <p>As $\Delta \to \infty$, $p_m \to 1.0$ exponentially fast. For all non-winning tokens $j \ne m$:</p>
+        $$p_j \le e^{-\Delta} \to 0$$
+        <p>Now inspect the Jacobian elements:</p>
+        <ul>
+          <li>For the winner $m$: $\frac{\partial p_m}{\partial z_m} = p_m(1 - p_m) \approx 1 \cdot (N-1)e^{-\Delta} \to 0$.</li>
+          <li>For non-winners $j \ne m$: $\frac{\partial p_j}{\partial z_j} = p_j(1 - p_j) \approx e^{-\Delta} \cdot 1 \to 0$.</li>
+          <li>For cross-terms $i \ne j$: $\frac{\partial p_i}{\partial z_j} = -p_i p_j \approx -(1)(e^{-\Delta}) \to 0$.</li>
+        </ul>
+        <p>The entire Jacobian matrix collapses: $\|\frac{\partial \mathbf{p}}{\partial \mathbf{z}}\|_F \le \mathcal{O}(e^{-\Delta}) \to 0$. Consequently, the backward gradient $\frac{\partial \mathcal{L}}{\partial \mathbf{z}} = \left(\frac{\partial \mathbf{p}}{\partial \mathbf{z}}\right)^\top \frac{\partial \mathcal{L}}{\partial \mathbf{p}} \to \mathbf{0}$. Backpropagation through the attention map is extinguished, permanently freezing the model parameters. The $\frac{1}{\sqrt{d_k}}$ scaling factor is strictly required to prevent this exponential saturation.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1.6</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-meta">Meta FAIR</span>
+        <span class="company-tag company-berkeley">UC Berkeley</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Mathematical Proof of RoPE Relative Distance Invariance in the Complex Plane:</strong></p>
+        <p>In Rotary Position Embeddings (RoPE), query and key vectors in $\mathbb{R}^d$ are decomposed into $\frac{d}{2}$ two-dimensional coordinate pairs and represented as complex numbers: $\mathbf{x} = [x^{(0)}, x^{(1)}, \dots, x^{(d/2 - 1)}] \in \mathbb{C}^{d/2}$, where $x^{(k)} = x_{2k} + i x_{2k+1}$.</p>
+        <ol>
+          <li>Formulate the positional encoding operator $R_m$ on complex coordinate $x^{(k)}$ at sequence index $m$ with base frequency $\theta_k$.</li>
+          <li>Define the real Euclidean inner product of two real vectors $\mathbf{u}, \mathbf{v} \in \mathbb{R}^2$ in terms of their complex representations $u = u_1 + i u_2$ and $v = v_1 + i v_2$.</li>
+          <li>Prove that the inner product between the query rotated by position $m$ and the key rotated by position $n$ satisfies:
+          $$\langle R_m q^{(k)}, R_n k^{(k)} \rangle = \operatorname{Re}\left( (q^{(k)})^* k^{(k)} e^{i(n-m)\theta_k} \right)$$
+          where $(q^{(k)})^*$ is the complex conjugate.</li>
+          <li>Conclude why this mathematical structure guarantees that the attention score between two tokens depends <em>strictly</em> on their relative distance $n - m$ rather than their absolute positions.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Proof:</div>
+        <p class="step"><strong>Step 1: Complex RoPE Operator Formulation</strong></p>
+        <p>The RoPE operator rotates coordinate $x^{(k)} \in \mathbb{C}$ by angle $m \theta_k$ using Euler's formula:</p>
+        $$\tilde{x}_m^{(k)} = x^{(k)} e^{i m \theta_k} = (x_{2k} + i x_{2k+1}) (\cos(m\theta_k) + i \sin(m\theta_k))$$
+
+        <p class="step"><strong>Step 2: Real Euclidean Inner Product via Complex Numbers</strong></p>
+        <p>Let $u = u_1 + i u_2$ and $v = v_1 + i v_2$. The product of the complex conjugate $u^* = u_1 - i u_2$ and $v$ is:</p>
+        $$u^* v = (u_1 - i u_2)(v_1 + i v_2) = (u_1 v_1 + u_2 v_2) + i (u_1 v_2 - u_2 v_1)$$
+        <p>The real part of this product is exactly the standard Euclidean dot product in $\mathbb{R}^2$:</p>
+        $$\operatorname{Re}(u^* v) = u_1 v_1 + u_2 v_2 = \mathbf{u}^\top \mathbf{v} \quad \blacksquare$$
+
+        <p class="step"><strong>Step 3: Rotated Inner Product Derivation</strong></p>
+        <p>Now let $\tilde{q}_m = q e^{i m \theta}$ and $\tilde{k}_n = k e^{i n \theta}$. The inner product in $\mathbb{R}^2$ is:</p>
+        $$\langle \tilde{q}_m, \tilde{k}_n \rangle = \operatorname{Re}\left( (\tilde{q}_m)^* \tilde{k}_n \right)$$
+        <p>Substitute the rotated complex representations:</p>
+        $$(\tilde{q}_m)^* = (q e^{i m \theta})^* = q^* (e^{i m \theta})^* = q^* e^{-i m \theta}$$
+        $$\tilde{k}_n = k e^{i n \theta}$$
+        <p>Multiply the two terms:</p>
+        $$(\tilde{q}_m)^* \tilde{k}_n = (q^* e^{-i m \theta})(k e^{i n \theta}) = q^* k e^{i(n - m)\theta}$$
+        <p>Taking the real part:</p>
+        $$\langle \tilde{\mathbf{q}}_m, \tilde{\mathbf{k}}_n \rangle = \operatorname{Re}\left( q^* k e^{i(n - m)\theta} \right) \quad \blacksquare$$
+
+        <p class="step"><strong>Step 4: Relative Invariance Conclusion</strong></p>
+        <p>Summing across all $d/2$ independent frequency channels:</p>
+        $$\mathbf{q}_m^\top \mathbf{k}_n = \sum_{k=0}^{d/2 - 1} \operatorname{Re}\left( (q^{(k)})^* k^{(k)} e^{i(n - m)\theta_k} \right) = g(\mathbf{q}, \mathbf{k}, n - m)$$
+        <p>Notice that the absolute position variables $m$ and $n$ appear <strong>solely as the scalar difference $n - m$</strong>! If both tokens are shifted forward by an arbitrary integer offset $\Delta$ ($m \to m + \Delta, n \to n + \Delta$), the difference remains invariant: $(n + \Delta) - (m + \Delta) = n - m$. The attention score is mathematically identical. This completes the proof that RoPE embeds relative positioning directly into the inner product geometry.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1.7</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-amazon">Amazon AWS</span>
+        <span class="company-tag company-nvidia">NVIDIA</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap MCQ: Megatron-LM Tensor Parallelism (TP) Communication Primitives:</strong></p>
+        <p>In Megatron-LM Tensor Parallelism (Shoeybi et al., 2019), a multi-head self-attention block is partitioned across $N$ GPUs. The input projection matrices $W_Q, W_K, W_V$ are partitioned <strong>Column-Parallel</strong>, while the output projection matrix $W_O$ is partitioned <strong>Row-Parallel</strong>. Which of the following statements provides the exact mathematical reason for this pairing?</p>
+        <ol type="A">
+          <li>Splitting $W_Q, W_K, W_V$ column-wise enables each GPU to compute its attention heads independently with zero communication, and subsequent row-wise splitting of $W_O$ naturally produces partial sum outputs that require only a <strong>single All-Reduce collective</strong> at the very end of the attention block.</li>
+          <li>Column-parallel splitting of $W_O$ is mathematically forbidden because matrix multiplication is non-commutative in $\mathbb{R}^{d \times d}$.</li>
+          <li>Row-parallel splitting of $W_Q$ would require 64-bit double precision floating point registers to prevent underflow during scaled dot-product division.</li>
+          <li>Splitting $W_Q, W_K, W_V$ row-wise requires an <code>All-to-All</code> communication primitive which is physically unsupported across NVLink switches.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Analysis:</div>
+        <p class="step"><strong>Correct Answer: A</strong></p>
+        <p class="step"><strong>Deep Architectural and Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Why A is Correct:</strong> In a multi-head attention layer with $H$ heads, let the weight matrices be sliced across $N$ GPUs:
+          <br>1. <strong>Column-Parallel $W_Q, W_K, W_V$:</strong> Slicing column-wise means GPU $i$ gets slice $W_Q^{(i)} \in \mathbb{R}^{d \times (d/N)}$. Given the replicated input $X$, GPU $i$ computes $Q_i = X W_Q^{(i)}, K_i = X W_K^{(i)}, V_i = X W_V^{(i)}$ locally. Each GPU now possesses the complete queries, keys, and values for its own subset of heads ($H/N$ heads). Attention scores $\text{softmax}\left(\frac{Q_i K_i^\top}{\sqrt{d_k}}\right) V_i = Z_i$ are computed <strong>completely in parallel with ZERO network communication!</strong>
+          <br>2. <strong>Row-Parallel $W_O$:</strong> Slicing row-wise means $W_O^{(i)} \in \mathbb{R}^{(d/N) \times d}$. The full output is:
+          $$\text{Output} = [Z_1, Z_2, \dots, Z_N] \begin{bmatrix} W_O^{(1)} \\ W_O^{(2)} \\ \vdots \\ W_O^{(N)} \end{bmatrix} = \sum_{i=1}^N Z_i W_O^{(i)}$$
+          Each GPU $i$ computes the local product $Z_i W_O^{(i)} \in \mathbb{R}^{N \times d}$. To obtain the final sum, the GPUs simply execute an <code>All-Reduce (SUM)</code> collective!
+          <br>The entire attention block requires <strong>exactly ONE All-Reduce operation</strong>. Pairing Column-Parallel then Row-Parallel completely eliminates communication between the projection and output layers.</li>
+          <li><strong>Why B is False:</strong> Matrix multiplication associativity is preserved under any linear slicing; it is not non-commutative constraints that prevent column splitting of $W_O$, but rather the fact that Column-Parallel $W_O$ would require an <code>All-Gather</code> communication step, doubling total communication overhead.</li>
+          <li><strong>Why C is False:</strong> Tensor Parallelism runs natively in BF16 / FP16 mixed precision; numerical precision registers have no relationship to row slicing.</li>
+          <li><strong>Why D is False:</strong> <code>All-to-All</code> is standard across NVLink and InfiniBand; it is simply much slower and bandwidth-wasteful than a single All-Reduce.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-anthropic">Anthropic</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap MCQ: Pre-LN vs Post-LN Gradient Highway &amp; Warmup Dynamics:</strong></p>
+        <p>In early Transformer research (Vaswani et al., 2017), models used Post-LayerNorm and could not be trained without hundreds of steps of delicate learning rate warmup, frequently suffering sudden divergence. Modern LLMs strictly use Pre-LayerNorm (or Pre-RMSNorm) and train stably from step 1. Which of the following statements provides the rigorous mathematical reason for this behavioral divergence?</p>
+        <ol type="A">
+          <li>In Post-LN, the gradient through the residual branch must pass through the LayerNorm derivative at every single layer, causing the expected gradient norm to decay as $\mathcal{O}(1/\sqrt{L})$ with depth $L$, whereas Pre-LN preserves an exact identity gradient highway $\mathbf{I}$ from the output loss directly to early layer embeddings.</li>
+          <li>Pre-LN eliminates the need for activation functions in feed-forward layers, preventing dead neuron collapse.</li>
+          <li>Post-LN creates an asymmetric attention matrix that violates the spectral theorem of symmetric operators.</li>
+          <li>LayerNorm in Post-LN causes the covariance matrix of token embeddings to become singular and non-invertible.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Analysis:</div>
+        <p class="step"><strong>Correct Answer: A</strong></p>
+        <p class="step"><strong>Deep Architectural and Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Why A is Correct:</strong> Let us mathematically write the recurrence for both configurations:
+          <br>1. <strong>Post-LN:</strong> $\mathbf{x}_{l+1} = \text{LN}(\mathbf{x}_l + \mathcal{F}_l(\mathbf{x}_l))$. When computing the gradient of the loss with respect to early layer activation $\mathbf{x}_1$:
+          $$\frac{\partial \mathbf{x}_{L}}{\partial \mathbf{x}_1} = \prod_{l=1}^{L-1} \left( \frac{\partial \text{LN}}{\partial \mathbf{y}_l} \left( \mathbf{I} + \frac{\partial \mathcal{F}_l}{\partial \mathbf{x}_l} \right) \right)$$
+          The Jacobian of LayerNorm $\frac{\partial \text{LN}}{\partial \mathbf{y}_l}$ scales inversely with the standard deviation of its input: $\|\frac{\partial \text{LN}}{\partial \mathbf{y}}\|_2 \approx \frac{1}{\sigma(\mathbf{y})}$. Because the residual sum $\mathbf{y}_l = \mathbf{x}_l + \mathcal{F}_l(\mathbf{x}_l)$ accumulates variance across layers ($\sigma^2 \propto l$), the normalization scaling factor shrinks as $\mathcal{O}(1/\sqrt{l})$. Taking the product across $L$ layers causes the gradient magnitude reaching layer 1 to <strong>vanish to zero</strong>! Early layers cannot learn, while top layers receive massive updates. Without warmup (forcing initial steps to take near-zero updates until variance stabilizes), Post-LN diverges immediately.
+          <br>2. <strong>Pre-LN:</strong> $\mathbf{x}_{l+1} = \mathbf{x}_l + \mathcal{F}_l(\text{LN}(\mathbf{x}_l))$. Expanding across all $L$ layers:
+          $$\mathbf{x}_L = \mathbf{x}_1 + \sum_{l=1}^{L-1} \mathcal{F}_l(\text{LN}(\mathbf{x}_l))$$
+          Differentiating directly:
+          $$\frac{\partial \mathbf{x}_L}{\partial \mathbf{x}_1} = \mathbf{I} + \sum_{l=1}^{L-1} \frac{\partial \mathcal{F}_l}{\partial \mathbf{x}_1}$$
+          The term $\mathbf{I}$ is the <strong>unobstructed identity gradient highway</strong>! Regardless of depth $L$ (even for $L=128$), gradients flow directly from the final layer back to $\mathbf{x}_1$ without being multiplied by any vanishing scalar factors! Pre-LN models train stably without fragile warmup hyperparameters.</li>
+          <li><strong>Why B is False:</strong> Pre-LN still requires non-linear activations (GELU, SwiGLU) in the feed-forward blocks; removing activations would collapse the Transformer into a trivial linear map.</li>
+          <li><strong>Why C is False:</strong> Attention matrices in decoders are lower-triangular causal matrices; they are inherently non-symmetric regardless of normalization placement.</li>
+          <li><strong>Why D is False:</strong> LayerNorm normalizes along the feature dimension $d_{\text{model}}$; it does not compute sample covariance matrices and does not suffer from matrix inversion failures.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- CHAPTER SUMMARY -->
+    <div class="chapter-summary">
+      <h4>Chapter 5.1 Key Takeaways</h4>
+      <ul>
+        <li><strong>Attention vs Recurrence:</strong> Attention eliminates the sequential bottleneck ($O(1)$ path length vs $O(T)$ in RNNs), unlocking full GPU parallelization across long contexts.</li>
+        <li><strong>Pre-LN Highway:</strong> Pre-LN places normalization inside residual branches, establishing an identity gradient highway ($\mathbf{I}$) directly from the loss to early embeddings and preventing Post-LN gradient vanishing.</li>
+        <li><strong>SwiGLU Parity:</strong> Setting intermediate dimension $d_{\text{ffn}} = \frac{8}{3} d_{\text{model}}$ in SwiGLU preserves parameter and FLOP parity with standard 2-layer MLPs while enhancing non-linear expressive routing.</li>
+        <li><strong>$\sqrt{d_k}$ Derivation:</strong> Dividing $QK^\top$ by $\sqrt{d_k}$ normalizes score variance from $d_k$ back to $1.0$, preventing Softmax saturation and exponential gradient annihilation.</li>
+        <li><strong>GQA Efficiency:</strong> Grouped-Query Attention (e.g. 8 KV heads for 64 Query heads) slashes KV cache memory footprint by $8\times$, drastically multiplying concurrent serving throughput.</li>
+        <li><strong>RoPE Relative Invariance:</strong> 2D complex rotational embeddings guarantee that token dot products depend strictly on relative positional offsets $n-m$.</li>
+        <li><strong>Tensor Parallelism:</strong> Pairing Column-Parallel attention projections with Row-Parallel output projections requires only a single All-Reduce collective per block.</li>
+      </ul>
     </div>
   </div>
 </div>

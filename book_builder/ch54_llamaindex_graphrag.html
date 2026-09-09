@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="graphrag_hybrid_retrieval.png" alt="Figure 5.4.1: graphrag hybrid retrieval">
+        <div class="diagram-caption"><strong>Figure 5.4.1:</strong> GraphRAG hybrid retrieval architecture. Unstructured text is indexed into both dense vector chunk embeddings and a knowledge graph with extracted entities and relations. Incoming user queries retrieve relevant semantic passages and traverse structural graph communities before passing through hybrid rerankers for LLM generation.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 5.4 — ADVANCED RAG WITH LLAMAINDEX & KNOWLEDGE GRAPHS
      ====================================================================== -->
@@ -5,7 +11,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 5.4</span>
     <h2 class="chapter-title">Advanced RAG with LlamaIndex &amp; Knowledge Graphs</h2>
-    <span class="chapter-subtitle">Sub-Question Query Engines, Router Engines, Entity Triples &amp; Multi-Hop GraphRAG</span>
+    <span class="chapter-subtitle">Sub-Question Query Engines, Router Engines, Hierarchical Community Detection, Leiden Algorithm &amp; Multi-Hop GraphRAG</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -18,104 +24,600 @@
     <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
     <!-- SECTION 1: THE LIMITS OF VECTOR RAG -->
-    <h3>1. Why Flat Vector Search Fails on Multi-Hop Questions</h3>
-    <p>Standard vector search operates under the assumption of <strong>semantic locality</strong>: it assumes that the answer to a user's question is neatly contained within a single 512-token chunk, or within a few chunks that all share semantic similarity to the query.</p>
+    <h3>1. Why Flat Vector Search Fails on Multi-Hop &amp; Global Thematic Questions</h3>
+    <p>Standard vector retrieval operates under the fundamental assumption of <strong>semantic locality</strong>: it assumes that the answer to a user's question is localized within an isolated 512-token chunk, or within a tight cluster of chunks sharing high cosine similarity with the query vector. In enterprise knowledge management, this assumption collapses across two critical query topologies:</p>
 
-    <p>In enterprise operations, the most critical questions require <strong>Multi-Hop Relational Reasoning</strong>:</p>
-    <blockquote>"Compare the gross profit margin of Subsidiary Alpha in the Q3 2024 filing with the supplier liability clauses disclosed by Vendor Beta in Document 14, and determine whether the overall enterprise cash flow is at risk."</blockquote>
-    <p>A standard vector database fails completely: the query embedding lands in an arbitrary middle ground between profit margins and legal clauses, retrieving irrelevant generic balance sheets and missing the specific cross-document linkages. To solve this, we require <strong>LlamaIndex</strong> and <strong>Knowledge Graph RAG (GraphRAG)</strong>.</p>
-
-    <!-- SECTION 2: LLAMAINDEX QUERY ENGINES -->
-    <h3>2. Advanced LlamaIndex Architectures</h3>
-    <p><strong>LlamaIndex</strong> provides structured index abstractions and orchestration engines designed specifically for complex query execution:</p>
-
-    <h4>1. The Sub-Question Query Engine</h4>
-    <p>The Sub-Question Query Engine treats the LLM as a query planner:</p>
     <ol>
-      <li>It inspects the complex multi-document user question.</li>
-      <li>It decomposes the question into $K$ discrete, independent sub-questions, each targeted at a specific document store:
-      $$\text{Sub-Q 1: "What was Subsidiary Alpha's Q3 2024 gross profit margin?"} \xrightarrow{\text{routed to}} \text{10-Q Index}$$
-      $$\text{Sub-Q 2: "What are Vendor Beta's supplier liability clauses?"} \xrightarrow{\text{routed to}} \text{Contract Index}$$</li>
-      <li>It executes the sub-queries in parallel across their respective vector indices.</li>
-      <li>It synthesizes the collected sub-answers into a single, cohesive, comprehensive final report.</li>
+      <li><strong>Multi-Hop Relational Reasoning:</strong> Questions requiring structural traversals across disparate documents.
+      <blockquote>"Compare the debt covenant liabilities of Subsidiary A in the 2022 filing with the litigation risk disclosed by Supplier B in Document 14, and determine if Enterprise C is exposed to insolvency."</blockquote>
+      A vector search embeds the entire sentence into an intermediate centroid that matches neither document strongly, retrieving generic balance sheets while missing the latent causal chain.</li>
+      <li><strong>Global Sensemaking / Corpus-Wide Thematic Aggregation:</strong> Questions asking for macro-level insights across thousands of documents.
+      <blockquote>"What are the top 5 emerging cybersecurity vulnerabilities reported across our 10,000 incident post-mortems over the past three years?"</blockquote>
+      Vector search cannot answer this. Asking for the top 5 chunks via $k$-nearest neighbors retrieves 5 specific incidents that happen to mention "vulnerability", completely ignoring the remaining 9,995 documents and failing to synthesize a global statistical distribution.</li>
     </ol>
 
-    <h4>2. The Router Query Engine</h4>
-    <p>Different questions require different index structures. A user asking <em>"What is the phone number of the support team?"</em> needs a high-precision <code>VectorStoreIndex</code>. A user asking <em>"Summarize the entire 400-page annual report"</em> needs a hierarchical <code>SummaryIndex</code> or <code>TreeIndex</code>. The Router Query Engine uses an LLM classifier to inspect incoming questions and dynamically route them to the optimal index engine.</p>
+    <p>To overcome these systemic limitations, modern AI engineering combines <strong>LlamaIndex orchestration</strong> with <strong>Knowledge Graph RAG (GraphRAG)</strong>.</p>
 
-    <!-- SECTION 3: GRAPHRAG -->
-    <h3>3. Knowledge Graph RAG (GraphRAG): Relational Entity Triples</h3>
-    <p>Instead of slicing text into blind rectangular chunks, <strong>GraphRAG</strong> extracts semantic entities and relationships, constructing a formal <strong>Knowledge Graph $\mathcal{G} = (\mathcal{V}, \mathcal{E})$</strong> composed of directed triples:</p>
-    $$\text{Triple: } \quad (\text{Subject}, \text{Predicate}, \text{Object}) \iff (h, r, t)$$
-    <p><em>Example:</em> <code>(Satya Nadella, CEO_OF, Microsoft)</code>, <code>(Microsoft, INVESTED_IN, OpenAI)</code>, <code>(OpenAI, DEVELOPED, GPT-4)</code>.</p>
+    <!-- SECTION 2: LLAMAINDEX QUERY ENGINES -->
+    <h3>2. Advanced LlamaIndex Orchestration Architectures</h3>
+    <p><strong>LlamaIndex</strong> provides a modular framework for structured data indexing, tree abstractions, and dynamic query routing. Rather than treating an index as a static vector store, LlamaIndex treats indices as queryable computation graphs.</p>
 
-    <div class="real-world-box">
-      <h4>🏆 The Power of Multi-Hop Graph Traversal</h4>
-      <p>When asked: <em>"What products are developed by companies that receive investment from Satya Nadella's organization?"</em></p>
-      <ul>
-        <li>Standard vector search has no single embedding that connects Satya Nadella directly to GPT-4.</li>
-        <li>GraphRAG performs an exact 2-hop <strong>Breadth-First Search (BFS)</strong> traversal along relational edges:
-        $$\text{Satya Nadella} \xrightarrow{\text{CEO\_OF}} \text{Microsoft} \xrightarrow{\text{INVESTED\_IN}} \text{OpenAI} \xrightarrow{\text{DEVELOPED}} \mathbf{GPT\text{-}4}$$</li>
-      </ul>
-      <p>GraphRAG retrieves the exact entity path with 100% mathematical certainty, completely eliminating hallucination!</p>
+    <div class="table-container" style="overflow-x: auto; margin: 1.5em 0;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em;">
+        <thead>
+          <tr style="background-color: #1b4965; color: #ffffff;">
+            <th style="padding: 10px; border: 1px solid #ccc;">LlamaIndex Architecture</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Execution Mechanism</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Primary Enterprise Use Case</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Sub-Question Query Engine</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Decomposes a complex multi-document query into $K$ independent sub-questions via LLM planning, routes each to specialized index tools, and synthesizes answers.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Cross-document financial comparisons, multi-contract due diligence, vendor audits.</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Router Query Engine</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Uses an LLM selector or semantic classifier to inspect query intent and dynamically route between summary indices, vector indices, and SQL databases.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Hybrid QA portals handling both pinpoint factoid lookups and high-level document summarization.</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Sentence Window / Small-to-Big</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Embeds individual granular sentences for high-precision retrieval, but injects a surrounding window of $\pm K$ sentences into the LLM context window.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Legal contracts and technical specifications where precision matching is required without losing local context.</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Property Graph Index</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Constructs a labeled property graph with node/edge properties, combining vector similarity over entities with Cypher-based graph traversals.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Biomedical disease-gene networks, supply-chain disruption tracking, fraud rings.</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Advanced RAG</h3>
+    <!-- SECTION 3: KNOWLEDGE GRAPHS & GRAPHRAG -->
+    <h3>3. Knowledge Graph RAG (GraphRAG): Mathematical Foundations</h3>
+    <p>A <strong>Knowledge Graph</strong> $\mathcal{G} = (\mathcal{V}, \mathcal{E}, \mathcal{R})$ consists of a set of entity nodes $\mathcal{V}$, directed relation edges $\mathcal{E}$, and relation types $\mathcal{R}$. Each edge is a directed proposition triple:</p>
+    $$(h, r, t) \in \mathcal{V} \times \mathcal{R} \times \mathcal{V}$$
+    <p>where $h$ is the head entity (subject), $r$ is the relation (predicate), and $t$ is the tail entity (object). For example: $(\text{Satya Nadella}, \text{CEO\_OF}, \text{Microsoft})$.</p>
 
+    <h4>Graph Construction Pipeline</h4>
+    <ol>
+      <li><strong>Information Extraction (OpenIE):</strong> An LLM extracts entities, types, and relational descriptions from text chunks:
+      $$\text{Text Chunk } c_k \xrightarrow{\text{LLM Prompt}} \{(h_i, r_i, t_i, \text{description}_i)\}$$</li>
+      <li><strong>Entity Resolution &amp; Deduplication:</strong> Entities appearing under slight linguistic variations (e.g., "Microsoft", "MSFT", "Microsoft Corp.") are resolved to canonical entity IDs using cosine similarity over entity description embeddings:
+      $$\text{sim}(e_i, e_j) = \frac{\mathbf{e}_i^T \mathbf{e}_j}{\|\mathbf{e}_i\| \|\mathbf{e}_j\|} \ge \tau_{\text{resolve}} \implies \text{Merge}(e_i, e_j)$$</li>
+      <li><strong>Graph Augmentation:</strong> Nodes and edges are annotated with metadata, source chunk citations, and occurrence weights $w_{ij}$.</li>
+    </ol>
+
+    <!-- SECTION 4: MICROSOFT GRAPHRAG & LEIDEN COMMUNITY DETECTION -->
+    <h3>4. Microsoft Research GraphRAG: Hierarchical Community Detection</h3>
+    <p>To answer global sensemaking queries across an entire corpus, Microsoft Research's GraphRAG introduces <strong>Hierarchical Community Summarization</strong>. Instead of searching raw text, GraphRAG partitions the knowledge graph into communities of tightly connected entities using the <strong>Leiden Algorithm</strong>, and generates hierarchical natural-language summaries at multiple granularity levels.</p>
+
+    <h4>1. Modularity Optimization &amp; The Leiden Algorithm</h4>
+    <p>Community detection groups nodes such that the density of edges within communities is significantly higher than expected by chance. This is quantified by <strong>Newman-Girvan Modularity $\mathcal{Q}$</strong>:</p>
+    $$\mathcal{Q} = \frac{1}{2m} \sum_{i, j \in \mathcal{V}} \left[ A_{ij} - \gamma \frac{k_i k_j}{2m} \right] \delta(c_i, c_j)$$
+    <p>where $A_{ij}$ is the adjacency weight between nodes $i$ and $j$, $m = \frac{1}{2} \sum_{ij} A_{ij}$ is the total edge weight, $k_i = \sum_j A_{ij}$ is the degree of node $i$, $\gamma &gt; 0$ is the resolution parameter, $c_i$ is the community assignment of node $i$, and $\delta(c_i, c_j) = 1$ if $c_i = c_j$ and $0$ otherwise.</p>
+
+    <div class="tip-box">
+      <h4>⚡ Why Leiden Over Louvain?</h4>
+      <p>The classical <strong>Louvain algorithm</strong> has a major mathematical flaw: it frequently traps communities into disconnected or weakly connected subgraphs. The <strong>Leiden algorithm</strong> (Traag et al., 2019) guarantees that all communities are well-connected by introducing an intermediate <em>refinement phase</em> that splits communities into sub-communities before aggregating them into the super-graph.</p>
+    </div>
+
+    <h4>2. Local Search vs. Global Search in GraphRAG</h4>
+    <p>GraphRAG supports two distinct retrieval modalities:</p>
+    <ul>
+      <li><strong>Local Search (Entity-Focused):</strong> For queries about specific entities (e.g., <em>"What are the supply chain dependencies of Product X?"</em>). It extracts entities from the query, traverses $k$-hop ego-networks, retrieves incident relationships and raw text chunks, and synthesizes a grounded answer.</li>
+      <li><strong>Global Search (Thematic/Sensemaking):</strong> For macro-level questions without specific named entities (e.g., <em>"What are the overarching economic risks in the portfolio?"</em>). It executes a <strong>Map-Reduce</strong> workflow across precomputed community summaries:
+        <ol>
+          <li><em>Map:</em> Distribute community summaries to parallel LLM workers. Each worker extracts key points and assigns an importance rating $s \in [0, 100]$.</li>
+          <li><em>Filter &amp; Sort:</em> Rank points by score $s$ and filter out low-relevance summaries.</li>
+          <li><em>Reduce:</em> Synthesize the top-ranked community points into a cohesive global executive briefing.</li>
+        </ol>
+      </li>
+    </ul>
+
+    <!-- SECTION 5: FAANG PRACTICE SUITE -->
+    <h3>FAANG &amp; Research Lab Practice Suite — Advanced RAG &amp; GraphRAG</h3>
+    <p>Master the theoretical derivations, modularity arithmetic, graph traversal algorithms, and conceptual traps powering production GraphRAG systems.</p>
+
+    <!-- PROBLEM 5.4.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 5.4.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="difficulty difficulty-easy">Tier 1: Direct Formula Drill</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Multi-Hop Graph Traversal vs. Dense Vector MIPS Sizing &amp; Complexity Drill:</strong></p>
+        <p>An enterprise knowledge base indexes $N = 1,000,000$ documents. An engineer compares the computational complexity and memory bandwidth of a 2-hop GraphRAG traversal against a brute-force Flat L2 Dense Vector search.</p>
+        <ol>
+          <li>Assume the Knowledge Graph contains $|\mathcal{V}| = 500,000$ entities with an average branching factor (degree) $d = 14$. Calculate the exact maximum number of nodes and directed edges traversed in a 2-hop breadth-first search (BFS) starting from a single seed entity $v_0$ (assuming no cycles).</li>
+          <li>Assuming an adjacency list pointer lookup requires fetching a 64-bit memory address ($8$ bytes per edge), calculate the exact memory read footprint (in Kilobytes) to complete this 2-hop traversal.</li>
+          <li>In contrast, compute the floating-point operations (FLOPs) and memory bandwidth required to perform a brute-force Flat L2 vector search across all $N = 1,000,000$ chunk embeddings with dimension $D = 1536$ (using 32-bit floating point numbers).</li>
+          <li>State the ratio of vector search FLOPs to graph traversal edge visits.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
+
+        <p class="step"><strong>Step 1: 2-Hop BFS Node and Edge Count:</strong><br>
+        Starting from root node $v_0$ with branching factor $d = 14$:
+        $$\text{Hop 0 (Seed): } 1 \text{ node}$$
+        $$\text{Hop 1 (Direct Neighbors): } d = 14 \text{ nodes, } 14 \text{ edges}$$
+        $$\text{Hop 2 (Secondary Neighbors): } d^2 = 14^2 = 196 \text{ nodes, } 196 \text{ edges}$$
+        Total nodes visited:
+        $$|\mathcal{V}_{\text{visited}}| = 1 + 14 + 196 = \mathbf{211 \text{ nodes}}$$
+        Total edges traversed:
+        $$|\mathcal{E}_{\text{traversed}}| = 14 + 196 = \mathbf{210 \text{ edges}}$$</p>
+
+        <p class="step"><strong>Step 2: Memory Read Footprint:</strong><br>
+        Each edge pointer requires 8 bytes (64-bit integer):
+        $$\text{Memory} = 210 \times 8 \text{ bytes} = 1,680 \text{ bytes} = \mathbf{1.641 \text{ KB}}$$
+        This footprint fits entirely inside the L1 CPU cache ($32 \text{ KB}$), executing in under $\mathbf{0.005 \text{ ms}}$ (sub-microsecond pointer dereferencing)!</p>
+
+        <p class="step"><strong>Step 3: Flat L2 Dense Vector Search Cost:</strong><br>
+        For $N = 1,000,000$ vectors of dimension $D = 1536$:
+        Each L2 distance computation between query $\mathbf{q}$ and document $\mathbf{x}_i$ requires:
+        $$\|\mathbf{q} - \mathbf{x}_i\|^2 = \sum_{j=1}^D (q_j - x_{i,j})^2$$
+        This requires $D$ subtractions, $D$ multiplications (squaring), and $D-1$ additions:
+        $$\text{FLOPs per vector} = 3D - 1 \approx 2D \text{ (or } 3D \text{ strictly)}$$
+        Using standard $2D$ multiply-accumulate (MAC) operations:
+        $$\text{Total FLOPs} = 2 \times N \times D = 2 \times 1,000,000 \times 1,536 = \mathbf{3.072 \times 10^9 \text{ FLOPs (3.072 GFLOPs)}}$$
+        Memory bandwidth required to stream the unquantized FP32 embeddings from RAM/VRAM:
+        $$\text{Data Size} = N \times D \times 4 \text{ bytes} = 10^6 \times 1,536 \times 4 = 6,144,000,000 \text{ bytes} \approx \mathbf{5.72 \text{ GiB}}$$</p>
+
+        <p class="step"><strong>Step 4: Ratio Comparison:</strong><br>
+        $$\text{Ratio} = \frac{3.072 \times 10^9 \text{ FLOPs}}{210 \text{ edge visits}} \approx \mathbf{1.46 \times 10^7 \times}$$
+        Flat vector search requires over <strong>14.6 million times more computational work</strong> and streams 5.72 GiB of memory, whereas graph traversal touches 1.64 KB. For structural multi-hop queries, graph traversal is astronomically more efficient.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.4.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.4.2</span>
+        <span class="difficulty difficulty-medium">Tier 1: Direct Formula Drill</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Newman-Girvan Modularity Optimization $\Delta \mathcal{Q}$ Calculation:</strong></p>
+        <p>Consider an unweighted undirected knowledge graph with $n = 5$ entity nodes and $m = 6$ edges:
+        $$\mathcal{E} = \{(1,2), (1,3), (2,3), (3,4), (4,5), (3,5)\}$$
+        Current community partition: $\mathcal{C}_1 = \{1, 2\}$, $\mathcal{C}_2 = \{3, 4, 5\}$. Resolution parameter $\gamma = 1.0$.</p>
+        <ol>
+          <li>Calculate the degree $k_i$ for each of the 5 nodes, and verify that $\sum_{i=1}^5 k_i = 2m$.</li>
+          <li>Compute the modularity $\mathcal{Q}(\mathcal{P})$ of the initial partition $\mathcal{P} = \{\mathcal{C}_1, \mathcal{C}_2\}$ using the formula:
+          $$\mathcal{Q} = \sum_{c} \left[ \frac{\Sigma_{\text{in}}(c)}{2m} - \left( \frac{\Sigma_{\text{tot}}(c)}{2m} \right)^2 \right]$$
+          where $\Sigma_{\text{in}}(c)$ is twice the number of internal edges in community $c$, and $\Sigma_{\text{tot}}(c)$ is the sum of degrees of all nodes in $c$.</li>
+          <li>In a Leiden/Louvain local movement step, node $3$ is considered for moving from $\mathcal{C}_2$ to $\mathcal{C}_1$. Calculate the exact change in modularity $\Delta \mathcal{Q}_{3 \to \mathcal{C}_1}$. Determine whether moving node 3 to $\mathcal{C}_1$ is accepted.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
+
+        <p class="step"><strong>Step 1: Node Degrees and Verification:</strong><br>
+        Inspecting the edges connected to each node:
+        <ul>
+          <li>Node 1: connected to {2, 3} $\implies k_1 = 2$</li>
+          <li>Node 2: connected to {1, 3} $\implies k_2 = 2$</li>
+          <li>Node 3: connected to {1, 2, 4, 5} $\implies k_3 = 4$</li>
+          <li>Node 4: connected to {3, 5} $\implies k_4 = 2$</li>
+          <li>Node 5: connected to {3, 4} $\implies k_5 = 2$</li>
+        </ul>
+        Sum of degrees:
+        $$\sum_{i=1}^5 k_i = 2 + 2 + 4 + 2 + 2 = 12 = 2m = 2(6) = 12 \quad \text{✓ Verified.}$$
+        Total edge normalization factor: $2m = 12$.</p>
+
+        <p class="step"><strong>Step 2: Modularity of Initial Partition $\mathcal{P} = \{\mathcal{C}_1, \mathcal{C}_2\}$:</strong><br>
+        For community $\mathcal{C}_1 = \{1, 2\}$:
+        <ul>
+          <li>Internal edges: edge $(1,2)$ only. Thus $\Sigma_{\text{in}}(\mathcal{C}_1) = 2 \times 1 = 2$.</li>
+          <li>Total degree sum: $\Sigma_{\text{tot}}(\mathcal{C}_1) = k_1 + k_2 = 2 + 2 = 4$.</li>
+          <li>Contribution:
+          $$\mathcal{Q}(\mathcal{C}_1) = \frac{2}{12} - \left(\frac{4}{12}\right)^2 = \frac{1}{6} - \left(\frac{1}{3}\right)^2 = \frac{1}{6} - \frac{1}{9} = \frac{3 - 2}{18} = \frac{1}{18} \approx \mathbf{0.0556}$$</li>
+        </ul>
+        For community $\mathcal{C}_2 = \{3, 4, 5\}$:
+        <ul>
+          <li>Internal edges: $(3,4), (4,5), (3,5)$ (3 edges). Thus $\Sigma_{\text{in}}(\mathcal{C}_2) = 2 \times 3 = 6$.</li>
+          <li>Total degree sum: $\Sigma_{\text{tot}}(\mathcal{C}_2) = k_3 + k_4 + k_5 = 4 + 2 + 2 = 8$.</li>
+          <li>Contribution:
+          $$\mathcal{Q}(\mathcal{C}_2) = \frac{6}{12} - \left(\frac{8}{12}\right)^2 = \frac{1}{2} - \left(\frac{2}{3}\right)^2 = \frac{1}{2} - \frac{4}{9} = \frac{9 - 8}{18} = \frac{1}{18} \approx \mathbf{0.0556}$$</li>
+        </ul>
+        Total initial modularity:
+        $$\mathcal{Q}_{\text{initial}} = \mathcal{Q}(\mathcal{C}_1) + \mathcal{Q}(\mathcal{C}_2) = \frac{1}{18} + \frac{1}{18} = \frac{2}{18} = \frac{1}{9} \approx \mathbf{0.1111}$$</p>
+
+        <p class="step"><strong>Step 3: Modularity Change $\Delta \mathcal{Q}_{3 \to \mathcal{C}_1}$:</strong><br>
+        If node 3 moves to $\mathcal{C}_1$, the new partition is $\mathcal{P}' = \{\mathcal{C}_1' = \{1, 2, 3\}, \mathcal{C}_2' = \{4, 5\}\}$.
+        Let us compute $\mathcal{Q}(\mathcal{P}')$ directly:
+        For $\mathcal{C}_1' = \{1, 2, 3\}$:
+        <ul>
+          <li>Internal edges: $(1,2), (1,3), (2,3)$ (3 edges) $\implies \Sigma_{\text{in}}(\mathcal{C}_1') = 2 \times 3 = 6$.</li>
+          <li>Total degree sum: $\Sigma_{\text{tot}}(\mathcal{C}_1') = 2 + 2 + 4 = 8$.</li>
+          <li>$$\mathcal{Q}(\mathcal{C}_1') = \frac{6}{12} - \left(\frac{8}{12}\right)^2 = \frac{1}{2} - \frac{4}{9} = \frac{1}{18}$$</li>
+        </ul>
+        For $\mathcal{C}_2' = \{4, 5\}$:
+        <ul>
+          <li>Internal edges: $(4,5)$ (1 edge) $\implies \Sigma_{\text{in}}(\mathcal{C}_2') = 2 \times 1 = 2$.</li>
+          <li>Total degree sum: $\Sigma_{\text{tot}}(\mathcal{C}_2') = 2 + 2 = 4$.</li>
+          <li>$$\mathcal{Q}(\mathcal{C}_2') = \frac{2}{12} - \left(\frac{4}{12}\right)^2 = \frac{1}{6} - \left(\frac{1}{3}\right)^2 = \frac{1}{18}$$</li>
+        </ul>
+        Total new modularity:
+        $$\mathcal{Q}_{\text{new}} = \frac{1}{18} + \frac{1}{18} = \frac{1}{9} \approx \mathbf{0.1111}$$
+        Change in modularity:
+        $$\Delta \mathcal{Q} = \mathcal{Q}_{\text{new}} - \mathcal{Q}_{\text{initial}} = \frac{1}{9} - \frac{1}{9} = \mathbf{0.0000}$$
+        Since $\Delta \mathcal{Q} = 0 \ngtr 0$, the move provides <strong>no modularity gain</strong>. By symmetry, node 3 is equally connected to $\{1,2\}$ (2 edges) and $\{4,5\}$ (2 edges). Under greedy modularity maximization, the move is rejected or broken randomly.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.4.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.4.3</span>
+        <span class="difficulty difficulty-medium">Tier 2: Applied Engineering Trace</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-uber">Uber</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Personalized PageRank (PPR) Entity Importance Tracing:</strong></p>
+        <p>In GraphRAG local retrieval, when a user asks about an entity $v_1$ (e.g. "Acme Corp"), the engine runs <strong>Personalized PageRank (PPR)</strong> to score the surrounding relational nodes, prioritizing context chunks tied to the highest-scoring entities.</p>
+        <p>Consider a 4-node knowledge graph with entity set $\mathcal{V} = \{1, 2, 3, 4\}$ and directed edges:
+        $$1 \to 2, \quad 1 \to 3, \quad 2 \to 3, \quad 3 \to 1, \quad 3 \to 4, \quad 4 \to 1$$
+        Personalization vector $\mathbf{s} = [1, 0, 0, 0]^T$ (teleportation restart strictly to seed entity 1). Damping factor $\alpha = 0.80$.</p>
+        <ol>
+          <li>Construct the column-stochastic random walk transition matrix $\mathbf{P}$, where $P_{ij} = \text{Prob}(j \to i) = \frac{A_{ji}}{k_j^{\text{out}}}$.</li>
+          <li>State the PPR power-iteration recurrence relation:
+          $$\mathbf{p}^{(t+1)} = \alpha \mathbf{P} \mathbf{p}^{(t)} + (1 - \alpha) \mathbf{s}$$</li>
+          <li>Initialize $\mathbf{p}^{(0)} = \mathbf{s} = [1, 0, 0, 0]^T$. Perform exactly <strong>two full iterations</strong> ($t = 1$ and $t = 2$). Calculate the exact decimal values of $\mathbf{p}^{(1)}$ and $\mathbf{p}^{(2)}$.</li>
+          <li>Rank the entities by relevance after Iteration 2, and identify which entity is selected as the highest-priority 1st-hop context node.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Algorithmic Trace</div>
+
+        <p class="step"><strong>Step 1: Construct Transition Matrix $\mathbf{P}$:</strong><br>
+        Compute out-degrees $k_j^{\text{out}}$:
+        <ul>
+          <li>Node 1 has edges to {2, 3} $\implies k_1^{\text{out}} = 2$. Probabilities: $P_{2,1} = 0.5, P_{3,1} = 0.5$.</li>
+          <li>Node 2 has edges to {3} $\implies k_2^{\text{out}} = 1$. Probability: $P_{3,2} = 1.0$.</li>
+          <li>Node 3 has edges to {1, 4} $\implies k_3^{\text{out}} = 2$. Probabilities: $P_{1,3} = 0.5, P_{4,3} = 0.5$.</li>
+          <li>Node 4 has edges to {1} $\implies k_4^{\text{out}} = 1$. Probability: $P_{1,4} = 1.0$.</li>
+        </ul>
+        Writing the column-stochastic matrix $\mathbf{P}$ (where column $j$ contains outgoing probabilities from node $j$):
+        $$\mathbf{P} = \begin{bmatrix}
+        0 & 0 & 0.5 & 1.0 \\
+        0.5 & 0 & 0 & 0 \\
+        0.5 & 1.0 & 0 & 0 \\
+        0 & 0 & 0.5 & 0
+        \end{bmatrix}$$</p>
+
+        <p class="step"><strong>Step 2 &amp; 3: Power Iterations:</strong><br>
+        Given $\alpha = 0.80$, $1 - \alpha = 0.20$, and $\mathbf{s} = \begin{bmatrix} 1 \\ 0 \\ 0 \\ 0 \end{bmatrix}$:
+        $$\mathbf{p}^{(t+1)} = 0.80 \mathbf{P} \mathbf{p}^{(t)} + \begin{bmatrix} 0.20 \\ 0 \\ 0 \\ 0 \end{bmatrix}$$
+
+        <u>Iteration 1 ($t = 0 \to t = 1$):</u><br>
+        $\mathbf{p}^{(0)} = [1, 0, 0, 0]^T$. Compute $\mathbf{P} \mathbf{p}^{(0)}$ (first column of $\mathbf{P}$):
+        $$\mathbf{P} \mathbf{p}^{(0)} = \begin{bmatrix} 0 \\ 0.5 \\ 0.5 \\ 0 \end{bmatrix}$$
+        Applying damping and restart:
+        $$\mathbf{p}^{(1)} = 0.80 \begin{bmatrix} 0 \\ 0.5 \\ 0.5 \\ 0 \end{bmatrix} + \begin{bmatrix} 0.20 \\ 0 \\ 0 \\ 0 \end{bmatrix} = \begin{bmatrix} 0.20 \\ 0.40 \\ 0.40 \\ 0.00 \end{bmatrix}$$
+        Sum check: $0.20 + 0.40 + 0.40 + 0.00 = 1.00$ (✓ stochastic).
+
+        <br><br><u>Iteration 2 ($t = 1 \to t = 2$):</u><br>
+        Compute $\mathbf{P} \mathbf{p}^{(1)}$:
+        $$\mathbf{P} \mathbf{p}^{(1)} = \begin{bmatrix}
+        0 & 0 & 0.5 & 1.0 \\
+        0.5 & 0 & 0 & 0 \\
+        0.5 & 1.0 & 0 & 0 \\
+        0 & 0 & 0.5 & 0
+        \end{bmatrix} \begin{bmatrix} 0.20 \\ 0.40 \\ 0.40 \\ 0.00 \end{bmatrix}$$
+        Row-by-row arithmetic:
+        <ul>
+          <li>Row 1: $0(0.20) + 0(0.40) + 0.5(0.40) + 1.0(0.00) = 0.20$</li>
+          <li>Row 2: $0.5(0.20) + 0(0.40) + 0(0.40) + 0(0.00) = 0.10$</li>
+          <li>Row 3: $0.5(0.20) + 1.0(0.40) + 0(0.40) + 0(0.00) = 0.10 + 0.40 = 0.50$</li>
+          <li>Row 4: $0(0.20) + 0(0.40) + 0.5(0.40) + 0(0.00) = 0.20$</li>
+        </ul>
+        Thus $\mathbf{P} \mathbf{p}^{(1)} = [0.20, 0.10, 0.50, 0.20]^T$.
+        Applying damping and restart:
+        $$\mathbf{p}^{(2)} = 0.80 \begin{bmatrix} 0.20 \\ 0.10 \\ 0.50 \\ 0.20 \end{bmatrix} + \begin{bmatrix} 0.20 \\ 0 \\ 0 \\ 0 \end{bmatrix} = \begin{bmatrix} 0.16 + 0.20 \\ 0.08 \\ 0.40 \\ 0.16 \end{bmatrix} = \mathbf{\begin{bmatrix} 0.36 \\ 0.08 \\ 0.40 \\ 0.16 \end{bmatrix}}$$
+        Sum check: $0.36 + 0.08 + 0.40 + 0.16 = \mathbf{1.00}$ (✓ exact).</p>
+
+        <p class="step"><strong>Step 4: Entity Ranking and Selection:</strong><br>
+        The resulting relevance distribution after two hops is:
+        $$\mathbf{p}^{(2)}: \quad p_3 (0.40) &gt; p_1 (0.36) &gt; p_4 (0.16) &gt; p_2 (0.08)$$
+        <strong>Node 3</strong> emerges with the highest overall score ($0.40$), even surpassing the seed entity! This occurs because Node 3 receives incoming probability mass from both Node 1 ($0.5 \times 0.20$) and Node 2 ($1.0 \times 0.40$). Node 3 is selected as the top-priority context node for injection into the LLM prompt.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.4.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.4.4</span>
+        <span class="difficulty difficulty-hard">Tier 2: Applied Engineering Trace</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Microsoft GraphRAG Global Search Map-Reduce Token &amp; Cost Engineering:</strong></p>
+        <p>An enterprise deploys Microsoft GraphRAG on a corpus of $M = 4,000$ internal research reports. The indexing pipeline partitions the graph into a 3-level Leiden hierarchy:</p>
+        <ul>
+          <li>Level $C_0$ (Root): 1 top-level macro-community.</li>
+          <li>Level $C_1$ (Broad Clusters): 16 communities, each summarized in a 1,200-token report.</li>
+          <li>Level $C_2$ (Sub-clusters): 80 communities, each summarized in a 600-token report.</li>
+        </ul>
+        <p>A user submits a global query: <em>"Synthesize all major technical breakthroughs and unresolved safety risks across our entire research archive."</em></p>
+        <p>The system executes Global Search over Level $C_1$ using Map-Reduce:</p>
+        <ol>
+          <li><strong>Map Stage:</strong> The 16 community summaries are packaged into parallel LLM prompts. Each prompt contains a 400-token system instruction + one 1,200-token summary. The LLM generates a structured JSON output of 350 tokens containing extracted insight points rated from 0 to 100. Calculate the total input tokens and total output tokens across all 16 Map workers.</li>
+          <li><strong>Filter &amp; Reduce Stage:</strong> The aggregator collects all extracted points. 30% of points are filtered out due to low score ($&lt;60$). The remaining points total 3,920 tokens. These are bundled into a single Reduce prompt along with a 600-token synthesis instruction. The LLM generates a comprehensive 1,500-token final executive report. Calculate the Reduce stage input and output tokens.</li>
+          <li>Assuming LLM pricing of <strong>$2.50 per 1M input tokens</strong> and <strong>$10.00 per 1M output tokens</strong>, compute the total financial cost to execute this single Global Search query.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Engineering Trace</div>
+
+        <p class="step"><strong>Step 1: Map Stage Token Footprint:</strong><br>
+        Number of parallel community workers = 16.
+        Per-worker input tokens:
+        $$\text{Input}_{\text{map\_worker}} = 400 \text{ (instruction)} + 1,200 \text{ (summary)} = 1,600 \text{ tokens}$$
+        Total Map input tokens across 16 workers:
+        $$\text{Total Input}_{\text{map}} = 16 \times 1,600 = \mathbf{25,600 \text{ tokens}}$$
+        Per-worker output tokens = 350 tokens.
+        Total Map output tokens:
+        $$\text{Total Output}_{\text{map}} = 16 \times 350 = \mathbf{5,600 \text{ tokens}}$$</p>
+
+        <p class="step"><strong>Step 2: Reduce Stage Token Footprint:</strong><br>
+        The filtered points comprise 3,920 tokens.
+        Reduce prompt input:
+        $$\text{Input}_{\text{reduce}} = 600 \text{ (instruction)} + 3,920 \text{ (filtered points)} = \mathbf{4,520 \text{ tokens}}$$
+        Reduce prompt output:
+        $$\text{Output}_{\text{reduce}} = \mathbf{1,500 \text{ tokens}}$$</p>
+
+        <p class="step"><strong>Step 3: Total Cost Calculation:</strong><br>
+        Aggregate tokens across both stages:
+        $$\text{Total Input Tokens} = 25,600 + 4,520 = \mathbf{30,120 \text{ tokens}}$$
+        $$\text{Total Output Tokens} = 5,600 + 1,500 = \mathbf{7,100 \text{ tokens}}$$
+        Calculating API dollar costs:
+        $$\text{Cost}_{\text{input}} = \frac{30,120}{1,000,000} \times \$2.50 = \$0.0753$$
+        $$\text{Cost}_{\text{output}} = \frac{7,100}{1,000,000} \times \$10.00 = \$0.0710$$
+        Total financial cost:
+        $$\text{Total Cost} = \$0.0753 + \$0.0710 = \mathbf{\$0.1463 \text{ (~14.6 cents)}}$$
+        Executing a corpus-wide global query across 4,000 documents via GraphRAG costs under 15 cents, while reading all 4,000 raw documents ($~2 \times 10^6$ tokens) would exceed the context limit or cost over $5.00 per query!</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.4.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.4.5</span>
+        <span class="difficulty difficulty-hard">Tier 3: FAANG / Research Lab Proof</span>
+        <span class="company-tag company-microsoft">Microsoft Research</span>
+        <span class="company-tag company-google">DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Mathematical Proof: Disconnected Communities in Louvain vs. Leiden Well-Connectedness:</strong></p>
+        <p>The Louvain algorithm iteratively moves nodes to neighboring communities that maximize modularity $\mathcal{Q}$. In 2019, Traag, Waltman, and van Eck proved that Louvain can yield arbitrarily badly connected or internally disconnected communities.</p>
+        <ol>
+          <li>Construct a formal counterexample graph $\mathcal{G}$ with two cliques $\mathcal{K}_1$ and $\mathcal{K}_2$ connected by a bridge of intermediary nodes. Prove analytically that Louvain can merge $\mathcal{K}_1$ and $\mathcal{K}_2$ into a single community $\mathcal{C}$ even if the path between them is severed during subsequent node movements, leaving $\mathcal{C}$ disconnected.</li>
+          <li>Formally explain the <strong>three-phase architecture of the Leiden Algorithm</strong>: (i) local moving of nodes, (ii) refinement of partition, and (iii) aggregation of network based on the refined partition.</li>
+          <li>Prove that the Leiden refinement guarantee ensures that all resulting communities are $\gamma$-separated and internally connected.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Mathematical Proof</div>
+
+        <p class="step"><strong>Part 1: Analytical Counterexample of Louvain Disconnection:</strong><br>
+        Consider two large, dense cliques $\mathcal{K}_1$ and $\mathcal{K}_2$, each containing $n$ nodes ($n \gg 1$). Suppose they are initially connected by a single intermediate bridge node $b$, such that $b$ has edges to a node in $\mathcal{K}_1$ and a node in $\mathcal{K}_2$.
+        During the first pass of Louvain, node $b$ is merged into community $\mathcal{C}$, which also absorbs $\mathcal{K}_1$ and $\mathcal{K}_2$ because the modularity gain $\Delta \mathcal{Q}$ of merging them exceeds the null-model penalty $\frac{k_i k_j}{2m}$ when total graph size $m$ is large.
+        In a subsequent iteration, node $b$ considers moving to another community $\mathcal{C}'$ (e.g., if another neighboring community offers a higher marginal $\Delta \mathcal{Q}$). Once node $b$ leaves $\mathcal{C}$, the remaining community $\mathcal{C} \setminus \{b\}$ consists of $\mathcal{K}_1$ and $\mathcal{K}_2$ with <strong>zero edges between them</strong>!
+        In standard Louvain, once nodes belong to the same community, the algorithm only moves individual nodes between communities; it <em>never checks whether the community has split into disconnected components</em>. When the network is subsequently aggregated, the disconnected components $\mathcal{K}_1$ and $\mathcal{K}_2$ are collapsed into a <strong>single super-node</strong>, forever cementing an internally disconnected community! $\blacksquare$</p>
+
+        <p class="step"><strong>Part 2: The Three Phases of the Leiden Algorithm:</strong><br>
+        To eliminate disconnected communities, the Leiden algorithm introduces a <strong>Refinement Phase</strong> between local moving and network aggregation:
+        <ol>
+          <li><strong>Local Movement:</strong> Fast greedy movement of nodes to maximize modularity (identical to Louvain's first phase), producing partition $\mathcal{P}$.</li>
+          <li><strong>Refinement Phase:</strong> Starting from a singleton partition $\mathcal{P}_{\text{refined}}$ (where every node is its own community), nodes within each community $\mathcal{C} \in \mathcal{P}$ are only merged into a sub-community $\mathcal{S} \subset \mathcal{C}$ if $\mathcal{S}$ is <em>well-connected</em> to the rest of $\mathcal{C}$. Specifically, a node is merged into $\mathcal{S}$ with probability proportional to the modularity gain, but <strong>strictly restricted to nodes within the same community $\mathcal{C}$</strong>. If a community $\mathcal{C}$ was disconnected (like $\mathcal{K}_1 \cup \mathcal{K}_2$), the refinement phase naturally partitions it into two separate sub-communities $\mathcal{S}_1 = \mathcal{K}_1$ and $\mathcal{S}_2 = \mathcal{K}_2$.</li>
+          <li><strong>Aggregation:</strong> The network is aggregated based on the <em>refined partition</em> $\mathcal{P}_{\text{refined}}$, but the community assignments from $\mathcal{P}$ are preserved for the super-nodes.</li>
+        </ol></p>
+
+        <p class="step"><strong>Part 3: Proof of Well-Connectedness Guarantee:</strong><br>
+        Let $\mathcal{C}$ be a community created by Leiden. By construction of the refinement phase:
+        A sub-community $\mathcal{S} \subseteq \mathcal{C}$ is defined as $\gamma$-well-connected if the internal edge cut between any subset $\mathcal{T} \subset \mathcal{S}$ and $\mathcal{S} \setminus \mathcal{T}$ satisfies:
+        $$E(\mathcal{T}, \mathcal{S} \setminus \mathcal{T}) \ge \gamma \frac{\text{Vol}(\mathcal{T}) \text{Vol}(\mathcal{S} \setminus \mathcal{T})}{2m}$$
+        During refinement, a node $v \in \mathcal{C}$ is only added to an existing sub-community $\mathcal{S}$ if it is connected to $\mathcal{S}$ by at least one real edge ($E(\{v\}, \mathcal{S}) &gt; 0$). If $\mathcal{C}$ contains disconnected components $\mathcal{C}_A$ and $\mathcal{C}_B$ with $E(\mathcal{C}_A, \mathcal{C}_B) = 0$, no node in $\mathcal{C}_B$ can ever join a refined community initialized in $\mathcal{C}_A$.
+        Therefore, every refined community $\mathcal{S}$ is guaranteed to be a connected subgraph. When the super-graph is constructed, communities can never aggregate disconnected components, guaranteeing that all communities produced by Leiden are connected. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.4.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.4.6</span>
+        <span class="difficulty difficulty-hard">Tier 3: FAANG / Research Lab Proof</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Mathematical Proof: Convergence and Uniqueness of Personalized PageRank via Banach Fixed-Point Theorem:</strong></p>
+        <p>In GraphRAG retrieval, Personalized PageRank computes the stationary entity relevance vector $\mathbf{p}^*$ satisfying:
+        $$\mathbf{p}^* = \alpha \mathbf{P} \mathbf{p}^* + (1 - \alpha) \mathbf{s}$$
+        where $\mathbf{P} \in \mathbb{R}^{n \times n}$ is a column-stochastic matrix ($\sum_{i=1}^n P_{ij} = 1, P_{ij} \ge 0$), $\mathbf{s} \in \mathbb{R}^n$ is a probability distribution ($\|\mathbf{s}\|_1 = 1, s_i \ge 0$), and $\alpha \in (0, 1)$ is the damping factor.</p>
+        <ol>
+          <li>Define the operator $T: \Delta^n \to \Delta^n$ as $T(\mathbf{p}) = \alpha \mathbf{P} \mathbf{p} + (1 - \alpha) \mathbf{s}$, where $\Delta^n = \{\mathbf{x} \in \mathbb{R}^n : x_i \ge 0, \|\mathbf{x}\|_1 = 1\}$ is the probability simplex. Prove that $\Delta^n$ is a complete metric space under the $L_1$ norm $\|\mathbf{x}\|_1 = \sum_{i=1}^n |x_i|$.</li>
+          <li>Prove that $T$ is a strict contraction mapping on $(\Delta^n, \|\cdot\|_1)$ with Lipschitz constant $L = \alpha &lt; 1$.</li>
+          <li>Apply the <strong>Banach Fixed-Point Theorem</strong> to prove that:
+            <ul>
+              <li>A unique stationary vector $\mathbf{p}^*$ exists.</li>
+              <li>The power iteration sequence $\mathbf{p}^{(t+1)} = T(\mathbf{p}^{(t)})$ converges to $\mathbf{p}^*$ from <em>any</em> initial vector $\mathbf{p}^{(0)}$ at a geometric rate:
+              $$\|\mathbf{p}^{(t)} - \mathbf{p}^*\|_1 \le \alpha^t \|\mathbf{p}^{(0)} - \mathbf{p}^*\|_1$$</li>
+            </ul>
+          </li>
+          <li>Derive the closed-form matrix solution for $\mathbf{p}^*$, proving that $(\mathbf{I} - \alpha \mathbf{P})$ is strictly invertible for any $\alpha \in (0, 1)$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Mathematical Derivation &amp; Proof</div>
+
+        <p class="step"><strong>Part 1: Completeness of the Probability Simplex:</strong><br>
+        The space $\mathbb{R}^n$ equipped with the $L_1$ norm is a Banach space (a complete normed vector space).
+        The probability simplex $\Delta^n = \{\mathbf{x} \in \mathbb{R}^n \mid x_i \ge 0, \sum_{i=1}^n x_i = 1\}$ is:
+        <ol>
+          <li><strong>Closed:</strong> It is the intersection of closed half-spaces $\{x_i \ge 0\}$ and the inverse image of the closed set $\{1\}$ under the continuous linear functional $\mathbf{1}^T \mathbf{x}$.</li>
+          <li><strong>Bounded:</strong> For any $\mathbf{x} \in \Delta^n$, $\|\mathbf{x}\|_1 = 1 \le 1$.</li>
+        </ol>
+        Since $\Delta^n$ is a closed subset of a complete metric space $(\mathbb{R}^n, \|\cdot\|_1)$, $(\Delta^n, \|\cdot\|_1)$ is itself a <strong>complete metric space</strong>.
+        Furthermore, for any $\mathbf{p} \in \Delta^n$:
+        $$\|T(\mathbf{p})\|_1 = \sum_{i=1}^n \left( \alpha \sum_{j=1}^n P_{ij} p_j + (1 - \alpha) s_i \right)$$
+        Since all entries are non-negative:
+        $$\|T(\mathbf{p})\|_1 = \alpha \sum_{j=1}^n p_j \underbrace{\sum_{i=1}^n P_{ij}}_{=1} + (1 - \alpha) \underbrace{\sum_{i=1}^n s_i}_{=1} = \alpha(1) + (1 - \alpha)(1) = 1$$
+        Thus $T$ maps $\Delta^n \to \Delta^n$. $\blacksquare$</p>
+
+        <p class="step"><strong>Part 2: Contraction Mapping Proof:</strong><br>
+        Let $\mathbf{u}, \mathbf{v} \in \Delta^n$. Consider the difference:
+        $$T(\mathbf{u}) - T(\mathbf{v}) = (\alpha \mathbf{P} \mathbf{u} + (1 - \alpha)\mathbf{s}) - (\alpha \mathbf{P} \mathbf{v} + (1 - \alpha)\mathbf{s}) = \alpha \mathbf{P} (\mathbf{u} - \mathbf{v})$$
+        Taking the $L_1$ norm:
+        $$\|T(\mathbf{u}) - T(\mathbf{v})\|_1 = \|\alpha \mathbf{P} (\mathbf{u} - \mathbf{v})\|_1 = \alpha \|\mathbf{P} (\mathbf{u} - \mathbf{v})\|_1$$
+        By the induced matrix norm definition:
+        $$\|\mathbf{P}\|_1 = \max_{1 \le j \le n} \sum_{i=1}^n |P_{ij}|$$
+        Since $\mathbf{P}$ is column-stochastic ($P_{ij} \ge 0$ and $\sum_{i=1}^n P_{ij} = 1$), every column sum equals exactly 1. Therefore:
+        $$\|\mathbf{P}\|_1 = 1$$
+        Consequently, by Cauchy-Schwarz / sub-multiplicativity:
+        $$\|\mathbf{P} (\mathbf{u} - \mathbf{v})\|_1 \le \|\mathbf{P}\|_1 \|\mathbf{u} - \mathbf{v}\|_1 = 1 \cdot \|\mathbf{u} - \mathbf{v}\|_1$$
+        Thus:
+        $$\|T(\mathbf{u}) - T(\mathbf{v})\|_1 \le \alpha \|\mathbf{u} - \mathbf{v}\|_1$$
+        Since $\alpha \in (0, 1)$, the Lipschitz constant satisfies $L = \alpha &lt; 1$.
+        Therefore, $T$ is a <strong>strict contraction mapping</strong> on the complete metric space $(\Delta^n, \|\cdot\|_1)$. $\blacksquare$</p>
+
+        <p class="step"><strong>Part 3: Application of Banach Fixed-Point Theorem:</strong><br>
+        By the Banach Fixed-Point Theorem:
+        <ol>
+          <li>There exists a <strong>unique</strong> fixed point $\mathbf{p}^* \in \Delta^n$ such that $T(\mathbf{p}^*) = \mathbf{p}^*$.</li>
+          <li>For any arbitrary starting distribution $\mathbf{p}^{(0)} \in \Delta^n$, the sequence $\mathbf{p}^{(t+1)} = T(\mathbf{p}^{(t)})$ converges to $\mathbf{p}^*$ as $t \to \infty$.</li>
+          <li>The error decays strictly geometrically:
+          $$\|\mathbf{p}^{(t)} - \mathbf{p}^*\|_1 = \|T(\mathbf{p}^{(t-1)}) - T(\mathbf{p}^*)\|_1 \le \alpha \|\mathbf{p}^{(t-1)} - \mathbf{p}^*\|_1 \le \dots \le \alpha^t \|\mathbf{p}^{(0)} - \mathbf{p}^*\|_1$$
+          For $\alpha = 0.85$, after $t = 30$ iterations, $\alpha^{30} \approx 0.0076$ (less than $1\%$ initial error). Convergence is guaranteed independent of graph topology or disconnected subcomponents! $\blacksquare$</li>
+        </ol></p>
+
+        <p class="step"><strong>Part 4: Closed-Form Matrix Inversion:</strong><br>
+        At the fixed point:
+        $$\mathbf{p}^* = \alpha \mathbf{P} \mathbf{p}^* + (1 - \alpha) \mathbf{s} \iff (\mathbf{I} - \alpha \mathbf{P}) \mathbf{p}^* = (1 - \alpha) \mathbf{s}$$
+        We must prove that $(\mathbf{I} - \alpha \mathbf{P})$ is invertible.
+        Since $\mathbf{P}$ is column-stochastic, by the Perron-Frobenius theorem / Gerschgorin circle theorem, all eigenvalues $\lambda_i$ of $\mathbf{P}$ satisfy $|\lambda_i| \le \rho(\mathbf{P}) = 1$.
+        The spectral radius of $\alpha \mathbf{P}$ is:
+        $$\rho(\alpha \mathbf{P}) = \alpha \rho(\mathbf{P}) = \alpha \cdot 1 = \alpha &lt; 1$$
+        Since $\rho(\alpha \mathbf{P}) &lt; 1$, the Neumann series converges absolutely:
+        $$(\mathbf{I} - \alpha \mathbf{P})^{-1} = \sum_{k=0}^{\infty} (\alpha \mathbf{P})^k$$
+        Therefore, $(\mathbf{I} - \alpha \mathbf{P})$ is non-singular and strictly invertible. The unique closed-form stationary vector is:
+        $$\mathbf{p}^* = (1 - \alpha) (\mathbf{I} - \alpha \mathbf{P})^{-1} \mathbf{s} \quad \blacksquare$$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.4.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.4.7</span>
+        <span class="difficulty difficulty-medium">Tier 4: Conceptual Trap MCQ</span>
+        <span class="company-tag company-amazon">Amazon</span>
+        <span class="company-tag company-uber">Uber</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap: Entity Disambiguation &amp; High-Degree "Hub-and-Spoke" Explosion:</strong></p>
+        <p>An enterprise team builds an OpenIE Knowledge Graph for corporate contract analysis. During production retrieval, a user asks: <em>"What were the regulatory compliance penalties incurred by Subsidiary Alpha in 2023?"</em></p>
+        <p>The 2-hop BFS retrieval crashes due to an out-of-memory (OOM) error, attempting to pull $140,000$ chunks into the LLM context. Investigation reveals that the seed entity <code>"Subsidiary Alpha"</code> was connected to the generic entity <code>"United States"</code> via edge <code>LOCATED_IN</code>, and <code>"United States"</code> had $138,500$ incoming edges from other entities.</p>
+        <p>Which of the following architectural mitigations is the <strong>most theoretically sound and production-viable</strong> solution to eliminate this hub-node explosion?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> Switch from GraphRAG to pure dense vector search with Cosine Similarity, because vector search is immune to high-frequency semantic concepts.</li>
+          <li><strong>(B)</strong> Completely drop all nodes with degree $k_i &gt; 1,000$ from the graph database during the build phase.</li>
+          <li><strong>(C)</strong> Implement <strong>Inverse Degree Edge Weighting (IDF-like penalty)</strong> or <strong>Personalized PageRank (PPR) with Node Degree Discounting</strong>, combined with predicate type filtering (excluding non-informative spatial/generic relations during traversal).</li>
+          <li><strong>(D)</strong> Increase the LLM context window to 2 Million tokens so that all 140,000 chunks can be ingested directly without filtering.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Distractor Analysis &amp; Architectural Rationale</div>
+
+        <p class="step"><strong>Correct Answer: (C)</strong></p>
+
+        <p class="step"><strong>Exhaustive Distractor Analysis:</strong><br>
+        <ul>
+          <li><strong>Why (C) is Correct:</strong> In network theory, generic entities (e.g., countries, years, legal terms) act as <em>super-hubs</em> with massive degrees ($k \sim 10^5$). If an unweighted BFS traverses through a super-hub, the search space explodes exponentially ($O(d^k)$). The mathematically sound solution is two-fold:
+          <ol>
+            <li><em>Degree-discounted edge weighting:</em> Scale edge transition probability inversely with neighbor degree: $W(u, v) = \frac{1}{\log(1 + k_v)}$. In PPR, this drastically dampens the probability mass flowing through super-hubs.</li>
+            <li><em>Schema-aware predicate filtering:</em> Multi-hop traversal rules should exclude structural/demographic predicates (e.g., <code>LOCATED_IN</code>, <code>TYPE_OF</code>) unless explicitly requested in the query.</li>
+          </ol></li>
+          <li><strong>Why (A) is Incorrect:</strong> Switching entirely back to flat vector search destroys the engine's ability to answer multi-hop questions (as proven in Section 1 and Problem 5.4.1). In fact, dense vectors also suffer from <em>hubness</em> in high-dimensional embedding spaces.</li>
+          <li><strong>Why (B) is Incorrect:</strong> Blindly dropping high-degree nodes deletes critical enterprise entities (e.g., "Microsoft", "FDA", "SEC", "CEO"). If you delete "FDA", you sever all connections between pharmaceutical drugs and their regulatory approval status! Nodes must be preserved, but edge traversals through them must be regulated.</li>
+          <li><strong>Why (D) is Incorrect:</strong> Ingesting 140,000 chunks ($~70 \text{ Million tokens}$) exceeds all physical hardware limits, costs hundreds of dollars per query, and induces extreme "Lost in the Middle" attention degradation where the answer is completely obscured by noise.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.4.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.4.8</span>
+        <span class="difficulty difficulty-hard">Tier 4: Conceptual Trap MCQ</span>
         <span class="company-tag company-google">Google</span>
         <span class="company-tag company-microsoft">Microsoft</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> You are designing a financial intelligence system indexing $1,000,000$ news articles. Compare the computational complexity and retrieval behavior of a <strong>2-hop GraphRAG traversal</strong> vs. a <strong>Cosine Vector Search</strong> on a multi-entity relational question.</p>
-        <ol>
-          <li>Assume the entity graph has average degree $d = 12$ (branching factor). Calculate the number of nodes visited in a 2-hop traversal starting from a seed entity.</li>
-          <li>Explain why vector search exhibits the "Lost in the Middle" phenomenon when 30 candidate chunks are concatenated into the prompt context window.</li>
-        </ol>
+        <p><strong>Assertion-Reasoning: GraphRAG Global Search vs. Local Search Failure Boundaries:</strong></p>
+        <p>Evaluate the following Assertion and Reason regarding Microsoft GraphRAG:</p>
+        <p><strong>Assertion (A):</strong> When answering the question <em>"What was the exact revenue generated by Product X in Q3 2024?"</em>, executing GraphRAG Global Search over Level $C_1$ community summaries will frequently fail to provide the exact dollar figure or may hallucinate an inaccurate approximation.</p>
+        <p><strong>Reason (R):</strong> Global Search aggregates macro-level hierarchical community reports generated during the Map-Reduce summarization phase, which inherently compress high-level thematic patterns and discard granular, low-frequency numerical literals present only in raw text chunks.</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+          <li><strong>(B)</strong> Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li><strong>(C)</strong> (A) is true, but (R) is false.</li>
+          <li><strong>(D)</strong> (A) is false, but (R) is true.</li>
+        </ul>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+        <div class="solution-label">✓ Complete Distractor Analysis &amp; Architectural Rationale</div>
 
-        <p class="step"><strong>Step 1: Graph Traversal Complexity:</strong><br>
-        For a seed entity $v_0$ with branching factor $d = 12$:
+        <p class="step"><strong>Correct Answer: (A)</strong></p>
+
+        <p class="step"><strong>Exhaustive Architectural Analysis:</strong><br>
         <ul>
-          <li>Hop 1 (direct neighbors): $d = 12$ entities.</li>
-          <li>Hop 2 (secondary relations): $d^2 = 12^2 = 144$ entities.</li>
-          <li>Total nodes visited: $1 + 12 + 144 = \mathbf{157 \text{ entities}}$.</li>
-        </ul>
-        In terms of time complexity, exploring 157 indexed pointer nodes takes <strong>sub-millisecond CPU memory access ($&lt;0.2 \text{ ms}$)</strong>! In contrast, computing cosine similarity over 1,000,000 1536-dimensional float vectors requires $1,000,000 \times 1,536 \approx 1.53 \times 10^9$ FLOPs ($1.53$ GigaFLOPs), requiring specialized GPU/SIMD vector acceleration. Graph traversal is orders of magnitude more computationally targeted for relational queries.</p>
-
-        <p class="step"><strong>Step 2: The "Lost in the Middle" Phenomenon (Liu et al., Stanford 2023):</strong><br>
-        When researchers analyzed LLM attention weights across long contexts (16k to 128k tokens), they observed a distinct U-shaped curve: LLMs are exceptionally good at recalling information located at the <strong>very beginning (primacy effect)</strong> and the <strong>very end (recency effect)</strong> of the prompt context. However, retrieval accuracy drops by up to <strong>$40\%$ to $60\%$</strong> when the key fact is placed in the <strong>middle of the context</strong>! Concatenating 30 raw chunks guarantees that critical facts will be buried in the dead zone. LlamaIndex re-ranking and GraphRAG graph-path filtering solve this by pruning context down to only the exact 3–5 necessary relational sentences.</p>
+          <li><strong>Assertion (A) is TRUE:</strong> The question is a <em>narrow, pinpoint factoid lookup</em> regarding a single product's quarterly revenue. Global Search is designed for corpus-wide thematic sensemaking (e.g., "What are the macro trends?"). Running Global Search on this question routes through high-level community abstracts, which almost never retain individual balance-sheet line items. The model will either state that the data is missing or hallucinate a general estimate based on adjacent text. Pinpoint factoid questions require <strong>Local Search</strong> or direct <strong>Hybrid Vector/BM25 Search</strong>.</li>
+          <li><strong>Reason (R) is TRUE and correctly explains (A):</strong> Hierarchical community detection (Leiden) groups entities to synthesize overarching narratives. When the LLM generates a 600-to-1200 token report for a community of 50 documents, it prioritizes central themes, core relationships, and macro insights. Low-frequency quantitative literals (such as "$4.12M") are filtered out as noise during the semantic lossy compression of community summarization. Therefore, Global Search cannot substitute for Local Search on pinpoint queries.</li>
+          <li>Consequently, a production enterprise RAG engine must feature a <strong>Query Classifier (Router Engine)</strong> that dynamically directs thematic queries to Global GraphRAG and factoid queries to Local/Hybrid RAG.</li>
+        </ul></p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 5.4: Sub-Question Decomposition &amp; Entity Triple Store</h3>
-    <p>Below is a production Python implementation of an automated Sub-Question Query Planner and an in-memory Knowledge Graph Entity Triple store.</p>
+    <!-- SECTION 6: CODE LAB -->
+    <h3>5. Production Code Lab 5.4: Multi-Hop Knowledge Graph Traversal &amp; Personalized PageRank</h3>
+    <p>Below is an enterprise-grade Python implementation of an in-memory Knowledge Graph store supporting Breadth-First Search (BFS) path extraction, entity degree discounting, and Personalized PageRank (PPR) scoring.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 5.4 — Knowledge Graph Triple Traversal from Scratch</div>
+      <div class="code-lab-header">Code Lab 5.4 — Knowledge Graph Triple Traversal &amp; Personalized PageRank from Scratch</div>
       <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_transformers_llms/ch54_llamaindex_graphrag/graph_rag_scratch.py" target="_blank">🔗 View in GitHub: part5_transformers_llms/ch54_llamaindex_graphrag/graph_rag_scratch.py</a></p>
 <pre><code>from collections import defaultdict, deque
+import numpy as np
 
 class KnowledgeGraphStore:
     def __init__(self):
-        # Adjacency list: subject -> list of (predicate, object)
-        self.graph = defaultdict(list)
+        # Adjacency list: subject -> list of (predicate, object, weight)
+        self.adj = defaultdict(list)
+        self.nodes = set()
 
-    def add_triple(self, subject, predicate, obj):
-        self.graph[subject.lower()].append((predicate.lower(), obj.lower()))
+    def add_triple(self, subject: str, predicate: str, obj: str, weight: float = 1.0):
+        s, p, o = subject.lower().strip(), predicate.lower().strip(), obj.lower().strip()
+        self.adj[s].append((p, o, weight))
+        self.nodes.add(s)
+        self.nodes.add(o)
 
-    def traverse_multihop(self, start_entity, max_hops=2):
+    def traverse_bfs(self, start_entity: str, max_hops: int = 2):
         """Breadth-First Search finding all relational paths up to max_hops"""
-        start = start_entity.lower()
+        start = start_entity.lower().strip()
+        if start not in self.nodes:
+            return []
+
         visited = {start}
-        queue = deque([(start, [])]) # (current_node, path_of_triples)
+        queue = deque([(start, [])])  # (current_node, list_of_triples)
         all_paths = []
 
         while queue:
@@ -123,7 +625,7 @@ class KnowledgeGraphStore:
             if len(path) == max_hops:
                 continue
 
-            for predicate, neighbor in self.graph[current]:
+            for predicate, neighbor, _ in self.adj[current]:
                 new_path = path + [(current, predicate, neighbor)]
                 all_paths.append(new_path)
                 if neighbor not in visited:
@@ -132,26 +634,71 @@ class KnowledgeGraphStore:
 
         return all_paths
 
+    def personalized_pagerank(self, seed_entity: str, alpha: float = 0.85, max_iter: int = 50, tol: float = 1e-6):
+        """Computes stationary Personalized PageRank distribution focused on seed_entity"""
+        node_list = sorted(list(self.nodes))
+        node_to_idx = {n: i for i, n in enumerate(node_list)}
+        n = len(node_list)
+
+        seed = seed_entity.lower().strip()
+        if seed not in node_to_idx:
+            raise ValueError(f"Seed entity '{seed}' not found in graph.")
+
+        # Build column-stochastic transition matrix P
+        P = np.zeros((n, n), dtype=np.float64)
+        for u in node_list:
+            u_idx = node_to_idx[u]
+            neighbors = self.adj[u]
+            if neighbors:
+                total_weight = sum(w for _, _, w in neighbors)
+                for _, v, w in neighbors:
+                    v_idx = node_to_idx[v]
+                    P[v_idx, u_idx] += w / total_weight
+            else:
+                # Dangling node teleports uniformly
+                P[:, u_idx] = 1.0 / n
+
+        # Personalization restart vector
+        s = np.zeros(n, dtype=np.float64)
+        s[node_to_idx[seed]] = 1.0
+
+        p = s.copy()
+        for _ in range(max_iter):
+            p_next = alpha * (P @ p) + (1.0 - alpha) * s
+            if np.linalg.norm(p_next - p, ord=1) < tol:
+                break
+            p = p_next
+
+        # Return dict sorted by descending relevance
+        ranked = {node_list[i]: float(p[i]) for i in np.argsort(-p)}
+        return ranked
+
 if __name__ == "__main__":
     kg = KnowledgeGraphStore()
     kg.add_triple("Satya Nadella", "CEO_OF", "Microsoft")
     kg.add_triple("Microsoft", "INVESTED_IN", "OpenAI")
     kg.add_triple("OpenAI", "DEVELOPED", "GPT-4")
     kg.add_triple("Microsoft", "DEVELOPS", "Azure AI")
+    kg.add_triple("Azure AI", "HOSTS", "GPT-4")
 
-    paths = kg.traverse_multihop("Satya Nadella", max_hops=2)
-    print("Discovered 2-Hop Knowledge Graph Paths:")
+    print("--- 2-Hop Multi-Hop BFS Traversal ---")
+    paths = kg.traverse_bfs("Satya Nadella", max_hops=2)
     for p in paths:
         path_str = " -> ".join([f"({h})-[{r}]->({t})" for h, r, t in p])
-        print(" ", path_str)</code></pre>
+        print(" ", path_str)
+
+    print("\n--- Personalized PageRank Scores (Seed: 'Satya Nadella') ---")
+    ppr_scores = kg.personalized_pagerank("Satya Nadella", alpha=0.85)
+    for entity, score in ppr_scores.items():
+        print(f"  Entity: {entity:<18} PPR Score: {score:.5f}")</code></pre>
     </div>
 
-    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 5.4 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 5.4: Enterprise Multi-Document Financial GraphRAG Engine</h3>
-        <p class="project-desc">Build an enterprise corporate due-diligence platform using LlamaIndex and NetworkX that parses SEC 10-K filings, automatically extracts corporate relationship triples, constructs an in-memory knowledge graph, and answers complex cross-filing investment risk questions.</p>
+        <h3 class="project-title">Project 5.4: Enterprise Corporate Due-Diligence GraphRAG Engine</h3>
+        <p class="project-desc">Build an enterprise corporate due-diligence platform using LlamaIndex, NetworkX, and Neo4j that parses SEC 10-K filings, automatically extracts corporate relationship triples, detects multi-subsidiary debt liabilities via community detection, and answers complex cross-filing investment risk queries.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_transformers_llms/ch54_llamaindex_graphrag/graph_rag_scratch.py" target="_blank">🔗 Full Project Code: part5_transformers_llms/ch54_llamaindex_graphrag/graph_rag_scratch.py</a></p>
       </div>
       <div class="project-body">

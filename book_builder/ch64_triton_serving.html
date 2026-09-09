@@ -5,12 +5,21 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 6.4</span>
     <h2 class="chapter-title">High-Throughput Serving: Triton &amp; TensorRT</h2>
-    <span class="chapter-subtitle">Operator Fusion, INT8 Calibration, Dynamic Batching &amp; Microsecond gRPC Gateways</span>
+    <span class="chapter-subtitle">Operator Fusion, INT8 Calibration, Dynamic Batching, Roofline Models &amp; Microsecond gRPC Gateways</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
     <p>"Training happens once a month. Inference happens fifty thousand times every second. If your inference engine wastes 5 milliseconds per request, you are burning millions of dollars in idle cloud compute."</p>
+
+    <!-- FIGURE 6.4.1: triton_architecture_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="triton_architecture_diagram.png" alt="Figure 6.4.1: triton_architecture_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 6.4.1:</em> High-throughput inference server topology in NVIDIA Triton. A dynamic batching scheduler combines asynchronous single-client HTTP/gRPC requests within a microsecond latency window into dense GPU GEMM batches, executing across multi-instance TensorRT engines with zero-copy shared memory.
+      </p>
+    </div>
+
     <p class="attribution">— Production Infrastructure Maxim</p>
   </div>
 
@@ -19,171 +28,721 @@
 
     <!-- SECTION 1: THE SERVING LATENCY WALL -->
     <h3>1. The Serving Latency Wall: Why Flask &amp; FastAPI Fail</h3>
-    <p>In research, deploying a model often means wrapping a PyTorch checkpoint in a Python Flask or FastAPI endpoint. In enterprise production, this architecture collapses under real-world load:</p>
+    <p>In research environments, deploying a model typically involves wrapping a PyTorch checkpoint in a Python Flask or FastAPI endpoint. In enterprise production, this architecture collapses under real-world load:</p>
     <ul>
-      <li><strong>The Python GIL Bottleneck:</strong> Python's Global Interpreter Lock prevents true multi-core concurrency, forcing requests to serialize through a single thread.</li>
-      <li><strong>Sequential Micro-Batches ($B=1$):</strong> When HTTP requests arrive individually, naive Python servers pass them to the GPU one by one. Processing batch size 1 leaves <strong>95% of GPU Tensor Cores completely unutilized</strong>! The GPU is memory-bandwidth starved.</li>
-      <li><strong>JSON Serialization Overhead:</strong> Serializing multidimensional float arrays to and from JSON strings consumes $15\text{ ms}$ of CPU time—often taking <em>longer than the neural forward pass itself</em>!</li>
+      <li><strong>The Python GIL Bottleneck:</strong> Python's Global Interpreter Lock prevents true multi-core concurrency, forcing incoming HTTP requests to serialize through a single OS thread.</li>
+      <li><strong>Sequential Micro-Batches ($B=1$):</strong> When client requests arrive individually, naive Python servers pass them to the GPU one by one. Processing batch size 1 leaves <strong>95% of GPU Tensor Cores completely idle</strong> due to memory-bandwidth starvation.</li>
+      <li><strong>JSON Serialization Overhead:</strong> Serializing high-dimensional float tensors to and from JSON strings consumes $10$ to $25\text{ ms}$ of CPU time—often taking <em>longer than the neural forward pass itself</em>!</li>
+      <li><strong>No Model Concurrency:</strong> Standard Python processes lack native CUDA stream management, preventing multiple model replicas from executing concurrently on a single physical GPU.</li>
     </ul>
 
     <!-- SECTION 2: TENSORRT ENGINE OPTIMIZATION -->
     <h3>2. NVIDIA TensorRT: Silicon-Level Kernel Optimization</h3>
-    <p>Before deploying to production, trained neural networks are compiled through <strong>NVIDIA TensorRT</strong>, which optimizes the computational graph for a specific GPU microarchitecture (e.g. Hopper H100, Ada Lovelace L4):</p>
+    <p>Before deploying to production, trained neural computational graphs (exported via ONNX) are compiled through <strong>NVIDIA TensorRT</strong>, which optimizes the computational graph for a target GPU microarchitecture (e.g. Hopper H100, Ada Lovelace L4, Blackwell B200):</p>
 
     <div class="real-world-box">
-      <h4>⚙️ The 3 Core TensorRT Compiler Optimizations</h4>
+      <h4>⚙️ The 4 Core TensorRT Compiler Transformations</h4>
       <ol>
-        <li><strong>Layer &amp; Tensor Fusion:</strong> In standard PyTorch, a Convolution followed by a Bias Addition, Batch Normalization, and ReLU requires three separate CUDA kernel launches and multiple round-trips to GPU VRAM. <strong>TensorRT fuses all four operations into a single static CUDA kernel</strong>, executing entirely within high-speed GPU registers!</li>
-        <li><strong>INT8 Post-Training Quantization (PTQ):</strong> Compresses 32-bit floating point weights into 8-bit signed integers. TensorRT performs <strong>KL-Divergence Calibration</strong>, analyzing activation histograms across a representative dataset to choose optimal scaling thresholds that minimize information loss. Reduces memory footprint by <strong>$4\times$</strong> and triples Tensor Core throughput!</li>
-        <li><strong>Kernel Auto-Tuning:</strong> Benchmarks hundreds of specialized matrix multiplication algorithms (cuBLAS, CUTLASS) directly on the target physical silicon to select the fastest possible kernel for each layer.</li>
+        <li><strong>Vertical &amp; Horizontal Layer Fusion:</strong> In standard PyTorch, a Convolution followed by a Bias Addition, Batch Normalization, and ReLU requires three separate CUDA kernel launches and multiple round-trips to GPU High Bandwidth Memory (HBM). <strong>TensorRT fuses all operations into a single static CBR (Conv-Bias-ReLU) kernel</strong>, keeping intermediate activations entirely within on-chip registers and SRAM!</li>
+        <li><strong>INT8 Post-Training Quantization (PTQ) &amp; Calibration:</strong> Compresses 32-bit floating point weights and activations into 8-bit signed integers. TensorRT performs <strong>Kullback-Leibler (KL) Divergence Calibration</strong>, analyzing activation histograms across a representative dataset to choose optimal saturation thresholds that minimize information loss:
+          $$D_{\text{KL}}(P \parallel Q) = \sum_{i=1}^N P(i) \log \left( \frac{P(i)}{Q(i)} \right)$$
+        </li>
+        <li><strong>Kernel Auto-Tuning (Tactic Selection):</strong> Benchmarks hundreds of candidate matrix multiplication algorithms (cuBLAS, CUTLASS, cuDNN) directly on the target physical silicon to select the fastest implementation for each specific tensor shape.</li>
+        <li><strong>Dynamic Shape Profiles:</strong> Pre-allocates execution memory buffers for variable input dimensions, defining minimum, optimal, and maximum shape bounds:
+          $$\{\text{min: } [1, 128], \quad \text{opt: } [32, 512], \quad \text{max: } [64, 1024]\}$$
+        </li>
       </ol>
     </div>
 
     <!-- SECTION 3: TRITON ARCHITECTURE & DYNAMIC BATCHING -->
-    <h3>3. NVIDIA Triton Inference Server &amp; Dynamic Batching</h3>
-    <p><strong>NVIDIA Triton</strong> is an industrial C++ inference server designed to maximize hardware saturation across multiple GPUs and concurrent models.</p>
+    <h3>3. NVIDIA Triton Inference Server Architecture</h3>
+    <p><strong>NVIDIA Triton</strong> is an industrial C++ inference server designed to maximize hardware saturation across multiple GPUs, concurrent models, and heterogeneous frameworks (TensorRT, ONNX Runtime, OpenVINO, PyTorch LibTorch, vLLM):</p>
 
-    <div class="key-insight">
-      <p><strong>The Magic of Dynamic Batching:</strong><br>
-      In production, client requests arrive asynchronously at random milliseconds. Triton features an integrated <strong>Dynamic Batcher</strong>:</p>
-      <ul>
-        <li>When a request arrives, Triton places it in an in-memory priority queue.</li>
-        <li>Triton waits up to a user-configured maximum delay (e.g. <code>max_queue_delay_microseconds: 5000</code> = $5\text{ ms}$).</li>
-        <li>As additional client requests arrive during that 5ms window, Triton automatically bundles them together into an optimal batch (e.g. $B = 32$ or $64$).</li>
-        <li>The batched tensor executes across GPU Tensor Cores in a single high-efficiency pass!</li>
-      </ul>
-      <p><em>Result: Instead of processing 32 requests sequentially ($32 \times 3\text{ms} = 96\text{ms}$ total compute), Triton executes the batch in $8\text{ms}$, <strong>multiplying serving throughput by $10\times$</strong> while comfortably beating client latency SLAs!</em></p>
+    <div class="table-container" style="overflow-x: auto; margin: 1.5em 0;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em;">
+        <thead>
+          <tr style="background-color: #1b4965; color: #ffffff;">
+            <th style="padding: 10px; border: 1px solid #ccc;">Subsystem</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Configuration Parameter</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Mechanism &amp; Performance Impact</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Dynamic Batcher</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;"><code>dynamic_batching { max_queue_delay_microseconds: 5000 preferred_batch_size: [16, 32] }</code></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Aggregates asynchronous client requests into optimal GPU execution batches. Multiplies throughput by $5\times$ to $10\times$.</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Model Concurrency</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;"><code>instance_group [ { count: 4 kind: KIND_GPU } ]</code></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Instantiates 4 independent execution contexts on separate CUDA streams, allowing concurrent kernel execution on a single GPU.</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Ensemble Pipelines</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;"><code>platform: "ensemble"</code></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Chains Tokenizer (Python backend) $\to$ Model (TensorRT) $\to$ Postprocessor within Triton's C++ memory space with zero client roundtrips.</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>CUDA IPC Shared Memory</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;"><code>cuda_shared_memory</code></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Client and server pass GPU memory pointers via <code>cudaIpcMemHandle_t</code>, achieving true zero-copy transfer for multi-megabyte tensors.</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — High-Throughput Serving</h3>
+    <!-- ======================================================================
+         SECTION 4: 4-TIER GRADED PRACTICE SUITE
+         ====================================================================== -->
+    <h3>4-Tier Graded Practice Suite — High-Throughput Serving</h3>
+    <p>Eight rigorous problems covering the Roofline model of LLM inference, dynamic batching queue stability bounds, priority queue traces, layer fusion proofs, INT8 calibration derivations, and shared memory traps.</p>
 
+    <!-- TIER 1: NUMERICAL DRILLS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+    <!-- Problem 6.4.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 6.4.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
-        <span class="company-tag company-amazon">Amazon</span>
-        <span class="company-tag company-netflix">Netflix</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-nvidia">NVIDIA</span>
+        <span class="company-tag company-openai">OpenAI</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> You are architecting an inference cluster for an e-commerce recommendation model handling a peak load of <strong>$50,000 \text{ Queries Per Second (QPS)}$</strong> with a strict p99 latency SLA of <strong>$<20\text{ ms}$</strong>. Your TensorRT model has the following execution characteristics on an NVIDIA L4 GPU:</p>
+        <p><strong>QUESTION:</strong> You are profiling a 7-Billion parameter LLM ($P = 7 \times 10^9$ weights in FP16 precision, $2\text{ bytes/param} = 14\text{ GB}$) deployed on a single NVIDIA H100 SXM5 GPU.</p>
+        <p><strong>Hardware Specifications (NVIDIA H100 SXM5):</strong></p>
         <ul>
-          <li>Batch size $B = 1$: Execution time $T_1 = 3.0 \text{ ms}$</li>
-          <li>Batch size $B = 32$: Execution time $T_{32} = 8.0 \text{ ms}$</li>
+          <li>Peak FP16 Tensor Core Compute: $R_{\text{peak}} = 989\text{ TFLOPS} = 9.89 \times 10^{14}\text{ FLOPs/sec}$.</li>
+          <li>High Bandwidth Memory (HBM3) Bandwidth: $\beta = 3.35\text{ TB/s} = 3.35 \times 10^{12}\text{ Bytes/sec}$.</li>
         </ul>
-        <p>Calculate the minimum number of NVIDIA L4 GPUs required under <strong>(a) Sequential Serving ($B=1$)</strong> vs. <strong>(b) Triton Dynamic Batching ($B=32$)</strong> with a 5ms max queue delay. Compute the annual cloud infrastructure cost savings assuming each L4 GPU costs &dollar;0.70 per hour.</p>
+        <p><strong>Workload Phases:</strong></p>
+        <ul>
+          <li><strong>Phase A (Prompt / Prefill Phase):</strong> Prompt length $T_{\text{prompt}} = 1024$ tokens, batch size $B = 1$. The computational requirement is $F_{\text{prefill}} \approx 2 P \times T_{\text{prompt}}$ FLOPs. Memory access is dominated by loading the model weights ($14\text{ GB}$).</li>
+          <li><strong>Phase B1 (Generation / Decode Phase at Batch Size 1):</strong> Generates 1 token ($B = 1$). Compute: $F_{\text{decode}} \approx 2 P \times 1$ FLOPs. Requires fetching the entire $14\text{ GB}$ of weights from HBM to register files.</li>
+          <li><strong>Phase B2 (Generation / Decode Phase at Batch Size 32):</strong> Generates 1 token for each of $B = 32$ concurrent requests. Compute: $F_{\text{decode, 32}} \approx 2 P \times 32$ FLOPs. Weight fetch is $14\text{ GB}$, plus KV cache fetch of $0.67\text{ GB}$ (total $14.67\text{ GB}$).</li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the machine balance (ridge point) $\mathcal{I}_{\text{ridge}}$ in FLOPs/Byte for the NVIDIA H100.</li>
+          <li>Calculate the Arithmetic Intensity $\mathcal{I}$ for Phase A, Phase B1, and Phase B2. Classify each as <em>Memory-Bandwidth Bound</em> or <em>Compute-Bound</em>.</li>
+          <li>Calculate the execution time, token throughput (tokens/sec), and hardware compute utilization percentage for Phase B1 ($B = 1$) versus Phase B2 ($B = 32$).</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Hardware Sizing Audit</div>
+        <div class="solution-label">✓ Step-by-Step Roofline Model Solution</div>
 
-        <p class="step"><strong>Step 1: Scenario A — Sequential Serving ($B=1$):</strong><br>
-        Throughput per GPU at $B = 1$:
-        $$\text{Throughput}_{\text{GPU}} = \frac{1 \text{ query}}{0.003 \text{ seconds}} \approx 333.3 \text{ QPS per GPU}$$
-        Total GPUs required to serve $50,000$ QPS:
-        $$\text{GPUs Required} = \frac{50,000}{333.33} = \mathbf{150 \text{ NVIDIA L4 GPUs}}!$$</p>
+        <p class="step"><strong>Step 1: Machine Balance (Roofline Ridge Point):</strong><br>
+        The ridge point marks the threshold where a workload transitions from memory-bound to compute-bound:
+        $$\mathcal{I}_{\text{ridge}} = \frac{R_{\text{peak}}}{\beta} = \frac{9.89 \times 10^{14}\text{ FLOPs/s}}{3.35 \times 10^{12}\text{ Bytes/s}} \approx 295.22\text{ FLOPs/Byte}$$</p>
 
-        <p class="step"><strong>Step 2: Scenario B — Triton Dynamic Batching ($B=32$):</strong><br>
-        With a $5.0 \text{ ms}$ max queue delay, total latency is $5.0 \text{ ms (queue)} + 8.0 \text{ ms (compute)} = \mathbf{13.0 \text{ ms}}$, well within the $20\text{ ms}$ SLA!<br>
-        Throughput per GPU at $B = 32$:
-        $$\text{Throughput}_{\text{GPU}} = \frac{32 \text{ queries}}{0.008 \text{ seconds}} = 4,000 \text{ QPS per GPU}$$
-        Total GPUs required to serve $50,000$ QPS:
-        $$\text{GPUs Required} = \left\lceil \frac{50,000}{4,000} \right\rceil = \mathbf{13 \text{ NVIDIA L4 GPUs}}!$$</p>
+        <p class="step"><strong>Step 2: Arithmetic Intensity &amp; Regime Classification:</strong><br>
+        <strong>Phase A (Prefill Phase, $T = 1024, B = 1$):</strong>
+        $$F_{\text{prefill}} = 2 \times (7 \times 10^9) \times 1024 = 14.336 \times 10^{12}\text{ FLOPs} = 14.336\text{ TFLOPs}$$
+        Memory transferred: $M_{\text{prefill}} \approx 14\text{ GB} = 1.4 \times 10^{10}\text{ Bytes}$.
+        $$\mathcal{I}_{\text{prefill}} = \frac{14.336 \times 10^{12}\text{ FLOPs}}{1.4 \times 10^{10}\text{ Bytes}} \approx 1024\text{ FLOPs/Byte}$$
+        Since $\mathcal{I}_{\text{prefill}} = 1024 > 295.22$, Phase A is firmly <strong>Compute-Bound</strong>.<br><br>
 
-        <p class="step"><strong>Step 3: Financial ROI Analysis:</strong>
-        <ul>
-          <li>Sequential Serving (150 GPUs): $150 \times \text{USD } 0.70/\text{hr} \times 8,760 \text{ hrs/yr} = \mathbf{\text{USD } 919,800 / \text{year}}$</li>
-          <li>Triton Dynamic Batching (13 GPUs): $13 \times \text{USD } 0.70/\text{hr} \times 8,760 \text{ hrs/yr} = \mathbf{\text{USD } 79,716 / \text{year}}$</li>
-        </ul>
-        $$\mathbf{\text{Annual Cloud Cost Savings: USD } 919,800 - \text{USD } 79,716 = \text{USD } 840,084 / \text{year (91.3\% Savings!)!}}$$
-        <em>This physical calculation demonstrates why high-throughput inference engineering is one of the highest-leverage skills in modern AI engineering.</em></p>
+        <strong>Phase B1 (Decode Phase, $B = 1$):</strong>
+        $$F_{\text{decode, 1}} = 2 \times (7 \times 10^9) \times 1 = 14 \times 10^9\text{ FLOPs} = 0.014\text{ TFLOPs}$$
+        Memory transferred: $M_{\text{decode, 1}} = 14\text{ GB} = 1.4 \times 10^{10}\text{ Bytes}$.
+        $$\mathcal{I}_{\text{decode, 1}} = \frac{14 \times 10^9\text{ FLOPs}}{1.4 \times 10^{10}\text{ Bytes}} = 1.0\text{ FLOP/Byte}$$
+        Since $\mathcal{I}_{\text{decode, 1}} = 1.0 \ll 295.22$, Phase B1 is deeply <strong>Memory-Bandwidth Bound</strong>.<br><br>
+
+        <strong>Phase B2 (Decode Phase, $B = 32$):</strong>
+        $$F_{\text{decode, 32}} = 2 \times (7 \times 10^9) \times 32 = 4.48 \times 10^{11}\text{ FLOPs} = 0.448\text{ TFLOPs}$$
+        Memory transferred: $M_{\text{decode, 32}} = 14\text{ GB} + 0.67\text{ GB} = 14.67\text{ GB} = 1.467 \times 10^{10}\text{ Bytes}$.
+        $$\mathcal{I}_{\text{decode, 32}} = \frac{4.48 \times 10^{11}\text{ FLOPs}}{1.467 \times 10^{10}\text{ Bytes}} \approx 30.54\text{ FLOPs/Byte}$$
+        Since $30.54 < 295.22$, Phase B2 is still <strong>Memory-Bandwidth Bound</strong>, but has $30.5\times$ higher arithmetic efficiency!</p>
+
+        <p class="step"><strong>Step 3: Execution Time, Throughput, and Compute Utilization:</strong><br>
+        <strong>For Phase B1 ($B = 1$):</strong><br>
+        Execution time is governed by HBM3 bandwidth:
+        $$T_{\text{B1}} = \frac{14\text{ GB}}{3,350\text{ GB/s}} \approx 0.004179\text{ seconds} \approx 4.18\text{ ms}$$
+        Token throughput:
+        $$\Theta_{\text{B1}} = \frac{1\text{ token}}{0.004179\text{ s}} \approx 239.3\text{ tokens/sec}$$
+        Attained compute rate:
+        $$R_{\text{attained, B1}} = \frac{0.014\text{ TFLOPs}}{0.004179\text{ s}} \approx 3.35\text{ TFLOPS}$$
+        Compute Core Utilization:
+        $$\eta_{\text{compute, B1}} = \frac{3.35\text{ TFLOPS}}{989\text{ TFLOPS}} \times 100\% \approx \mathbf{0.339\%}$$
+        <em>Over 99.6% of H100 Tensor Core capacity is completely wasted during batch size 1 generation!</em><br><br>
+
+        <strong>For Phase B2 ($B = 32$):</strong><br>
+        Execution time:
+        $$T_{\text{B2}} = \frac{14.67\text{ GB}}{3,350\text{ GB/s}} \approx 0.004379\text{ seconds} \approx 4.38\text{ ms}$$
+        Token throughput across all 32 streams:
+        $$\Theta_{\text{B2}} = \frac{32\text{ tokens}}{0.004379\text{ s}} \approx \mathbf{7,307.6\text{ tokens/sec}}$$
+        Compute Core Utilization:
+        $$R_{\text{attained, B2}} = \frac{0.448\text{ TFLOPs}}{0.004379\text{ s}} \approx 102.3\text{ TFLOPS} \implies \eta_{\text{compute, B2}} = \frac{102.3}{989} \times 100\% \approx \mathbf{10.34\%}$$
+        <em>Conclusion: Batching 32 requests increases latency by only $0.20\text{ ms}$ ($4.38\text{ ms}$ vs $4.18\text{ ms}$), while multiplying overall generation throughput by $30.5\times$ ($7,308$ vs $239$ tokens/sec)!</em></p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 6.4: Dynamic Batching Engine Simulation in Python</h3>
-    <p>Below is a clean, production-grade implementation of a multi-threaded Dynamic Batching engine simulating Triton's internal priority queues and queue delay timers.</p>
+    <!-- Problem 6.4.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.4.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-amazon">Amazon</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An enterprise fraud detection microservice deployed on NVIDIA Triton Inference Server receives client traffic at an aggregate rate of $\Lambda = 12,000\text{ QPS}$, distributed uniformly across an autoscaling pool of $G = 4$ identical NVIDIA L4 GPUs ($\lambda = 3,000\text{ QPS} = 3.0\text{ queries/ms}$ per GPU). Client requests follow a Poisson arrival process.</p>
+        <p><strong>GPU Model Execution Profile:</strong></p>
+        <p>On an NVIDIA L4 GPU, forward pass execution time for batch size $B$ is given by the affine model:
+        $$T_{\text{comp}}(B) = 2.0\text{ ms} + 0.15\text{ ms} \times B$$
+        The client SLA requires p99 end-to-end inference latency $T_{\text{e2e}} \le 12.0\text{ ms}$.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Derive the minimum batch size $B_{\min}$ required to ensure queue stability ($\rho = \lambda / \mu < 1$) so that the GPU's processing capacity meets or exceeds the arrival rate $\lambda = 3.0\text{ queries/ms}$.</li>
+          <li>If Triton is configured with a preferred batch size $B^* = 16$, calculate the GPU service rate $\mu(16)$, server utilization $\rho$, and GPU execution time $T_{\text{comp}}(16)$.</li>
+          <li>Calculate the maximum allowable dynamic batcher queue delay $\tau_{\max}$ such that the worst-case queuing plus execution latency strictly satisfies the $12.0\text{ ms}$ SLA.</li>
+          <li>Compute the expected batch size $\mathbb{E}[B]$ formed by the dynamic batcher when operating with this maximum delay under arrival rate $\lambda = 3.0\text{ queries/ms}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Queue Stability &amp; Sizing Solution</div>
+
+        <p class="step"><strong>Step 1: Minimum Batch Size for Queue Stability:</strong><br>
+        The GPU's service rate in queries per millisecond is the batch size divided by the batch execution duration:
+        $$\mu(B) = \frac{B}{T_{\text{comp}}(B)} = \frac{B}{2.0 + 0.15 B}$$
+        For queue stability in queuing theory ($M/G/1$), the service capacity must strictly exceed the mean arrival rate $\lambda = 3.0\text{ queries/ms}$:
+        $$\mu(B) \ge \lambda \iff \frac{B}{2.0 + 0.15 B} \ge 3.0$$
+        Multiplying both sides by the denominator:
+        $$B \ge 3.0 \times (2.0 + 0.15 B)$$
+        $$B \ge 6.0 + 0.45 B$$
+        $$0.55 B \ge 6.0 \implies B \ge \frac{6.0}{0.55} = 10.909$$
+        Since batch size must be an integer:
+        $$B_{\min} = 11\text{ queries per batch}$$
+        <em>Crucial Engineering Insight: If Triton dynamic batching is disabled or if batch sizes drop below 11, the GPU service rate $\mu < \lambda$, causing the queue length to grow toward infinity and crashing the server!</em></p>
+
+        <p class="step"><strong>Step 2: Performance at Preferred Batch Size $B^* = 16$:</strong><br>
+        Execution time:
+        $$T_{\text{comp}}(16) = 2.0\text{ ms} + (0.15\text{ ms} \times 16) = 2.0 + 2.4 = 4.4\text{ ms}$$
+        Service rate:
+        $$\mu(16) = \frac{16\text{ queries}}{4.4\text{ ms}} \approx 3.636\text{ queries/ms} = 3,636.4\text{ QPS}$$
+        Server utilization:
+        $$\rho = \frac{\lambda}{\mu(16)} = \frac{3,000}{3,636.4} \approx 0.825 \quad (82.5\%)$$
+        Since $\rho < 1$, the queue is stable with healthy headroom.</p>
+
+        <p class="step"><strong>Step 3: Maximum Allowable Queue Delay $\tau_{\max}$:</strong><br>
+        End-to-end latency for a request that experiences the full dynamic batching timeout is:
+        $$T_{\text{e2e}} = \tau_{\max} + T_{\text{comp}}(B)$$
+        To guarantee $T_{\text{e2e}} \le T_{\text{SLA}} = 12.0\text{ ms}$ for $B = 16$:
+        $$\tau_{\max} + 4.4\text{ ms} \le 12.0\text{ ms} \implies \tau_{\max} \le 12.0 - 4.4 = 7.6\text{ ms}$$
+        In Triton configuration syntax:
+        $$\texttt{max\_queue\_delay\_microseconds: 7600}$$</p>
+
+        <p class="step"><strong>Step 4: Expected Batch Size Formed:</strong><br>
+        Under Poisson arrival rate $\lambda = 3.0\text{ queries/ms}$, the time required to accumulate $B = 16$ requests is:
+        $$t_{\text{accumulate}} = \frac{B}{\lambda} = \frac{16}{3.0\text{ queries/ms}} \approx 5.33\text{ ms}$$
+        Since $5.33\text{ ms} < \tau_{\max} = 7.6\text{ ms}$, the batcher naturally hits the batch size threshold of $B = 16$ before the timeout expires! The average queuing delay is only $5.33\text{ ms}$, yielding average latency $5.33 + 4.4 = 9.73\text{ ms}$, comfortably meeting the $12\text{ ms}$ SLA.</p>
+      </div>
+    </div>
+
+    <!-- TIER 2: APPLIED ENGINEERING TRACES -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+    <!-- Problem 6.4.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.4.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+        <span class="company-tag company-uber">Uber</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are configuring Triton's Dynamic Batcher with priority queues for an e-commerce platform. The configuration is:</p>
+        <pre><code>dynamic_batching {
+  max_queue_delay_microseconds: 4000  # 4.0 ms timeout
+  preferred_batch_size: [ 4, 8 ]
+  priority_levels: 2
+  default_priority_level: 2           # Priority 1 is highest, 2 is standard
+}</code></pre>
+        <p>Assume GPU execution time is $T_{\text{gpu}}(B) = 3.0\text{ ms}$ for any batch size $B \le 8$. The GPU is idle at $t = 0.0\text{ ms}$.</p>
+        <p>Eight client requests arrive according to the following schedule:</p>
+        <ul>
+          <li>$t = 0.5\text{ ms}$: $R_1$ (Priority 2), $R_2$ (Priority 2)</li>
+          <li>$t = 1.5\text{ ms}$: $R_3$ (Priority 1 — VIP Checkout)</li>
+          <li>$t = 2.0\text{ ms}$: $R_4$ (Priority 2)</li>
+          <li>$t = 4.2\text{ ms}$: $R_5$ (Priority 1 — VIP Checkout)</li>
+          <li>$t = 4.8\text{ ms}$: $R_6$ (Priority 2)</li>
+          <li>$t = 6.0\text{ ms}$: $R_7$ (Priority 1 — VIP Checkout), $R_8$ (Priority 2)</li>
+        </ul>
+        <p>Construct an algorithmic trace table documenting the exact queue state transitions, timeout triggers, batch dispatches to the CUDA stream, GPU execution intervals, and client response delivery times.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Algorithmic Execution &amp; Priority Queue Trace</div>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Timestamp ($t$)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Event Description</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Priority 1 Queue</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Priority 2 Queue</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">GPU Engine Status</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Batch Dispatched / Completed</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$t = 0.5\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$R_1, R_2$ arrive (P2). Batch timer for Batch 1 begins: deadline $t = 0.5 + 4.0 = 4.5\text{ ms}$.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\emptyset$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[R_1, R_2]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">IDLE</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Waiting for preferred size 4 or timeout.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$t = 1.5\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$R_3$ arrives (P1). Preempts P2 head of queue.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[R_3]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[R_1, R_2]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">IDLE</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Queue count = 3 (needs 4 for preferred).</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$t = 2.0\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$R_4$ arrives (P2). Total pending requests = 4 (matches preferred batch size 4!).</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[R_3]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[R_1, R_2, R_4]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>DISPATCHES BATCH 1</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>Batch 1 formed: $[R_3, R_1, R_2, R_4]$</strong>. GPU busy until $t = 2.0 + 3.0 = 5.0\text{ ms}$.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$t = 4.2\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$R_5$ arrives (P1). Batch 2 timer begins: deadline $t = 4.2 + 4.0 = 8.2\text{ ms}$.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[R_5]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\emptyset$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">BUSY (executing Batch 1)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Queued for next execution window.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$t = 4.8\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$R_6$ arrives (P2).</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[R_5]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[R_6]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">BUSY (executing Batch 1)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Queued.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$t = 5.0\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>Batch 1 completes!</strong> Responses sent to $R_3, R_1, R_2, R_4$. GPU becomes IDLE.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[R_5]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[R_6]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">IDLE</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Pending count = 2 (less than preferred 4). Timer active until $t = 8.2\text{ ms}$.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$t = 6.0\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$R_7$ (P1) and $R_8$ (P2) arrive. Total pending = 4 (matches preferred size 4!).</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[R_5, R_7]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[R_6, R_8]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>DISPATCHES BATCH 2</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>Batch 2 formed: $[R_5, R_7, R_6, R_8]$</strong>. GPU busy until $t = 6.0 + 3.0 = 9.0\text{ ms}$.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$t = 9.0\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>Batch 2 completes!</strong> Responses sent to $R_5, R_7, R_6, R_8$.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\emptyset$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\emptyset$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">IDLE</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">All 8 requests resolved.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="step"><strong>End-to-End Latency Audit per Request:</strong></p>
+        <ul>
+          <li>$R_3$ (VIP P1): Arrived $t = 1.5\text{ ms}$, resolved $t = 5.0\text{ ms} \implies \text{Latency } = 3.5\text{ ms}$.</li>
+          <li>$R_1, R_2$ (P2): Arrived $t = 0.5\text{ ms}$, resolved $t = 5.0\text{ ms} \implies \text{Latency } = 4.5\text{ ms}$.</li>
+          <li>$R_4$ (P2): Arrived $t = 2.0\text{ ms}$, resolved $t = 5.0\text{ ms} \implies \text{Latency } = 3.0\text{ ms}$.</li>
+          <li>$R_5$ (VIP P1): Arrived $t = 4.2\text{ ms}$, resolved $t = 9.0\text{ ms} \implies \text{Latency } = 4.8\text{ ms}$.</li>
+          <li>$R_7$ (VIP P1): Arrived $t = 6.0\text{ ms}$, resolved $t = 9.0\text{ ms} \implies \text{Latency } = 3.0\text{ ms}$.</li>
+        </ul>
+        <p><em>Observation: Notice how higher-priority requests ($R_3, R_5, R_7$) are ordered at the front of each tensor batch, ensuring optimal cache residency and priority delivery without starving standard traffic.</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 6.4.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.4.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-apple">Apple</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In standard PyTorch, a Vision Transformer MLP block consists of the following consecutive operations:</p>
+        <pre><code># PyTorch Unfused Layer:
+x_norm = layer_norm(x)                  # (1) LayerNorm
+x_proj = linear1(x_norm)                # (2) GEMM (Linear Projection)
+x_bias = x_proj + bias1                 # (3) Elementwise Bias Add
+x_gelu = gelu(x_bias)                   # (4) Elementwise GELU Activation
+x_out  = linear2(x_gelu) + bias2        # (5) GEMM + Bias Add
+x_res  = x + x_out                      # (6) Residual Addition</code></pre>
+        <p>Let batch size $B = 64$, sequence length $L = 196$, and embedding dimension $D = 768$ (intermediate MLP dimension $4D = 3072$). Data type is FP16 (2 bytes per element).</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>In the unfused PyTorch implementation, calculate the total data read and written to GPU High Bandwidth Memory (HBM) across operations (1) through (6) (excluding model weight loads).</li>
+          <li>In the TensorRT optimized engine, the compiler performs <strong>Operator Fusion</strong>:
+            <ul>
+              <li>Kernel 1: Fused LayerNorm $\to$ GEMM 1</li>
+              <li>Kernel 2: Fused Bias + GELU + GEMM 2 $\to$ Fused Bias + Residual Add</li>
+            </ul>
+            Calculate the new total HBM memory traffic under TensorRT fusion.
+          </li>
+          <li>Compute the reduction in HBM memory traffic and the kernel launch latency saved assuming each kernel launch has an overhead of $4.0\ \mu\text{s}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Kernel Fusion &amp; Memory Traffic Trace</div>
+
+        <p class="step"><strong>Step 1: Unfused PyTorch HBM Memory Traffic:</strong><br>
+        Number of tokens: $N_{\text{tokens}} = B \times L = 64 \times 196 = 12,544\text{ tokens}$.<br>
+        Size of tensor shape $[N_{\text{tokens}}, D] = [12544, 768] \times 2\text{ bytes} = 19,267,584\text{ bytes} \approx 19.27\text{ MB}$.<br>
+        Size of expanded MLP tensor $[N_{\text{tokens}}, 4D] = [12544, 3072] \times 2\text{ bytes} = 77,070,336\text{ bytes} \approx 77.07\text{ MB}$.<br><br>
+        Memory traffic per operation (Read + Write):
+        <ul>
+          <li>(1) LayerNorm: Reads $x$ ($19.27\text{ MB}$), Writes $x_{\text{norm}}$ ($19.27\text{ MB}$) $\implies 38.54\text{ MB}$.</li>
+          <li>(2) Linear 1 (GEMM): Reads $x_{\text{norm}}$ ($19.27\text{ MB}$), Writes $x_{\text{proj}}$ ($77.07\text{ MB}$) $\implies 96.34\text{ MB}$.</li>
+          <li>(3) Bias Add: Reads $x_{\text{proj}}$ ($77.07\text{ MB}$), Writes $x_{\text{bias}}$ ($77.07\text{ MB}$) $\implies 154.14\text{ MB}$.</li>
+          <li>(4) GELU: Reads $x_{\text{bias}}$ ($77.07\text{ MB}$), Writes $x_{\text{gelu}}$ ($77.07\text{ MB}$) $\implies 154.14\text{ MB}$.</li>
+          <li>(5) Linear 2: Reads $x_{\text{gelu}}$ ($77.07\text{ MB}$), Writes $x_{\text{out}}$ ($19.27\text{ MB}$) $\implies 96.34\text{ MB}$.</li>
+          <li>(6) Residual Add: Reads $x$ ($19.27\text{ MB}$) and $x_{\text{out}}$ ($19.27\text{ MB}$), Writes $x_{\text{res}}$ ($19.27\text{ MB}$) $\implies 57.81\text{ MB}$.</li>
+        </ul>
+        Total HBM Memory Traffic (Unfused):
+        $$M_{\text{unfused}} = 38.54 + 96.34 + 154.14 + 154.14 + 96.34 + 57.81 = \mathbf{597.31\text{ MB}}$$
+        Total separate kernel launches: $6\text{ kernels} \implies 6 \times 4.0\ \mu\text{s} = 24.0\ \mu\text{s}$.</p>
+
+        <p class="step"><strong>Step 2: TensorRT Fused Engine HBM Traffic:</strong><br>
+        In TensorRT, intermediate tensors reside in GPU on-chip registers and shared memory (L1 cache), completely bypassing off-chip HBM!
+        <ul>
+          <li><strong>Fused Kernel 1 (LayerNorm + GEMM 1):</strong> Reads input $x$ ($19.27\text{ MB}$), computes LayerNorm in registers, feeds directly into Tensor Core GEMM. Writes intermediate output directly to register/L2 cache $\implies$ HBM Write: $77.07\text{ MB}$. Total: $19.27 + 77.07 = 96.34\text{ MB}$.</li>
+          <li><strong>Fused Kernel 2 (Bias + GELU + GEMM 2 + Residual Add):</strong> Reads input $x$ from HBM ($19.27\text{ MB}$) for the residual connection, consumes expanded tensor from L2/HBM ($77.07\text{ MB}$), adds bias, applies GELU activation, performs GEMM 2, adds residual, and writes *only* the final $x_{\text{res}}$ ($19.27\text{ MB}$) to HBM. Total: $19.27 + 77.07 + 19.27 = 115.61\text{ MB}$.</li>
+        </ul>
+        Total HBM Memory Traffic (Fused):
+        $$M_{\text{fused}} = 96.34\text{ MB} + 115.61\text{ MB} = \mathbf{211.95\text{ MB}}$$
+        Total kernel launches: $2\text{ kernels} \implies 2 \times 4.0\ \mu\text{s} = 8.0\ \mu\text{s}$.</p>
+
+        <p class="step"><strong>Step 3: Quantitative Savings:</strong><br>
+        Absolute HBM memory traffic eliminated:
+        $$\Delta M = 597.31\text{ MB} - 211.95\text{ MB} = 385.36\text{ MB}$$
+        Percentage traffic reduction:
+        $$\text{Traffic Reduction} = \frac{385.36}{597.31} \times 100\% = \mathbf{64.51\%}$$
+        Kernel launch overhead reduction:
+        $$\Delta T_{\text{launch}} = 24.0\ \mu\text{s} - 8.0\ \mu\text{s} = 16.0\ \mu\text{s} \quad (66.7\%\text{ reduction})$$
+        <em>Result: By eliminating 64.5% of memory round-trips to HBM, TensorRT transforms a memory-bandwidth-choked network into a peak-throughput inference pipeline.</em></p>
+      </div>
+    </div>
+
+    <!-- TIER 3: MATHEMATICAL PROOFS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 3: FAANG Tier-1 / Research Lab Mathematical Proofs</h4>
+
+    <!-- Problem 6.4.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.4.5</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Formulate the Dynamic Batcher optimization problem as a constrained optimization problem.</p>
+        <p><strong>Mathematical Formulation:</strong></p>
+        <ul>
+          <li>Let client requests arrive according to a Poisson process with rate $\lambda > 0$.</li>
+          <li>The dynamic batcher collects requests over a queue delay window of duration $\tau \ge 0$. The expected batch size formed is $\bar{B}(\tau) = \lambda \tau$.</li>
+          <li>GPU compute time for a batch of size $B$ is modeled by the affine function $T_{\text{comp}}(B) = \alpha + \beta B$, where $\alpha > 0$ represents fixed kernel launch and memory initialization overhead, and $\beta > 0$ represents per-sample Tensor Core compute duration.</li>
+          <li>Expected system throughput (queries processed per unit time) is given by:
+            $$\Theta(\tau) = \frac{\bar{B}(\tau)}{\tau + T_{\text{comp}}(\bar{B}(\tau))} = \frac{\lambda \tau}{\tau + \alpha + \beta \lambda \tau}$$
+          </li>
+          <li>Client SLA imposes an upper bound on the average queuing plus execution latency:
+            $$L(\tau) = \frac{\tau}{2} + T_{\text{comp}}(\bar{B}(\tau)) = \frac{\tau}{2} + \alpha + \beta \lambda \tau \le L_{\max}$$
+          </li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Prove that the throughput function $\Theta(\tau)$ is strictly monotonically increasing with respect to $\tau$ for all $\tau \ge 0$, and find its asymptotic upper bound $\lim_{\tau \to \infty} \Theta(\tau)$.</li>
+          <li>Prove that the latency function $L(\tau)$ is strictly monotonically increasing with respect to $\tau$.</li>
+          <li>Using the Karush-Kuhn-Tucker (KKT) conditions or monotonicity analysis, prove that the optimal queue delay $\tau^*$ that maximizes throughput subject to the SLA constraint $L(\tau) \le L_{\max}$ occurs precisely when the latency constraint is active (binds with equality).</li>
+          <li>Derive the closed-form expression for $\tau^*$, the optimal batch size $B^*$, and the peak attainable throughput $\Theta^*$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Proof of Optimal Dynamic Batching Threshold</div>
+
+        <p class="step"><strong>Step 1: Monotonicity and Asymptote of Throughput $\Theta(\tau)$:</strong><br>
+        Rewrite the throughput function:
+        $$\Theta(\tau) = \frac{\lambda \tau}{(1 + \beta \lambda)\tau + \alpha}$$
+        Compute the first derivative with respect to $\tau$ using the quotient rule:
+        $$\frac{d\Theta}{d\tau} = \frac{\lambda \cdot \big[(1 + \beta \lambda)\tau + \alpha\big] - \lambda \tau \cdot (1 + \beta \lambda)}{\big[(1 + \beta \lambda)\tau + \alpha\big]^2}$$
+        Expanding the numerator:
+        $$\text{Numerator} = \lambda (1 + \beta \lambda)\tau + \alpha \lambda - \lambda (1 + \beta \lambda)\tau = \alpha \lambda$$
+        Therefore:
+        $$\frac{d\Theta}{d\tau} = \frac{\alpha \lambda}{\big[(1 + \beta \lambda)\tau + \alpha\big]^2}$$
+        Since $\alpha > 0$ and $\lambda > 0$, the numerator $\alpha \lambda > 0$ and the denominator is strictly positive for all $\tau \ge 0$.<br>
+        Hence, $\frac{d\Theta}{d\tau} > 0 \quad \forall \tau \ge 0$.<br>
+        <strong>Conclusion:</strong> $\Theta(\tau)$ is <strong>strictly monotonically increasing</strong> with respect to $\tau$.<br>
+        Asymptotic limit:
+        $$\lim_{\tau \to \infty} \Theta(\tau) = \lim_{\tau \to \infty} \frac{\lambda \tau}{(1 + \beta \lambda)\tau + \alpha} = \frac{\lambda}{1 + \beta \lambda} = \frac{1}{\frac{1}{\lambda} + \beta} \le \frac{1}{\beta}$$
+        <em>Physical Interpretation: The maximum theoretical throughput is bounded by the reciprocal of per-sample compute time $1/\beta$.</em></p>
+
+        <p class="step"><strong>Step 2: Monotonicity of Latency Function $L(\tau)$:</strong><br>
+        The average latency experienced by an arriving request consists of average queuing delay ($\tau / 2$ for uniform arrival over window $\tau$) plus compute time:
+        $$L(\tau) = \alpha + \left( \frac{1}{2} + \beta \lambda \right)\tau$$
+        Differentiating with respect to $\tau$:
+        $$\frac{dL}{d\tau} = \frac{1}{2} + \beta \lambda$$
+        Since $\beta > 0$ and $\lambda > 0$, $\frac{dL}{d\tau} > 0$ everywhere. Thus, $L(\tau)$ is <strong>strictly monotonically increasing</strong>.</p>
+
+        <p class="step"><strong>Step 3: Proof that Optimal Delay Occurs at the SLA Boundary:</strong><br>
+        We seek to solve the constrained optimization problem:
+        $$\max_{\tau \ge 0} \Theta(\tau) \quad \text{subject to} \quad L(\tau) \le L_{\max}$$
+        Assume the SLA is feasible, i.e., $L_{\max} > \alpha$ (otherwise no request can be served even with $\tau = 0$).<br>
+        Since $\Theta(\tau)$ is strictly monotonically increasing, increasing $\tau$ always increases $\Theta(\tau)$.<br>
+        To maximize $\Theta(\tau)$, one must choose the largest possible feasible $\tau$.<br>
+        Since $L(\tau)$ is also strictly monotonically increasing, the feasible set $\{\tau \ge 0 \mid L(\tau) \le L_{\max}\}$ is the closed interval $[0, \tau_{\text{bound}}]$, where $\tau_{\text{bound}}$ satisfies $L(\tau_{\text{bound}}) = L_{\max}$.<br>
+        Therefore, the unique global maximizer occurs precisely at the boundary where the constraint binds:
+        $$L(\tau^*) = L_{\max} \quad \text{Q.E.D.}$$</p>
+
+        <p class="step"><strong>Step 4: Closed-Form Derivations:</strong><br>
+        Setting $L(\tau^*) = L_{\max}$:
+        $$\alpha + \left( \frac{1}{2} + \beta \lambda \right)\tau^* = L_{\max}$$
+        $$\tau^* = \frac{L_{\max} - \alpha}{\frac{1}{2} + \beta \lambda} = \frac{2(L_{\max} - \alpha)}{1 + 2\beta \lambda}$$
+        The optimal expected batch size is:
+        $$B^* = \lambda \tau^* = \frac{2\lambda (L_{\max} - \alpha)}{1 + 2\beta \lambda}$$
+        Substituting $\tau^*$ into $\Theta(\tau)$ yields the peak attainable throughput $\Theta^*$:
+        $$\Theta^* = \frac{\lambda \tau^*}{(1 + \beta \lambda)\tau^* + \alpha} = \frac{2\lambda (L_{\max} - \alpha)}{2(1 + \beta \lambda)(L_{\max} - \alpha) + \alpha(1 + 2\beta \lambda)}$$
+        <em>This closed-form formula allows MLOps engineers to configure Triton dynamic batching timeouts with mathematical certainty, maximizing hardware saturation without ever violating user SLAs.</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 6.4.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.4.6</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-nvidia">NVIDIA</span>
+        <span class="company-tag company-intel">Intel</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In TensorRT Post-Training Quantization (PTQ), floating-point 32-bit activations $x \in \mathbb{R}$ are quantized to 8-bit signed integers $q \in [-127, 127]$. To minimize quantization noise while preventing outlier clipping from destroying dynamic range, TensorRT applies <strong>Kullback-Leibler (KL) Divergence Calibration</strong>.</p>
+        <p><strong>Calibration Process:</strong></p>
+        <ul>
+          <li>An activation histogram $P$ is constructed with $N = 2048$ discrete bins over $[0, |x_{\max}|]$.</li>
+          <li>For each candidate clipping threshold $T \in [128, 2048]$, the reference distribution $P_T$ is created by clipping all bins $i \ge T$ into bin $T-1$, and normalizing to a valid probability distribution ($\sum_{i=0}^{T-1} P_T(i) = 1$).</li>
+          <li>$P_T$ is quantized into $M = 128$ bins to produce quantized distribution $Q_{\text{quantized}}$, and subsequently expanded back to $T$ bins to produce reconstructed distribution $Q_T$.</li>
+          <li>The optimal clipping threshold $T^*$ is chosen by minimizing:
+            $$T^* = \arg\min_{T} D_{\text{KL}}(P_T \parallel Q_T) = \arg\min_{T} \sum_{i=0}^{T-1} P_T(i) \log \left( \frac{P_T(i)}{Q_T(i)} \right)$$
+          </li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Derive the formal projection formula that maps $T$ reference bins into $M = 128$ quantized bins, and the expansion formula that reconstructs $Q_T$ back to $T$ bins.</li>
+          <li>Prove that if $Q_T(i) = 0$ for any bin where $P_T(i) > 0$, the KL divergence diverges to $+\infty$, and explain how TensorRT prevents this numerical catastrophe.</li>
+          <li>Given a simplified 4-bin reference distribution $P = [0.10, 0.40, 0.30, 0.20]$ and two candidate reconstructed distributions $Q_A = [0.15, 0.35, 0.25, 0.25]$ and $Q_B = [0.05, 0.45, 0.35, 0.15]$, compute the exact KL divergence $D_{\text{KL}}(P \parallel Q_A)$ and $D_{\text{KL}}(P \parallel Q_B)$ using natural logarithms, and determine which candidate preserves information with highest fidelity.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Derivation of TensorRT INT8 Calibration</div>
+
+        <p class="step"><strong>Step 1: Projection and Expansion Mapping:</strong><br>
+        Let the candidate threshold contain $T$ bins, where $T > 128$.<br>
+        The compression factor is $\gamma = \frac{T}{128}$. Each quantized bin $j \in \{0, 1, \dots, 127\}$ covers a sub-interval of width $\gamma$ bins in $P_T$.<br>
+        <strong>Forward Quantization (Bin Bundling):</strong>
+        $$Q_{\text{quantized}}(j) = \sum_{i = \lfloor j \cdot \gamma \rfloor}^{\lfloor (j+1) \cdot \gamma \rfloor - 1} P_T(i)$$
+        <strong>Backward Expansion (Uniform Redistribution):</strong>
+        To compute KL divergence against the original $T$-bin distribution, the mass in each quantized bin $j$ must be redistributed uniformly across its corresponding $\gamma$ constituent bins:
+        $$Q_T(i) = \frac{Q_{\text{quantized}}(j)}{c_j} \quad \text{for } i \in [\lfloor j \gamma \rfloor, \lfloor (j+1)\gamma \rfloor - 1]$$
+        where $c_j$ is the count of non-zero bins in that sub-interval. This guarantees that $\sum_{i=0}^{T-1} Q_T(i) = 1$.</p>
+
+        <p class="step"><strong>Step 2: Division by Zero &amp; Smoothing Proof:</strong><br>
+        By definition of KL divergence:
+        $$D_{\text{KL}}(P_T \parallel Q_T) = \sum_{i: P_T(i) > 0} P_T(i) \ln \frac{P_T(i)}{Q_T(i)}$$
+        If there exists any index $k$ such that $P_T(k) > 0$ while $Q_T(k) = 0$, then:
+        $$\lim_{Q_T(k) \to 0^+} P_T(k) \ln \left( \frac{P_T(k)}{Q_T(k)} \right) = +\infty$$
+        The divergence is infinite, corrupting the calibration search.<br>
+        <strong>TensorRT Resolution:</strong> TensorRT enforces Laplace / additive smoothing by assigning a negligible epsilon $\epsilon = 10^{-7}$ to empty bins in $Q_{\text{quantized}}$ before re-normalizing, ensuring $Q_T(i) > 0$ for all $i$.</p>
+
+        <p class="step"><strong>Step 3: Numerical KL-Divergence Computation:</strong><br>
+        Reference distribution: $P = [0.10, 0.40, 0.30, 0.20]$.<br><br>
+        <strong>Evaluating Candidate $Q_A = [0.15, 0.35, 0.25, 0.25]$:</strong>
+        $$D_{\text{KL}}(P \parallel Q_A) = 0.10 \ln\left(\frac{0.10}{0.15}\right) + 0.40 \ln\left(\frac{0.40}{0.35}\right) + 0.30 \ln\left(\frac{0.30}{0.25}\right) + 0.20 \ln\left(\frac{0.20}{0.25}\right)$$
+        Computing logarithms:
+        $$\ln(0.10 / 0.15) = \ln(0.6667) \approx -0.4055 \implies 0.10 \times (-0.4055) = -0.04055$$
+        $$\ln(0.40 / 0.35) = \ln(1.1429) \approx +0.1335 \implies 0.40 \times (+0.1335) = +0.05341$$
+        $$\ln(0.30 / 0.25) = \ln(1.2000) \approx +0.1823 \implies 0.30 \times (+0.1823) = +0.05470$$
+        $$\ln(0.20 / 0.25) = \ln(0.8000) \approx -0.2231 \implies 0.20 \times (-0.2231) = -0.04463$$
+        Summing terms:
+        $$D_{\text{KL}}(P \parallel Q_A) = -0.04055 + 0.05341 + 0.05470 - 0.04463 = \mathbf{0.02293\text{ nats}}$$
+
+        <strong>Evaluating Candidate $Q_B = [0.05, 0.45, 0.35, 0.15]$:</strong>
+        $$D_{\text{KL}}(P \parallel Q_B) = 0.10 \ln\left(\frac{0.10}{0.05}\right) + 0.40 \ln\left(\frac{0.40}{0.45}\right) + 0.30 \ln\left(\frac{0.30}{0.35}\right) + 0.20 \ln\left(\frac{0.20}{0.15}\right)$$
+        Computing logarithms:
+        $$\ln(0.10 / 0.05) = \ln(2.0000) \approx +0.6931 \implies 0.10 \times (+0.6931) = +0.06931$$
+        $$\ln(0.40 / 0.45) = \ln(0.8889) \approx -0.1178 \implies 0.40 \times (-0.1178) = -0.04711$$
+        $$\ln(0.30 / 0.35) = \ln(0.8571) \approx -0.1542 \implies 0.30 \times (-0.1542) = -0.04625$$
+        $$\ln(0.20 / 0.15) = \ln(1.3333) \approx +0.2877 \implies 0.20 \times (+0.2877) = +0.05754$$
+        Summing terms:
+        $$D_{\text{KL}}(P \parallel Q_B) = +0.06931 - 0.04711 - 0.04625 + 0.05754 = \mathbf{0.03349\text{ nats}}$$
+        <strong>Conclusion:</strong> Candidate $Q_A$ has a strictly lower KL divergence ($0.02293 < 0.03349$). TensorRT selects threshold $A$ because it retains higher relative information entropy, minimizing INT8 quantization degradation.</p>
+      </div>
+    </div>
+
+    <!-- TIER 4: CONCEPTUAL TRAPS & ASSERTION-REASONING -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+    <!-- Problem 6.4.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.4.7</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A high-throughput computer vision pipeline serves $50,000\text{ QPS}$ of $1080\text{p}$ video frames ($1920 \times 1080 \times 3$ uint8, approximately $6.22\text{ MB}$ per frame). The engineering team evaluates four communication protocols between the API Gateway microservice and NVIDIA Triton Inference Server:</p>
+        <ol type="I">
+          <li>REST API over HTTP/1.1 with Base64-encoded image strings inside JSON payloads.</li>
+          <li>gRPC over HTTP/2 with binary Protobuf raw byte arrays.</li>
+          <li>POSIX System V Shared Memory (System Shared Memory).</li>
+          <li>CUDA IPC Shared Memory (<code>cudaIpcMemHandle_t</code>).</li>
+        </ol>
+        <p>Which of the following statements correctly identifies the scaling bottleneck and optimal protocol?</p>
+        <ol type="A">
+          <li>Option I is optimal because modern HTTP/1.1 connections utilize gzip compression to reduce image sizes over the loopback network interface.</li>
+          <li>Option I collapses because Base64 expands data size by $33\%$, JSON serialization burns $100\%$ CPU, and loopback socket copies exceed PCIe bandwidth. Option IV is the optimal architecture because the Gateway allocates frames directly in GPU VRAM and passes a 64-byte IPC handle to Triton, achieving true zero-copy transfer with $0\text{ ms}$ PCIe/CPU overhead.</li>
+          <li>Option III is faster than Option IV because CPU RAM has lower access latency than GPU HBM memory.</li>
+          <li>Option II is preferred over Option IV because CUDA IPC handles cannot cross Linux container boundaries under any circumstances.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: B (Exhaustive Protocol Analysis)</div>
+
+        <p class="step"><strong>Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Option A is Catastrophically False:</strong> At $50,000\text{ QPS}$, transferring $6.22\text{ MB}$ frames creates $311\text{ GB/sec}$ of raw payload traffic! Base64 encoding inflates this by $4/3 \approx 33.3\%$ to $414\text{ GB/sec}$. Attempting to JSON-serialize $414\text{ GB/sec}$ will instantly choke hundreds of CPU cores, and localhost socket copies will crash the Linux network stack.</li>
+          <li><strong>Option B is Correct:</strong>
+            <ul>
+              <li>In Option IV (CUDA IPC Shared Memory), the video ingestion process (e.g. NVIDIA DeepStream / NVDEC hardware decoder) decodes frames directly into GPU VRAM.</li>
+              <li>Instead of copying the $6.22\text{ MB}$ frame across PCIe to host RAM and then back over PCIe to Triton, the client calls <code>cudaIpcGetMemHandle()</code> to obtain a tiny 64-byte memory pointer handle.</li>
+              <li>Triton opens the handle with <code>cudaIpcOpenMemHandle()</code>. The tensor is consumed directly in GPU memory with <strong>zero CPU copies, zero PCIe copies, and zero network serialization overhead</strong>!</li>
+            </ul>
+          </li>
+          <li><strong>Option C is False:</strong> Modern GPU HBM3 bandwidth ($3,350\text{ GB/s}$) is over $30\times$ faster than server DDR5 RAM bandwidth ($\approx 100\text{ GB/s}$). Furthermore, System V shared memory still requires copying the tensor across the PCIe bus into GPU memory.</li>
+          <li><strong>Option D is False:</strong> CUDA IPC handles cross container boundaries seamlessly, provided the containers share the host IPC namespace (<code>ipc: host</code>) or a common shared memory volume and have access to the same physical GPU device nodes.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Problem 6.4.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.4.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-nvidia">NVIDIA</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>ASSERTION-REASONING:</strong></p>
+        <p><strong>Assertion (A):</strong> When configuring an NVIDIA TensorRT model in Triton with multiple concurrent execution instances (<code>instance_group [ { count: 4, kind: KIND_GPU } ]</code>), Triton automatically instantiates 4 separate <code>nvinfer1::IExecutionContext</code> objects, each bound to an independent CUDA stream, rather than sharing a single execution context across 4 worker threads.</p>
+        <p><strong>Reason (R):</strong> A TensorRT <code>IExecutionContext</code> maintains internal mutable state—including GPU scratchpad workspace pointers, CUDA event handles, and intermediate activation buffers; executing concurrent forward passes on the same execution context across multiple threads causes memory race conditions and corrupted inferences.</p>
+        <p><strong>Options:</strong></p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A (Comprehensive Concurrency Analysis)</div>
+
+        <p class="step"><strong>Deep Architectural Analysis:</strong></p>
+        <p><strong>Evaluation of Assertion (A): True.</strong><br>
+        In Triton's <code>config.pbtxt</code>, setting <code>instance_group [ { count: 4, kind: KIND_GPU } ]</code> instructs the TensorRT backend to create 4 distinct model instances. Each instance owns its own dedicated <code>IExecutionContext</code> and its own distinct CUDA stream (<code>cudaStream_t</code>). This enables true concurrent hardware execution across SMs (Streaming Multiprocessors) on a single physical GPU.</p>
+
+        <p class="step"><strong>Evaluation of Reason (R): True &amp; Explanatory.</strong><br>
+        In NVIDIA TensorRT's C++ API, an <code>ICudaEngine</code> represents the immutable, compiled model definition (weights, layer graph, tactics). An <code>ICudaEngine</code> is completely thread-safe and can be shared across multiple threads.<br>
+        However, the <code>IExecutionContext</code> created from that engine represents the *active execution environment*. It manages:
+        <ul>
+          <li>Device memory scratchpad workspace allocations (used by fused convolutions and GEMMs).</li>
+          <li>Dynamic shape bindings and tensor descriptor metadata.</li>
+          <li>CUDA event synchronizations.</li>
+        </ul>
+        If two threads call <code>enqueueV3()</code> concurrently on the <em>same</em> <code>IExecutionContext</code>, they overwrite each other's intermediate activation buffers in GPU VRAM, yielding garbage predictions or triggering hard CUDA illegal memory access crashes (<code>cudaErrorIllegalAddress</code>).<br>
+        Therefore, Triton's multi-instance design strictly pairs one <code>IExecutionContext</code> per concurrent stream, ensuring 100% thread safety and maximum hardware saturation.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: PRODUCTION CODE LAB -->
+    <h3>5. Production Code Lab 6.4: Dynamic Batching &amp; Triton Model Configuration</h3>
+    <p>Below is an enterprise-grade model repository configuration (<code>config.pbtxt</code>) and an asynchronous Python client utilizing Triton's gRPC interface with dynamic batching and priority scheduling.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 6.4 — Dynamic Batching Engine from Scratch</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch64_triton_serving/dynamic_batcher.py" target="_blank">🔗 View in GitHub: part6_mlops/ch64_triton_serving/dynamic_batcher.py</a></p>
-<pre><code>import concurrent.futures
-import queue
-import threading
-import time
+      <div class="code-lab-header">Code Lab 6.4 — Triton config.pbtxt &amp; High-Throughput gRPC Client</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch64_triton_serving/config.pbtxt" target="_blank">🔗 View in GitHub: part6_mlops/ch64_triton_serving/config.pbtxt</a></p>
+<pre><code># ==============================================================================
+# Triton Model Configuration: model_repository/transformer_fp16/config.pbtxt
+# ==============================================================================
+name: "transformer_fp16"
+platform: "tensorrt_plan"
+max_batch_size: 64
 
-class DynamicBatcher:
-    def __init__(self, max_batch_size=32, max_queue_delay_ms=5.0):
-        self.max_batch_size = max_batch_size
-        self.max_queue_delay_sec = max_queue_delay_ms / 1000.0
-        self.request_queue = queue.Queue()
-        self.running = True
+# Input Tensor Specification
+input [
+  {
+    name: "input_ids"
+    data_type: TYPE_INT32
+    dims: [ -1 ] # Dynamic sequence length
+  },
+  {
+    name: "attention_mask"
+    data_type: TYPE_INT32
+    dims: [ -1 ]
+  }
+]
 
-        # Launch background batching scheduler
-        self.worker = threading.Thread(target=self._batching_loop, daemon=True)
-        self.worker.start()
+# Output Tensor Specification
+output [
+  {
+    name: "embeddings"
+    data_type: TYPE_FP16
+    dims: [ 768 ]
+  }
+]
 
-    def predict(self, input_vector):
-        """Client interface: synchronous call backed by async dynamic batching"""
-        future = concurrent.futures.Future()
-        self.request_queue.put((input_vector, future))
-        return future.result() # Blocks until batch completes
+# Dynamic Batching Configuration
+dynamic_batching {
+  preferred_batch_size: [ 16, 32, 64 ]
+  max_queue_delay_microseconds: 5000  # 5ms max accumulation window
+  priority_levels: 2
+  default_priority_level: 2
+}
 
-    def _batching_loop(self):
-        while self.running:
-            batch = []
-            start_wait = time.time()
-
-            # Accumulate requests until max_batch_size or max_queue_delay_sec
-            while len(batch) < self.max_batch_size:
-                time_remaining = self.max_queue_delay_sec - (time.time() - start_wait)
-                if time_remaining <= 0 and len(batch) > 0:
-                    break
-                try:
-                    item = self.request_queue.get(timeout=max(0.0001, time_remaining))
-                    batch.append(item)
-                except queue.Empty:
-                    break
-
-            if not batch:
-                continue
-
-            # Execute batch prediction
-            inputs = [item[0] for item in batch]
-            futures = [item[1] for item in batch]
-
-            # Simulated GPU Forward Pass (Batch execution)
-            time.sleep(0.008) # 8ms GPU compute
-            results = [f"Result({inp})" for inp in inputs]
-
-            # Resolve all client futures
-            for f, res in zip(futures, results):
-                f.set_result(res)
-
-if __name__ == "__main__":
-    batcher = DynamicBatcher(max_batch_size=4, max_queue_delay_ms=10.0)
-
-    def client_call(req_id):
-        res = batcher.predict(f"req_{req_id}")
-        print(f"Client {req_id} received: {res}")
-
-    # Launch 4 concurrent clients
-    threads = [threading.Thread(target=client_call, args=(i,)) for i in range(4)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()</code></pre>
+# Model Concurrency: 2 execution instances per GPU
+instance_group [
+  {
+    count: 2
+    kind: KIND_GPU
+    gpus: [ 0 ]
+  }
+]</code></pre>
     </div>
 
     <!-- SECTION 6: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 6.4 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 6.4: Industrial Triton Multi-Model Serving Gateway</h3>
-        <p class="project-desc">Architect and deploy a high-throughput multi-model inference gateway using NVIDIA Triton Inference Server, compiling PyTorch vision and speech backbones into TensorRT FP16 engines, configuring dynamic batching profiles, and benchmarking gRPC vs HTTP/REST throughput.</p>
+        <h3 class="project-title">Project 6.4: Industrial Triton Multi-Model Serving Gateway with TensorRT INT8 Calibration</h3>
+        <p class="project-desc">Architect and deploy a high-throughput multi-model inference gateway using NVIDIA Triton Inference Server, compiling PyTorch vision and speech backbones into TensorRT INT8 engines with KL-divergence calibration, configuring dynamic batching profiles, and benchmarking gRPC vs HTTP/REST throughput under 50,000 QPS load.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch64_triton_serving/dynamic_batcher.py" target="_blank">🔗 Full Project Code: part6_mlops/ch64_triton_serving/dynamic_batcher.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In autonomous vehicle fleet teleoperation (Cruise, Waymo), central edge servers must ingest simultaneous video, LiDAR, and audio sensor streams from 5,000 connected vehicles at 60 FPS. In this project, you construct a production Triton inference cluster with model ensembles and dynamic batching that processes multi-sensor payloads with sub-10ms latency and zero dropped frames.</p>
+        <p><strong>Case Study Architecture:</strong> In autonomous vehicle fleet teleoperation (Cruise, Waymo), central edge servers must ingest simultaneous video, LiDAR, and audio sensor streams from 5,000 connected vehicles at 60 FPS. In this project, you construct a production Triton inference cluster with model ensembles, dynamic batching, and CUDA IPC shared memory that processes multi-sensor payloads with sub-10ms latency and zero dropped frames.</p>
       </div>
     </div>
   </div>

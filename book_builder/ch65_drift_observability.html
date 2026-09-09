@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="drift_observability_pipeline.png" alt="Figure 6.5.1: drift observability pipeline">
+        <div class="diagram-caption"><strong>Figure 6.5.1:</strong> Continuous model observability and automated retraining loop. Live production feature distributions and prediction outputs are continuously compared against baseline distributions using Population Stability Index (PSI) and Kolmogorov-Smirnov tests, triggering automated retraining pipelines upon significant drift.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 6.5 — DRIFT OBSERVABILITY & AUTOMATED RETRAINING
      ====================================================================== -->
@@ -5,7 +11,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 6.5</span>
     <h2 class="chapter-title">Drift Observability &amp; Automated Retraining</h2>
-    <span class="chapter-subtitle">Covariate Shift, The Population Stability Index (PSI), KS-Tests &amp; Closed-Loop Pipelines</span>
+    <span class="chapter-subtitle">Covariate Shift, Concept Shift, The Population Stability Index (PSI), KS-Tests &amp; Closed-Loop Canary Retraining</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -22,53 +28,60 @@
     <p>In standard software engineering, systems fail loudly: a null pointer exception raises a stack trace, returning an HTTP 500 error that triggers PagerDuty alerts. Machine learning systems <strong>fail silently</strong>: the API returns an HTTP 200 OK with a 99% confidence score, yet the business is hemorrhaging money because the predictions are completely wrong!</p>
 
     <h4>The Three Pillars of Distribution Shift</h4>
-    <ul>
-      <li><strong>Covariate Shift (Data Drift):</strong> The input feature distribution changes: $P_{\text{prod}}(\mathbf{x}) \neq P_{\text{train}}(\mathbf{x})$, while the true mapping $P(y \mid \mathbf{x})$ remains static (e.g. camera sensors upgrade to higher resolution).</li>
-      <li><strong>Concept Shift:</strong> The underlying physical relationship between features and labels changes: $P_{\text{prod}}(y \mid \mathbf{x}) \neq P_{\text{train}}(y \mid \mathbf{x})$ (e.g. consumer spending patterns shifting abruptly during a macroeconomic recession).</li>
-      <li><strong>Prior Probability Shift (Label Drift):</strong> The distribution of target labels $P(y)$ changes (e.g. an epidemic causing infection rates to surge from 0.1% to 15%).</li>
-    </ul>
-
-    <!-- SECTION 2: PSI DERIVATION -->
-    <h3>2. The Population Stability Index (PSI)</h3>
-    <p>How do we quantify whether a feature's distribution has drifted far enough to warrant retraining? In enterprise risk and banking, the gold standard is the <strong>Population Stability Index (PSI)</strong>.</p>
-
-    <div class="real-world-box">
-      <h4>🏆 Mathematical Formulation of PSI</h4>
-      <p>Divide the baseline (training) distribution into $B$ discrete quantile bins (typically deciles, $B = 10$). For each bin $i$:</p>
-      <ul>
-        <li>$E_i$: Expected percentage of observations in bin $i$ from the baseline training set.</li>
-        <li>$A_i$: Actual percentage of observations in bin $i$ from the live production stream.</li>
-      </ul>
-      $$\text{PSI} = \sum_{i=1}^B (A_i - E_i) \cdot \ln\left( \frac{A_i}{E_i} \right)$$
-      <p>Notice the mathematical elegance: $(A_i - E_i)$ and $\ln(A_i / E_i)$ always share the same sign! Their product is <strong>strictly non-negative</strong>, summing to zero if and only if $A_i = E_i$ across all bins.</p>
-
-      <h4>Industrial Decision Thresholds</h4>
-      <table>
+    <div class="table-container" style="overflow-x: auto; margin: 1.5em 0;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em;">
         <thead>
-          <tr>
-            <th>PSI Range</th>
-            <th>Statistical Interpretation</th>
-            <th>Production Action</th>
+          <tr style="background-color: #1b4965; color: #ffffff;">
+            <th style="padding: 10px; border: 1px solid #ccc;">Shift Type</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Formal Definition</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Invariant Quantity</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Real-World Example</th>
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td>$\text{PSI} &lt; 0.10$</td>
-            <td><strong>Stable:</strong> Insignificant distribution shift.</td>
-            <td>No action required. Continue standard serving.</td>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Covariate Shift (Data Drift)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$P_{\text{prod}}(\mathbf{x}) \neq P_{\text{train}}(\mathbf{x})$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$P(y \mid \mathbf{x})$ is static.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Autonomous vehicle cameras entering heavy snowfall or upgraded 4K sensors.</td>
           </tr>
           <tr>
-            <td>$0.10 \le \text{PSI} \le 0.25$</td>
-            <td><strong>Moderate Drift:</strong> Measurable population shift.</td>
-            <td>Log warning to Datadog/Prometheus; increase audit frequency.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Concept Shift</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$P_{\text{prod}}(y \mid \mathbf{x}) \neq P_{\text{train}}(y \mid \mathbf{x})$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$P(\mathbf{x})$ may remain static.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Macroeconomic inflation shifting credit default rates for identical salary bands.</td>
           </tr>
-          <tr>
-            <td>$\mathbf{\text{PSI} &gt; 0.25}$</td>
-            <td><strong>Critical Drift:</strong> Significant distribution divergence!</td>
-            <td><strong>Trigger automated model retraining pipeline immediately!</strong></td>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Prior Probability (Label Drift)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$P_{\text{prod}}(y) \neq P_{\text{train}}(y)$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$P(\mathbf{x} \mid y)$ is static.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">A viral pandemic causing positive medical diagnosis rates to surge from 0.1% to 18%.</td>
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- SECTION 2: STATISTICAL METRICS -->
+    <h3>2. Statistical Drift Detection Frameworks</h3>
+    <p>To detect distribution divergence before business KPIs crash, production pipelines continuously compute four statistical distance metrics across sliding telemetry windows:</p>
+
+    <div class="real-world-box">
+      <h4>📐 Mathematical Comparison of Drift Metrics</h4>
+      <ol>
+        <li><strong>Population Stability Index (PSI):</strong> Quantizes continuous features into deciles ($B = 10$). Evaluates divergence between expected baseline percentages $E_i$ and actual production percentages $A_i$:
+          $$\text{PSI} = \sum_{i=1}^B (A_i - E_i) \cdot \ln\left( \frac{A_i}{E_i} \right)$$
+        </li>
+        <li><strong>Two-Sample Kolmogorov-Smirnov (KS) Test:</strong> Non-parametric test comparing Empirical Cumulative Distribution Functions (ECDFs) $F_1(x)$ and $F_2(x)$:
+          $$D = \sup_x |F_1(x) - F_2(x)|$$
+          Evaluated against asymptotic critical threshold $D_{\alpha} = c(\alpha)\sqrt{\frac{n_1 + n_2}{n_1 n_2}}$.
+        </li>
+        <li><strong>Wasserstein Distance (Earth Mover's Distance):</strong> Measures the minimum work required to transform distribution $P$ into distribution $Q$:
+          $$W_1(P, Q) = \int_{-\infty}^{\infty} |F_P(x) - F_Q(x)| dx$$
+        </li>
+        <li><strong>Maximum Mean Discrepancy (MMD):</strong> Non-parametric kernel two-sample test in Reproducing Kernel Hilbert Spaces (RKHS) for high-dimensional embeddings:
+          $$\text{MMD}^2(P, Q) = \mathbb{E}_{x, x'}[k(x, x')] - 2\mathbb{E}_{x, y}[k(x, y)] + \mathbb{E}_{y, y'}[k(y, y')]$$
+        </li>
+      </ol>
     </div>
 
     <!-- SECTION 3: AUTOMATED CLOSED-LOOP RETRAINING -->
@@ -76,113 +89,701 @@
     <p>Modern production platforms (orchestrated via <strong>Kubeflow Pipelines, Apache Airflow, or Prefect</strong>) eliminate manual human intervention through automated continuous training loops:</p>
     <ol>
       <li><strong>Streaming Drift Sentinel:</strong> A lightweight background worker computes rolling PSI and Kolmogorov-Smirnov statistics over 24-hour sliding production windows.</li>
-      <li><strong>Automated Trigger:</strong> When $\text{PSI} &gt; 0.25$, an automated webhook dispatches a retraining DAG.</li>
+      <li><strong>Automated Trigger:</strong> When $\text{PSI} &gt; 0.25$ or $p_{\text{KS}} &lt; 0.01$, an automated webhook dispatches a retraining DAG.</li>
       <li><strong>Point-in-Time Historical Materialization:</strong> The pipeline queries the Feature Store, pulling the freshest historical training window with zero target leakage.</li>
       <li><strong>Automated Shadow Evaluation:</strong> The newly trained "Candidate" model runs concurrently with the active "Champion" model in shadow mode for 48 hours.</li>
       <li><strong>Canary Promotion:</strong> If the Candidate model outperforms the Champion on holdout ROC-AUC without increasing p99 latency, the model registry automatically promotes it to production traffic!</li>
     </ol>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Observability</h3>
+    <!-- ======================================================================
+         SECTION 4: 4-TIER GRADED PRACTICE SUITE
+         ====================================================================== -->
+    <h3>4-Tier Graded Practice Suite — Drift Observability &amp; Retraining</h3>
+    <p>Eight comprehensive problems spanning discrete PSI decile arithmetic, two-sample KS hypothesis testing, ECDF traces, canary promotion state machine traces, Jeffreys divergence proofs, 1D Wasserstein proofs, delayed feedback traps, and high-dimensional MMD embedding analysis.</p>
 
+    <!-- TIER 1: NUMERICAL DRILLS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+    <!-- Problem 6.5.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 6.5.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="difficulty difficulty-medium">Medium</span>
         <span class="company-tag company-google">Google</span>
-        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-jpmorgan">J.P. Morgan</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Prove that the Population Stability Index (PSI) is mathematically equivalent to the <strong>Symmetric Kullback-Leibler (KL) Divergence (Jeffreys Divergence)</strong> between the actual distribution $A$ and the expected distribution $E$.</p>
+        <p><strong>QUESTION:</strong> A credit scoring model monitors the feature <code>debt_to_income_ratio</code>. The training dataset was partitioned into $B = 5$ equal-frequency quantile bins, establishing an expected distribution $E = [0.20, 0.20, 0.20, 0.20, 0.20]$. Over the last 7 days of live production serving, a telemetry worker records the actual distribution across the same bin boundaries:
+        $$A = [0.10, 0.15, 0.25, 0.20, 0.30]$$</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Construct a complete computation table listing $(A_i - E_i)$, the ratio $A_i / E_i$, the natural logarithm $\ln(A_i / E_i)$, and the bin contribution $(A_i - E_i)\ln(A_i / E_i)$ for each bin $i \in \{1, 2, 3, 4, 5\}$ to 5 decimal places.</li>
+          <li>Calculate the total Population Stability Index ($\text{PSI}$).</li>
+          <li>Using the standard industrial thresholds:
+            $$\text{PSI} < 0.10 \implies \text{Stable}, \quad 0.10 \le \text{PSI} \le 0.25 \implies \text{Moderate Drift}, \quad \text{PSI} > 0.25 \implies \text{Critical Drift}$$
+            classify the drift severity and specify the mandatory production engineering action.
+          </li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+        <div class="solution-label">✓ Step-by-Step Numerical PSI Table &amp; Decision</div>
 
-        <p class="step"><strong>Step 1: Write Forward and Reverse KL Divergences:</strong><br>
-        Let $A$ and $E$ be discrete probability distributions across $B$ bins:
-        $$D_{\text{KL}}(A \parallel E) = \sum_{i=1}^B A_i \ln\left( \frac{A_i}{E_i} \right)$$
-        $$D_{\text{KL}}(E \parallel A) = \sum_{i=1}^B E_i \ln\left( \frac{E_i}{A_i} \right)$$</p>
+        <p class="step"><strong>Step 1: Bin-by-Bin Arithmetic Computation:</strong></p>
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.90em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Bin ($i$)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Expected ($E_i$)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Actual ($A_i$)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">$\Delta_i = A_i - E_i$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">$A_i / E_i$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">$\ln(A_i / E_i)$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">$\text{PSI}_i = \Delta_i \ln(A_i / E_i)$</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.20$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.10$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-0.10$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.50$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-0.69315$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(-0.10) \times (-0.69315) = \mathbf{0.06932}$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.20$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.15$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-0.05$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.75$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-0.28768$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(-0.05) \times (-0.28768) = \mathbf{0.01438}$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.20$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.25$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.05$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1.25$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.22314$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(+0.05) \times (+0.22314) = \mathbf{0.01116}$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>4</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.20$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.20$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.00$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1.00$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.00000$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.00 \times 0.00000 = \mathbf{0.00000}$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>5</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.20$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.30$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.10$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1.50$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.40547$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(+0.10) \times (+0.40547) = \mathbf{0.04055}$</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-        <p class="step"><strong>Step 2: Add the Two Divergences (Jeffreys Divergence):</strong><br>
-        Because standard KL divergence is asymmetric ($D_{\text{KL}}(A \parallel E) \neq D_{\text{KL}}(E \parallel A)$), the <strong>Symmetric KL Divergence</strong> is defined as their sum:
-        $$D_{\text{Sym}}(A, E) = D_{\text{KL}}(A \parallel E) + D_{\text{KL}}(E \parallel A) = \sum_{i=1}^B A_i \ln\left( \frac{A_i}{E_i} \right) + \sum_{i=1}^B E_i \ln\left( \frac{E_i}{A_i} \right)$$</p>
+        <p class="step"><strong>Step 2: Total PSI Calculation:</strong><br>
+        Summing the individual contributions across all 5 bins:
+        $$\text{PSI} = \sum_{i=1}^5 \text{PSI}_i = 0.06932 + 0.01438 + 0.01116 + 0.00000 + 0.04055 = \mathbf{0.13541}$$</p>
 
-        <p class="step"><strong>Step 3: Factorize the Logarithm:</strong><br>
-        Recall that $\ln(E_i / A_i) = -\ln(A_i / E_i)$. Substitute this into the second term:
-        $$D_{\text{Sym}}(A, E) = \sum_{i=1}^B A_i \ln\left( \frac{A_i}{E_i} \right) - \sum_{i=1}^B E_i \ln\left( \frac{A_i}{E_i} \right)$$
-        Factor out the shared logarithmic quotient $\ln(A_i / E_i)$:
-        $$D_{\text{Sym}}(A, E) = \sum_{i=1}^B (A_i - E_i) \cdot \ln\left( \frac{A_i}{E_i} \right) = \mathbf{\text{PSI}}$$
-        <strong>Q.E.D. The Population Stability Index is rigorously identical to the Symmetric Kullback-Leibler Divergence!</strong></p>
+        <p class="step"><strong>Step 3: Classification &amp; Engineering Action:</strong><br>
+        Comparing against thresholds:
+        $$0.10 \le \text{PSI} = 0.13541 \le 0.25$$
+        <strong>Classification: MODERATE DRIFT.</strong><br>
+        <strong>Mandatory Production Action:</strong>
+        <ul>
+          <li>Emit a warning alert to Prometheus / Datadog dashboards.</li>
+          <li>Increase telemetry logging sampling rate from 1% to 10% on the inference cluster.</li>
+          <li>Do NOT trigger emergency automatic model retraining (retraining threshold is $\text{PSI} > 0.25$), as premature retraining risks overfitting to transient short-term shocks.</li>
+        </ul></p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 6.5: Population Stability Index &amp; Drift Sentinel from Scratch</h3>
-    <p>Below is an industrial Python implementation of the Population Stability Index and automated retraining trigger sentinel.</p>
+    <!-- Problem 6.5.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.5.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-stripe">Stripe</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An autonomous payment fraud detection service continuously tracks the continuous transaction anomaly score $X \in [0, 100]$.</p>
+        <p><strong>Observability Configuration:</strong></p>
+        <ul>
+          <li>Baseline training distribution sample size: $n_1 = 500$ verified transactions.</li>
+          <li>Production sliding window sample size: $n_2 = 400$ live transactions.</li>
+          <li>Target significance level: $\alpha = 0.01$ (99% confidence level).</li>
+          <li>Critical value constant for $\alpha = 0.01$ is $c(0.01) = 1.628$.</li>
+          <li>The asymptotic critical threshold formula for the two-sample Kolmogorov-Smirnov test is:
+            $$D_{\alpha} = c(\alpha) \sqrt{\frac{n_1 + n_2}{n_1 n_2}}$$
+          </li>
+        </ul>
+        <p>A drift monitoring worker constructs the two Empirical Cumulative Distribution Functions $F_1(x)$ and $F_2(x)$ and determines that the maximum observed supremum distance is $D_{\text{obs}} = \sup_x |F_1(x) - F_2(x)| = 0.1140$.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the exact numerical critical value $D_{0.01}$.</li>
+          <li>Formally evaluate the null hypothesis $H_0: F_{\text{train}} = F_{\text{prod}}$ versus $H_1: F_{\text{train}} \neq F_{\text{prod}}$ at the $\alpha = 0.01$ level.</li>
+          <li>State with rigorous statistical justification whether statistically significant covariate drift has occurred in the transaction anomaly score.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step KS Hypothesis Test Solution</div>
+
+        <p class="step"><strong>Step 1: Critical Value Computation:</strong><br>
+        Calculate the harmonic sample size factor:
+        $$\frac{n_1 + n_2}{n_1 n_2} = \frac{500 + 400}{500 \times 400} = \frac{900}{200,000} = 0.0045$$
+        Compute the square root:
+        $$\sqrt{0.0045} = \sqrt{\frac{45}{10,000}} = \frac{6.708204}{100} \approx 0.067082$$
+        Multiply by critical constant $c(0.01) = 1.628$:
+        $$D_{0.01} = 1.628 \times 0.067082 \approx \mathbf{0.10921}$$</p>
+
+        <p class="step"><strong>Step 2: Hypothesis Evaluation:</strong><br>
+        Compare the observed test statistic against the critical threshold:
+        $$D_{\text{obs}} = 0.1140$$
+        $$D_{0.01} = 0.10921$$
+        Since $D_{\text{obs}} = 0.1140 > D_{0.01} = 0.10921$, the test statistic falls strictly inside the critical rejection region:
+        $$\mathcal{R} = \{D \in [0, 1] \mid D > D_{\alpha}\}$$
+        Therefore, we <strong>REJECT the null hypothesis $H_0$</strong> at the $\alpha = 0.01$ significance level ($p$-value $< 0.01$).</p>
+
+        <p class="step"><strong>Step 3: Engineering Conclusion:</strong><br>
+        We conclude with <strong>99% statistical confidence</strong> that the production feature distribution has experienced statistically significant covariate drift ($F_{\text{prod}}(x) \neq F_{\text{train}}(x)$).<br>
+        Because the probability of this distribution discrepancy occurring by random sampling variance is less than $1\%$, the automated observability sentinel dispatches a webhook to initiate an automated model audit.</p>
+      </div>
+    </div>
+
+    <!-- TIER 2: APPLIED ENGINEERING TRACES -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+    <!-- Problem 6.5.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.5.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-apple">Apple</span>
+        <span class="company-tag company-netflix">Netflix</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are implementing a lightweight streaming Kolmogorov-Smirnov test worker in Go for an edge computer vision system. The worker receives two small calibration batches of feature $x$ (normalized latency in milliseconds):</p>
+        <ul>
+          <li>Baseline Training Sample ($n_1 = 6$): $X_1 = \{12, 18, 25, 34, 45, 60\}$</li>
+          <li>Live Production Sample ($n_2 = 6$): $X_2 = \{15, 22, 28, 30, 32, 38\}$</li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Construct an algorithmic trace table across all jump points in the pooled sorted sample set. At each point, record: (a) Value $x$, (b) Step CDF $F_1(x)$, (c) Step CDF $F_2(x)$, and (d) Absolute divergence $|F_1(x) - F_2(x)|$.</li>
+          <li>Identify the exact value of $x$ where the supremum distance $D = \sup_x |F_1(x) - F_2(x)|$ is achieved.</li>
+          <li>Calculate the exact numerical value of $D$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Algorithmic ECDF Construction &amp; Supremum Trace</div>
+
+        <p class="step"><strong>Step 1: Algorithmic Step-by-Step Trace Table:</strong><br>
+        Pooled sorted sample set ($N = 12$ points):
+        $$\{12, 15, 18, 22, 25, 28, 30, 32, 34, 38, 45, 60\}$$
+        Each sample contributes a step of height $1/6 \approx 0.1667$.</p>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">$x$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Source</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">$F_1(x)$ (Baseline Count / 6)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">$F_2(x)$ (Prod Count / 6)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Fractional Diff $|F_1 - F_2|$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Decimal Absolute Divergence</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$12$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$X_1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.1667$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$15$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$X_2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.0000$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$18$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$X_1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$2/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.1667$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$22$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$X_2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$2/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$2/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.0000$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$25$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$X_1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$3/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$2/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.1667$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$28$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$X_2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$3/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$3/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.0000$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$30$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$X_2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$3/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$4/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.1667$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>32</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$X_2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3/6</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>5/6</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2/6</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>0.3333 (MAX SUPREMUM!)</strong></td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$34$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$X_1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$4/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$5/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.1667$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$38$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$X_2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$4/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$6/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$2/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.3333$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$45$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$X_1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$5/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$6/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.1667$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$60$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$X_1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$6/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$6/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0/6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.0000$</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="step"><strong>Step 2 &amp; 3: Supremum Point &amp; Test Statistic:</strong><br>
+        The maximum vertical divergence between the two cumulative step functions occurs over the interval $x \in [32, 34)$ (and $[38, 45)$):
+        $$D = \sup_x |F_1(x) - F_2(x)| = \frac{5}{6} - \frac{3}{6} = \frac{2}{6} = \mathbf{0.3333}$$
+        <em>Algorithmic takeaway: The KS distance can be computed in $\mathcal{O}((n_1 + n_2)\log(n_1 + n_2))$ time using a single merge-sort pass over the two empirical distributions!</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 6.5.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.5.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An enterprise recommendation platform implements an automated continuous training (CT) and canary deployment state machine. The system states are:</p>
+        $$\mathcal{S} = \{\texttt{HEALTHY}, \texttt{DRIFT\_ALERT}, \texttt{RETRAINING\_ACTIVE}, \texttt{SHADOW\_EVAL}, \texttt{CANARY\_5\%}, \texttt{CANARY\_25\%}, \texttt{PROMOTED}, \texttt{ROLLBACK}\}$$
+        <p>The system is currently in state <code>HEALTHY</code> serving model <code>Model_v1</code> (Champion). Construct a comprehensive state machine trace documenting the sequence of transitions triggered across a 72-hour operational timeline:</p>
+        <ul>
+          <li><strong>$T = 0\text{h}$:</strong> Marketing launches an unannounced flash sale; rolling 24h $\text{PSI}$ surges to $0.34$.</li>
+          <li><strong>$T = 1\text{h}$:</strong> Webhook triggers automated retraining DAG in Airflow, pulling historical data from Feast feature store.</li>
+          <li><strong>$T = 6\text{h}$:</strong> Retraining succeeds, producing candidate <code>Model_v2</code>. Shadow evaluation begins (0% user traffic, 100% mirrored requests).</li>
+          <li><strong>$T = 30\text{h}$:</strong> Shadow evaluation window completes. Candidate achieves ROC-AUC $0.912$ vs Champion's $0.841$ with matching latency. Canary Phase 1 starts (5% live traffic).</li>
+          <li><strong>$T = 42\text{h}$:</strong> Canary Phase 1 achieves conversion rate $+4.2\%$ ($p = 0.003$). Canary Phase 2 starts (25% live traffic).</li>
+          <li><strong>$T = 54\text{h}$:</strong> <code>Model_v2</code> causes a sudden memory leak in Triton, pushing p99 latency from $12\text{ ms}$ to $85\text{ ms}$ (SLA threshold is $25\text{ ms}$).</li>
+          <li><strong>$T = 54.1\text{h}$:</strong> Observability tripwire triggers automated rollback.</li>
+        </ul>
+        <p>Tabulate the state transitions, gate criteria evaluated, traffic percentages, and mitigation actions.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Closed-Loop Canary State Machine Trace Table</div>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Timestamp</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Current State $\to$ Next State</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Gate Condition / Metric Evaluated</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Traffic Split (v1 / v2)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Platform Action &amp; Audit Log</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$T = 0\text{h}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>HEALTHY</code> $\to$ <code>DRIFT_ALERT</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\text{PSI} = 0.34 > 0.25$ (Critical Drift threshold exceeded).</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">100% / 0%</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Drift Sentinel emits PagerDuty alert and dispatches Airflow webhook.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$T = 1\text{h}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>DRIFT_ALERT</code> $\to$ <code>RETRAINING_ACTIVE</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Airflow worker allocates 8x H100 GPU cluster.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">100% / 0%</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Point-in-Time feature query executed in Feast. Retraining job launched.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$T = 6\text{h}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>RETRAINING_ACTIVE</code> $\to$ <code>SHADOW_EVAL</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Model artifacts pass unit tests and MLflow registry registration.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">100% (v1) / 100% mirrored (v2)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Triton deploys <code>Model_v2</code> in shadow mode. Responses to live users come strictly from v1.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$T = 30\text{h}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>SHADOW_EVAL</code> $\to$ <code>CANARY_5%</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Shadow ROC-AUC: $0.912 > 0.841$ ($\Delta = +0.071$). Latency matches baseline.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">95% / 5%</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Istio Service Mesh routes 5% of production traffic to <code>Model_v2</code>.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$T = 42\text{h}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>CANARY_5%</code> $\to$ <code>CANARY_25%</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Conversion rate $+4.2\%$ with $p = 0.003 < 0.01$. Zero 5xx errors.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">75% / 25%</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Traffic weighting updated in Envoy gateway. Autoscaler provisions additional pods.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$T = 54\text{h}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>CANARY_25%</code> $\to$ <code>BREACH_DETECTED</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">p99 Latency = $85\text{ ms} > 25\text{ ms}$ (SLA violation!).</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">75% / 25%</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Prometheus rule <code>HighInferenceLatencyAlert</code> fires. Immediate tripwire signal emitted.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$T = 54.1\text{h}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>BREACH_DETECTED</code> $\to$ <code>ROLLBACK</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Instant automated circuit breaker execution.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>100% / 0% (Immediate)</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Traffic instantly reverted to <code>Model_v1</code>. <code>Model_v2</code> pods cordoned and quarantined for heap profiling. System stabilizes in sub-second time.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TIER 3: MATHEMATICAL PROOFS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 3: FAANG Tier-1 / Research Lab Mathematical Proofs</h4>
+
+    <!-- Problem 6.5.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.5.5</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-stanford">Stanford</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove from first principles that the Population Stability Index ($\text{PSI}$) is mathematically equivalent to the <strong>Symmetric Kullback-Leibler Divergence (Jeffreys Divergence)</strong> between actual production distribution $A$ and expected baseline distribution $E$.</p>
+        <p>Furthermore, prove that $\text{PSI}(A, E) \ge 0$ for any discrete probability distributions $A$ and $E$, with equality $\text{PSI} = 0$ holding if and only if $A_i = E_i$ for all bins $i \in \{1, \dots, B\}$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Rigorous Mathematical Proof (Equivalence &amp; Non-Negativity)</div>
+
+        <p class="step"><strong>Step 1: Proof of Equivalence to Jeffreys Divergence:</strong><br>
+        Let $A = (A_1, \dots, A_B)$ and $E = (E_1, \dots, E_B)$ be discrete probability vectors on the simplex $\Delta^{B-1}$ ($\sum A_i = 1, \sum E_i = 1$, with $A_i, E_i > 0$).<br>
+        The forward Kullback-Leibler divergence from $E$ to $A$ is:
+        $$D_{\text{KL}}(A \parallel E) = \sum_{i=1}^B A_i \ln\left( \frac{A_i}{E_i} \right)$$
+        The reverse Kullback-Leibler divergence from $A$ to $E$ is:
+        $$D_{\text{KL}}(E \parallel A) = \sum_{i=1}^B E_i \ln\left( \frac{E_i}{A_i} \right)$$
+        Jeffreys Divergence (Symmetric KL) is defined as their sum:
+        $$J(A, E) = D_{\text{KL}}(A \parallel E) + D_{\text{KL}}(E \parallel A) = \sum_{i=1}^B A_i \ln\left( \frac{A_i}{E_i} \right) + \sum_{i=1}^B E_i \ln\left( \frac{E_i}{A_i} \right)$$
+        Using the logarithmic identity $\ln(E_i / A_i) = -\ln(A_i / E_i)$:
+        $$J(A, E) = \sum_{i=1}^B A_i \ln\left( \frac{A_i}{E_i} \right) - \sum_{i=1}^B E_i \ln\left( \frac{A_i}{E_i} \right)$$
+        Factoring out the shared logarithmic term $\ln(A_i / E_i)$:
+        $$J(A, E) = \sum_{i=1}^B (A_i - E_i) \cdot \ln\left( \frac{A_i}{E_i} \right) = \mathbf{\text{PSI}(A, E)}$$
+        <em>Hence, PSI is identical to Jeffreys Divergence. Q.E.D.</em></p>
+
+        <p class="step"><strong>Step 2: Proof of Non-Negativity ($\text{PSI} \ge 0$):</strong><br>
+        We analyze each individual summand $\psi_i(A_i, E_i) = (A_i - E_i)\ln(A_i / E_i)$.<br>
+        Case 1: $A_i > E_i$.<br>
+        Here $(A_i - E_i) > 0$. Since $A_i / E_i > 1$, the natural logarithm $\ln(A_i / E_i) > 0$.<br>
+        The product of two strictly positive quantities is strictly positive: $\psi_i > 0$.<br><br>
+        Case 2: $A_i < E_i$.<br>
+        Here $(A_i - E_i) < 0$. Since $A_i / E_i < 1$, the natural logarithm $\ln(A_i / E_i) < 0$.<br>
+        The product of two strictly negative quantities is strictly positive: $\psi_i > 0$.<br><br>
+        Case 3: $A_i = E_i$.<br>
+        Here $(A_i - E_i) = 0$ and $\ln(1) = 0$, yielding $\psi_i = 0$.<br><br>
+        Therefore, for every bin $i$:
+        $$\psi_i = (A_i - E_i)\ln\left( \frac{A_i}{E_i} \right) \ge 0$$
+        Since PSI is the sum of non-negative terms:
+        $$\text{PSI} = \sum_{i=1}^B \psi_i \ge 0$$
+        Furthermore, $\sum \psi_i = 0$ if and only if $\psi_i = 0$ for all $i \in \{1, \dots, B\}$, which occurs if and only if $A_i = E_i$ for all $i$.<br>
+        <em>Q.E.D. PSI is strictly non-negative and is zero if and only if no distribution drift has occurred.</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 6.5.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.5.6</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-berkeley">UC Berkeley</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> The 1-Wasserstein Distance (Earth Mover's Distance) between two continuous probability distributions $P$ and $Q$ on $\mathbb{R}$ with Cumulative Distribution Functions $F_P(x)$ and $F_Q(x)$ is defined via optimal transport as:
+        $$W_1(P, Q) = \inf_{\gamma \in \Pi(P, Q)} \mathbb{E}_{(X, Y) \sim \gamma}[|X - Y|]$$
+        where $\Pi(P, Q)$ is the set of all joint couplings with marginals $P$ and $Q$.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>State the Kantorovich-Rubinstein Duality theorem for $W_1(P, Q)$.</li>
+          <li>Using the duality theorem and integration by parts, prove that for 1-dimensional distributions on $\mathbb{R}$, the Wasserstein distance simplifies to the closed-form integral of absolute CDF differences:
+            $$W_1(P, Q) = \int_{-\infty}^{\infty} |F_P(x) - F_Q(x)| \, dx$$
+          </li>
+          <li>Contrast this result against the Kolmogorov-Smirnov test statistic $D(P, Q) = \sup_x |F_P(x) - F_Q(x)|$. Provide a concrete mathematical counterexample demonstrating why the KS test fails to differentiate between a small shift and a massive shift along the feature axis, whereas the Wasserstein distance reflects the true magnitude of shift.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Derivation of 1D Wasserstein Distance</div>
+
+        <p class="step"><strong>Step 1: Kantorovich-Rubinstein Duality:</strong><br>
+        The Kantorovich-Rubinstein duality states that:
+        $$W_1(P, Q) = \sup_{\|f\|_{\text{Lip}} \le 1} \left| \int_{-\infty}^{\infty} f(x) \, dP(x) - \int_{-\infty}^{\infty} f(x) \, dQ(x) \right|$$
+        where the supremum is taken over all 1-Lipschitz functions $f: \mathbb{R} \to \mathbb{R}$ ($|f(x) - f(y)| \le |x - y| \implies |f'(x)| \le 1$ almost everywhere).</p>
+
+        <p class="step"><strong>Step 2: Derivation via Integration by Parts:</strong><br>
+        Let $f$ be a 1-Lipschitz test function. By integration by parts on Riemann-Stieltjes integrals:
+        $$\int_{-\infty}^{\infty} f(x) \, d(P(x) - Q(x)) = \left[ f(x)(F_P(x) - F_Q(x)) \right]_{-\infty}^{\infty} - \int_{-\infty}^{\infty} f'(x) (F_P(x) - F_Q(x)) \, dx$$
+        As $x \to \pm \infty$, $F_P(x) - F_Q(x) \to 0$ sufficiently fast (assuming distributions have finite first moments), so the boundary term vanishes:
+        $$\int_{-\infty}^{\infty} f(x) \, d(P - Q)(x) = - \int_{-\infty}^{\infty} f'(x) (F_P(x) - F_Q(x)) \, dx$$
+        To maximize this quantity subject to the Lipschitz constraint $|f'(x)| \le 1$, we must choose $f'(x)$ to match the sign of $-(F_P(x) - F_Q(x))$:
+        $$f'(x) = -\text{sgn}(F_P(x) - F_Q(x))$$
+        Since $|\text{sgn}(z)| \le 1$, this choice of $f$ is valid and achieves the supremum:
+        $$\sup_{\|f\|_{\text{Lip}} \le 1} \left[ - \int_{-\infty}^{\infty} f'(x)(F_P(x) - F_Q(x)) \, dx \right] = \int_{-\infty}^{\infty} |F_P(x) - F_Q(x)| \, dx$$
+        <em>Q.E.D. The 1D Wasserstein distance is the exact $L_1$ norm between the two cumulative distribution functions!</em></p>
+
+        <p class="step"><strong>Step 3: Comparative Analysis &amp; KS Blindness Counterexample:</strong><br>
+        Consider a baseline distribution $P = \delta(0)$ (Dirac delta at $x = 0$).<br>
+        Compare this against two production distributions:
+        <ul>
+          <li>Distribution $Q_1 = \delta(1)$ (shifted by 1 unit).</li>
+          <li>Distribution $Q_2 = \delta(1,000)$ (shifted by 1,000 units — a catastrophic physical anomaly!).</li>
+        </ul>
+        <strong>Evaluating Kolmogorov-Smirnov Distance:</strong>
+        For $Q_1$: $F_P(x) = 1$ for $x \ge 0$; $F_{Q_1}(x) = 1$ for $x \ge 1$. Over $[0, 1)$, $|F_P - F_{Q_1}| = 1$.
+        $$D(P, Q_1) = \sup_x |F_P(x) - F_{Q_1}(x)| = \mathbf{1.0}$$
+        For $Q_2$: Over $[0, 1000)$, $|F_P - F_{Q_2}| = 1$.
+        $$D(P, Q_2) = \sup_x |F_P(x) - F_{Q_2}(x)| = \mathbf{1.0}$$
+        <em>The KS test is completely blind to the magnitude of the shift! It assigns the exact same distance (1.0) to a negligible 1-unit shift and an extreme 1,000-unit shift!</em><br><br>
+        <strong>Evaluating Wasserstein Distance:</strong>
+        $$W_1(P, Q_1) = \int_0^1 1 \, dx = \mathbf{1.0}$$
+        $$W_1(P, Q_2) = \int_0^{1000} 1 \, dx = \mathbf{1,000.0}$$
+        <em>Conclusion: The Wasserstein distance correctly scales linearly with the physical transport distance ($1,000\times$ larger), making it vastly superior for detecting semantic drift in numerical engineering features!</em></p>
+      </div>
+    </div>
+
+    <!-- TIER 4: CONCEPTUAL TRAPS & ASSERTION-REASONING -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+    <!-- Problem 6.5.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.5.7</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-stripe">Stripe</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An AI platform monitors an automated loan underwriting model. Over a 6-month period, the feature distribution of applicant credit scores, income, and debt ratios exhibits near-zero covariate shift ($\text{PSI} &lt; 0.04$ and $p_{\text{KS}} &gt; 0.60$ across all features). However, six months after loan issuance, the portfolio experiences an unprecedented surge in default rates (concept shift). The ML team had no alerts firing during this period.</p>
+        <p>Which of the following architectural explanations correctly diagnoses why the observability system failed, and what is the legitimate solution?</p>
+        <ol type="A">
+          <li>The KS test failed because the sample size was too large, causing the test to be underpowered; the fix is downsampling production data to $N = 50$.</li>
+          <li>Unsupervised drift metrics (PSI, KS, Wasserstein) monitor only the input distribution $P(\mathbf{x})$; they are structurally blind to Concept Shift $P(y \mid \mathbf{x})$. When ground-truth labels $y$ have delayed feedback loops (e.g. loan defaults taking 90 to 180 days to materialize), unsupervised metrics cannot substitute for delayed cohort performance audits and counterfactual stress testing.</li>
+          <li>The feature store failed to perform an AS-OF temporal join, causing future labels to overwrite historical training features.</li>
+          <li>PSI is only defined for categorical features; applying PSI to numerical features produces mathematically invalid results that suppress drift alarms.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: B (Exhaustive Distractor Analysis)</div>
+
+        <p class="step"><strong>Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Option A is False:</strong> In statistical hypothesis testing, larger sample sizes increase statistical power, making the test <em>more</em> sensitive to subtle differences, not less. Downsampling reduces statistical power.</li>
+          <li><strong>Option B is Correct:</strong>
+            <ul>
+              <li>Unsupervised drift metrics (PSI, KS test, Wasserstein distance) measure variations in $P(\mathbf{x})$. In this real-world banking scenario, applicant demographics and credit scores were completely static ($P(\mathbf{x})$ did not shift).</li>
+              <li>However, an external macroeconomic shock (e.g. sudden interest rate hikes or regional job losses) caused applicants with the *exact same* income and debt ratios to default at $3\times$ higher rates ($P(y \mid \mathbf{x})$ changed).</li>
+              <li>Because loan default ground-truth labels require 90 to 180 days of delinquency to materialize, the system operated under a <strong>delayed feedback loop</strong>. Unsupervised input sentinels reported false calm.</li>
+              <li>The legitimate solution is to establish proxy metrics (early payment defaults at 30 days), track macroeconomic leading indicators as synthetic features, and perform rolling vintage / cohort analysis.</li>
+            </ul>
+          </li>
+          <li><strong>Option C is Irrelevant:</strong> While AS-OF joins prevent training data leakage, this failure occurred during live production serving six months post-deployment.</li>
+          <li><strong>Option D is False:</strong> PSI is routinely applied to continuous numerical variables by discretizing them into quantile decile bins.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Problem 6.5.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.5.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>ASSERTION-REASONING:</strong></p>
+        <p><strong>Assertion (A):</strong> When monitoring high-dimensional latent representation drift in Large Language Models or multimodal foundation models (e.g. 1536-dimensional text embeddings), computing independent univariate drift metrics (such as PSI or KS tests) on each individual embedding dimension is ineffective and misleading; instead, MLOps platforms must deploy multivariate kernel-based metrics like Maximum Mean Discrepancy (MMD) or cosine centroid drift.</p>
+        <p><strong>Reason (R):</strong> High-dimensional embeddings exhibit dense semantic correlations across dimensions; projecting complex contextual semantic shifts onto individual coordinate axes suffers from the curse of dimensionality and fails to capture non-linear joint distribution changes, whereas MMD evaluates distance in a Reproducing Kernel Hilbert Space (RKHS) using non-linear kernels that capture all higher-order statistical moments.</p>
+        <p><strong>Options:</strong></p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A (Comprehensive Embedding Observability Analysis)</div>
+
+        <p class="step"><strong>Deep Architectural Analysis:</strong></p>
+        <p><strong>Evaluation of Assertion (A): True.</strong><br>
+        A 1536-dimensional embedding vector (e.g. <code>text-embedding-3-small</code>) encodes semantic meaning through the joint orientation of vectors on a high-dimensional unit hypersphere $\mathbb{S}^{1535}$.<br>
+        If a monitoring worker evaluates 1536 independent univariate PSI tests:
+        <ul>
+          <li><strong>False Alarm Explosion:</strong> Testing 1536 hypotheses simultaneously at $\alpha = 0.05$ guarantees multiple false positive drift alerts purely due to random chance ($1 - (1 - 0.05)^{1536} \approx 1.0$).</li>
+          <li><strong>Orthogonal Blindness:</strong> A semantic shift (e.g. user prompts transitioning from technical coding queries to legal compliance questions) rotates the embedding vector in latent space. The marginal distribution of values along any single coordinate axis often remains virtually indistinguishable from a standard Gaussian $\mathcal{N}(0, 1/d)$, completely hiding the semantic rotation!</li>
+        </ul></p>
+
+        <p class="step"><strong>Evaluation of Reason (R): True &amp; Explanatory.</strong><br>
+        Maximum Mean Discrepancy (MMD) with a Radial Basis Function (RBF) kernel:
+        $$k(\mathbf{x}, \mathbf{x}') = \exp\left( -\frac{\|\mathbf{x} - \mathbf{x}'\|^2}{2\sigma^2} \right)$$
+        maps distributions into an infinite-dimensional feature space. By evaluating inner products in this RKHS:
+        $$\text{MMD}^2(P, Q) = \mathbb{E}[k(\mathbf{x}, \mathbf{x}')] - 2\mathbb{E}[k(\mathbf{x}, \mathbf{y})] + \mathbb{E}[k(\mathbf{y}, \mathbf{y}')]$$
+        MMD is zero if and only if $P = Q$ in all higher-order statistical moments. It inherently respects the joint multi-dimensional geometry and semantic distances between embedding vectors, reliably detecting concept and domain drift in LLM RAG pipelines.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: PRODUCTION CODE LAB -->
+    <h3>5. Production Code Lab 6.5: Industrial Population Stability Index (PSI) Sentinel</h3>
+    <p>Below is an enterprise-grade Python implementation of the Population Stability Index sentinel, featuring automated quantile calibration, Laplace smoothing for empty bins, and webhook dispatching for automated retraining.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 6.5 — Population Stability Index (PSI) Drift Sentinel</div>
+      <div class="code-lab-header">Code Lab 6.5 — Industrial PSI Drift Sentinel</div>
       <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch65_drift_observability/psi_sentinel.py" target="_blank">🔗 View in GitHub: part6_mlops/ch65_drift_observability/psi_sentinel.py</a></p>
 <pre><code>import numpy as np
+import logging
 
-class PSIDriftSentinel:
-    def __init__(self, num_bins=10, critical_threshold=0.25):
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+class EnterprisePSISentinel:
+    def __init__(self, num_bins: int = 10, critical_threshold: float = 0.25, smoothing_eps: float = 1e-4):
         self.num_bins = num_bins
         self.critical_threshold = critical_threshold
+        self.smoothing_eps = smoothing_eps
         self.bin_edges = None
         self.expected_pct = None
 
-    def fit_baseline(self, baseline_data):
-        """Establish baseline quantile bins from training data"""
-        # Determine quantile bin edges: equal observations per bin
+    def fit_baseline(self, baseline_data: np.ndarray):
+        """Establish baseline quantile bins from verified training data"""
         quantiles = np.linspace(0, 100, self.num_bins + 1)
         self.bin_edges = np.percentile(baseline_data, quantiles)
-        self.bin_edges[0] -= 1e-5
-        self.bin_edges[-1] += 1e-5
+        # Expand bounds slightly to prevent out-of-bounds edge clipping
+        self.bin_edges[0] -= 1e-6
+        self.bin_edges[-1] += 1e-6
 
-        # Compute expected percentages E_i
+        # Calculate baseline expected percentages E_i with Laplace smoothing
         counts, _ = np.histogram(baseline_data, bins=self.bin_edges)
-        self.expected_pct = (counts + 1e-4) / np.sum(counts + 1e-4)
+        counts_smoothed = counts + self.smoothing_eps
+        self.expected_pct = counts_smoothed / np.sum(counts_smoothed)
+        logging.info(f"Baseline established across {self.num_bins} quantile deciles.")
 
-    def calculate_psi(self, production_data):
-        """Compute PSI against baseline: sum((A - E) * ln(A / E))"""
+    def evaluate_production_stream(self, production_data: np.ndarray) -> tuple[float, str]:
+        """Compute PSI: sum((A - E) * ln(A / E)) and evaluate alert thresholds"""
+        if self.bin_edges is None or self.expected_pct is None:
+            raise RuntimeError("Sentinel must be fitted on baseline data prior to evaluating production streams.")
+
         counts, _ = np.histogram(production_data, bins=self.bin_edges)
-        actual_pct = (counts + 1e-4) / np.sum(counts + 1e-4)
+        counts_smoothed = counts + self.smoothing_eps
+        actual_pct = counts_smoothed / np.sum(counts_smoothed)
 
-        # PSI formula
-        psi_value = np.sum((actual_pct - self.expected_pct) * np.log(actual_pct / self.expected_pct))
-        
-        status = "STABLE"
-        if psi_value >= self.critical_threshold:
+        # Vectorized PSI computation
+        bin_psi = (actual_pct - self.expected_pct) * np.log(actual_pct / self.expected_pct)
+        total_psi = float(np.sum(bin_psi))
+
+        # Industrial classification gates
+        if total_psi >= self.critical_threshold:
             status = "CRITICAL_DRIFT_TRIGGER_RETRAIN"
-        elif psi_value >= 0.10:
+            logging.error(f"CRITICAL DRIFT DETECTED: PSI = {total_psi:.5f} >= {self.critical_threshold} -> Triggering Retraining DAG!")
+        elif total_psi >= 0.10:
             status = "MODERATE_DRIFT_WARNING"
+            logging.warning(f"MODERATE DRIFT WARNING: PSI = {total_psi:.5f} -> Increasing telemetry sampling rate.")
+        else:
+            status = "STABLE"
+            logging.info(f"POPULATION STABLE: PSI = {total_psi:.5f} -> System operating normally.")
 
-        return psi_value, status
+        return total_psi, status
 
 if __name__ == "__main__":
     np.random.seed(42)
-    baseline = np.random.normal(loc=0.0, scale=1.0, size=10000)
-    sentinel = PSIDriftSentinel(num_bins=10)
+    # Synthetic baseline: 10,000 credit risk scores
+    baseline = np.random.normal(loc=50.0, scale=10.0, size=10000)
+    sentinel = EnterprisePSISentinel(num_bins=10)
     sentinel.fit_baseline(baseline)
 
-    # 1. Test Stable Production Stream (Same distribution)
-    prod_stable = np.random.normal(loc=0.0, scale=1.0, size=2000)
-    psi_1, status_1 = sentinel.calculate_psi(prod_stable)
-    print(f"Test 1 (Stable)  : PSI = {psi_1:.4f} -> Status: {status_1}")
+    # 1. Evaluate Stable Stream
+    stable_stream = np.random.normal(loc=50.0, scale=10.0, size=2000)
+    psi_val, state = sentinel.evaluate_production_stream(stable_stream)
+    print(f"Test 1 (Stable)  : PSI = {psi_val:.5f} -> {state}")
 
-    # 2. Test Drifting Production Stream (Mean shifted by +0.8)
-    prod_drifted = np.random.normal(loc=0.8, scale=1.2, size=2000)
-    psi_2, status_2 = sentinel.calculate_psi(prod_drifted)
-    print(f"Test 2 (Drifted) : PSI = {psi_2:.4f} -> Status: {status_2}")</code></pre>
+    # 2. Evaluate Drifting Stream (Mean shifted by +5.0)
+    drifted_stream = np.random.normal(loc=55.0, scale=12.0, size=2000)
+    psi_val, state = sentinel.evaluate_production_stream(drifted_stream)
+    print(f"Test 2 (Drifted) : PSI = {psi_val:.5f} -> {state}")</code></pre>
     </div>
 
     <!-- SECTION 6: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 6.5 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 6.5: Enterprise Drift Sentinel &amp; Automated Retraining Pipeline</h3>
-        <p class="project-desc">Architect, build, and deploy an automated continuous retraining platform combining real-time Kafka telemetry drift sentinels (PSI, KS-test), Prometheus metrics alerting, and Airflow DAGs triggering point-in-time training and canary model rollout.</p>
+        <h3 class="project-title">Project 6.5: Enterprise Drift Sentinel &amp; Automated Closed-Loop Retraining Pipeline</h3>
+        <p class="project-desc">Architect, build, and deploy an automated continuous retraining platform combining real-time Kafka telemetry drift sentinels (PSI, KS-test, Wasserstein distance), Prometheus metrics alerting, and Airflow DAGs triggering point-in-time training and canary model rollout.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch65_drift_observability/psi_sentinel.py" target="_blank">🔗 Full Project Code: part6_mlops/ch65_drift_observability/psi_sentinel.py</a></p>
       </div>
       <div class="project-body">

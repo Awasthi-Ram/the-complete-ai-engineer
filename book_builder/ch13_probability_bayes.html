@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="bayesian_inference_update.png" alt="Figure 1.3.1: bayesian inference update">
+        <div class="diagram-caption"><strong>Figure 1.3.1:</strong> Bayesian updating under parameter estimation. The broad initial prior distribution $P(\theta)$ expresses epistemic uncertainty. Conditioning on observed evidence through likelihood $P(D \mid \theta)$ sharpens belief into posterior distribution $P(\theta \mid D) \propto P(D \mid \theta) P(\theta)$, simultaneously reducing variance and shifting expectation toward empirical truth.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 1.3 — PROBABILITY & BAYESIAN INFERENCE
      ====================================================================== -->
@@ -5,7 +11,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 1.3</span>
     <h2 class="chapter-title">Probability &amp; Bayesian Inference</h2>
-    <span class="chapter-subtitle">Uncertainty, Bayes' Theorem, Gaussian Distributions &amp; Maximum Likelihood Estimation</span>
+    <span class="chapter-subtitle">Uncertainty, Bayes' Theorem, Distributions Encyclopedia, MLE &amp; MAP Estimation</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -17,140 +23,589 @@
   <div class="chapter-body">
     <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <!-- SECTION 1: PROBABILITY FOUNDATIONS -->
+    <!-- SECTION 1: THE MATHEMATICS OF UNCERTAINTY -->
     <h3>1. The Mathematics of Uncertainty</h3>
-    <p>Deterministic software engineering operates in boolean binaries: a condition is either <code>True</code> or <code>False</code>. Machine learning operates in continuous probability spaces: an autonomous vehicle never says "the obstacle ahead is definitely a stop sign"; it calculates a posterior probability distribution $P(\text{StopSign} \mid \text{Lidar}, \text{Camera}) = 0.987$.</p>
+    <p>Deterministic software engineering operates in boolean binaries: a condition is either <code>True</code> or <code>False</code>, a pointer is either valid or <code>null</code>. Machine learning operates in continuous probability spaces: an autonomous vehicle never says "the obstacle ahead is definitely a stop sign"; it calculates a posterior probability distribution $P(\text{StopSign} \mid \text{Lidar}, \text{Camera}) = 0.987$. When dealing with sensor noise, missing features, and inherently stochastic real-world phenomena, probability is the universal mathematical grammar of artificial intelligence.</p>
 
     <h4>Kolmogorov's Axioms of Probability</h4>
-    <p>Given a sample space $\Omega$ of all possible outcomes, a valid probability measure $P$ must satisfy three fundamental axioms:</p>
+    <p>Given a sample space $\Omega$ of all possible mutually exclusive elementary outcomes, an event space $\mathcal{F}$ of measurable subsets of $\Omega$, a valid probability measure $P: \mathcal{F} \to [0, 1]$ must satisfy three fundamental axioms formulated by Andrey Kolmogorov in 1933:</p>
     <ol>
-      <li><strong>Non-negativity:</strong> For any event $A$, $P(A) \ge 0$.</li>
-      <li><strong>Unit Measure:</strong> The probability of the entire sample space is unity: $P(\Omega) = 1$.</li>
-      <li><strong>Countable Additivity:</strong> For any sequence of mutually exclusive events ($A_i \cap A_j = \emptyset$ for $i \neq j$):
+      <li><strong>Non-negativity:</strong> For any event $A \in \mathcal{F}$, $P(A) \ge 0$.</li>
+      <li><strong>Unit Measure:</strong> The probability of the entire sample space occurring is unity: $P(\Omega) = 1$.</li>
+      <li><strong>Countable Additivity:</strong> For any countable sequence of pairwise disjoint events ($A_i \cap A_j = \emptyset$ for all $i \neq j$):
       $$P\left(\bigcup_{i=1}^\infty A_i\right) = \sum_{i=1}^\infty P(A_i)$$</li>
     </ol>
 
-    <!-- SECTION 2: BAYES THEOREM -->
-    <h3>2. Conditional Probability &amp; Bayes' Theorem</h3>
-    <p>The conditional probability of event $A$ occurring given that event $B$ has occurred is defined as:
-    $$P(A \mid B) = \frac{P(A \cap B)}{P(B)}, \quad \text{provided } P(B) &gt; 0$$
-    Rearranging this definition yields <strong>Bayes' Theorem</strong>—the foundational equation of modern probabilistic machine learning:</p>
+    <h4>Joint, Marginal, and Conditional Probability</h4>
+    <p>From these axioms arise the core operational rules governing multidimensional random variables:</p>
+    <ul>
+      <li><strong>Joint Probability $P(X = x, Y = y)$:</strong> The probability that random variable $X$ takes value $x$ AND random variable $Y$ takes value $y$ simultaneously.</li>
+      <li><strong>Marginal Probability (Sum Rule):</strong> Summing (or integrating) out irrelevant nuisance variables from a joint distribution:
+      $$P(X = x) = \sum_{y \in \mathcal{Y}} P(X = x, Y = y) \quad \text{(Discrete)}, \qquad P(X = x) = \int_{\mathcal{Y}} P(X = x, Y = y) \, dy \quad \text{(Continuous)}$$</li>
+      <li><strong>Conditional Probability (Product Rule):</strong> The probability of event $A$ given that event $B$ has definitively occurred ($P(B) &gt; 0$):
+      $$P(A \mid B) = \frac{P(A \cap B)}{P(B)} \implies P(A \cap B) = P(A \mid B) P(B)$$</li>
+      <li><strong>Chain Rule of Probability:</strong> Factoring any high-dimensional joint probability distribution into a cascade of univariate conditionals:
+      $$P(X_1, X_2, \dots, X_n) = P(X_1) \prod_{i=2}^n P(X_i \mid X_1, \dots, X_{i-1})$$
+      <em>This exact factorization forms the mathematical foundation of Auto-regressive Large Language Models (GPT, Claude, Llama), where the probability of a document is the product of token probabilities conditioned on preceding tokens!</em></li>
+      <li><strong>Independence vs. Conditional Independence:</strong> Two variables $X$ and $Y$ are unconditionally independent ($X \perp Y$) if $P(X, Y) = P(X)P(Y)$. They are <em>conditionally independent</em> given $Z$ ($X \perp Y \mid Z$) if:
+      $$P(X, Y \mid Z) = P(X \mid Z) P(Y \mid Z)$$
+      Conditional independence is the cornerstone of Graphical Models, Naive Bayes classifiers, and Markov Random Fields.</li>
+    </ul>
+
+    <!-- SECTION 2: EXPECTATION, VARIANCE & MOMENTS -->
+    <h3>2. Expectation, Moments &amp; Variance Mechanics</h3>
+    <p>Probability distributions are high-dimensional objects. In practice, machine learning models optimize statistical summaries (moments) of these distributions.</p>
+
+    <h4>The Expectation Operator ($\mathbb{E}$)</h4>
+    <p>The expected value of a function $g(X)$ with respect to probability distribution $P(X)$ represents the probability-weighted average:</p>
+    $$\mathbb{E}_{X \sim P}[g(X)] = \sum_{x \in \mathcal{X}} g(x) P(x) \quad \text{(Discrete)}, \qquad \mathbb{E}_{X \sim P}[g(X)] = \int_{\Omega} g(x) P(x) \, dx \quad \text{(Continuous)}$$
+
+    <p><strong>Crucial Properties of Expectation:</strong></p>
+    <ol>
+      <li><strong>Linearity of Expectation:</strong> For <em>any</em> random variables $X$ and $Y$ (regardless of whether they are independent or correlated) and constants $a, b \in \mathbb{R}$:
+      $$\mathbb{E}[aX + bY] = a\mathbb{E}[X] + b\mathbb{E}[Y]$$</li>
+      <li><strong>Expectation of Independent Variables:</strong> If $X \perp Y$, then $\mathbb{E}[XY] = \mathbb{E}[X] \mathbb{E}[Y]$.</li>
+      <li><strong>Law of Total Expectation (Tower Property):</strong>
+      $$\mathbb{E}[Y] = \mathbb{E}_{X}\left[ \mathbb{E}_{Y \mid X}[Y \mid X] \right]$$</li>
+    </ol>
+
+    <h4>Variance, Covariance, and the Correlation Matrix</h4>
+    <p>Variance quantifies the expected squared dispersion of a random variable around its mean $\mu = \mathbb{E}[X]$:</p>
+    $$\text{Var}(X) = \mathbb{E}\left[ (X - \mathbb{E}[X])^2 \right] = \mathbb{E}[X^2] - (\mathbb{E}[X])^2$$
+    <p>Under linear scaling: $\text{Var}(aX + b) = a^2 \text{Var}(X)$. Adding a constant does not change spread; scaling by $a$ scales variance quadratically.</p>
+
+    <p>For two random variables $X$ and $Y$, the <strong>Covariance</strong> measures their linear co-movement:</p>
+    $$\text{Cov}(X, Y) = \mathbb{E}\left[ (X - \mathbb{E}[X])(Y - \mathbb{E}[Y]) \right] = \mathbb{E}[XY] - \mathbb{E}[X]\mathbb{E}[Y]$$
+    <p>Notice that $\text{Cov}(X, X) = \text{Var}(X)$. If $X \perp Y$, then $\text{Cov}(X, Y) = 0$. (Warning: zero covariance implies independence <em>only</em> if the variables are jointly Gaussian; in general non-linear cases, $\text{Cov}(X, Y) = 0$ does not imply independence!).</p>
+
+    <p>The <strong>Pearson Correlation Coefficient</strong> normalizes covariance by the product of standard deviations, yielding a scale-invariant metric in $[-1, 1]$:</p>
+    $$\rho_{XY} = \frac{\text{Cov}(X, Y)}{\sigma_X \sigma_Y} = \frac{\text{Cov}(X, Y)}{\sqrt{\text{Var}(X)\text{Var}(Y)}}$$
+
+    <p><strong>The Law of Total Variance (Eve's Law):</strong> In hierarchical models and reinforcement learning, total variance decomposes into unexplained variance and explained variance:
+    $$\text{Var}(Y) = \mathbb{E}_X\left[ \text{Var}(Y \mid X) \right] + \text{Var}_X\left( \mathbb{E}[Y \mid X] \right)$$</p>
+
+    <!-- SECTION 3: THE AI DISTRIBUTIONS ENCYCLOPEDIA -->
+    <h3>3. The AI Probability Distributions Encyclopedia</h3>
+    <p>Every loss function and generative model in AI is tied to a specific parametric probability distribution. Here are the 6 indispensable distributions every AI engineer must know by heart:</p>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Distribution</th>
+            <th>Domain / Support</th>
+            <th>Probability Density / Mass Function</th>
+            <th>Mean $\mathbb{E}[X]$</th>
+            <th>Variance $\text{Var}(X)$</th>
+            <th>Primary AI Application</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Bernoulli</strong></td>
+            <td>$k \in \{0, 1\}$</td>
+            <td>$P(k) = p^k (1-p)^{1-k}$</td>
+            <td>$p$</td>
+            <td>$p(1-p)$</td>
+            <td>Binary Classification (BCE Loss), Dropout activation masks</td>
+          </tr>
+          <tr>
+            <td><strong>Categorical</strong></td>
+            <td>$k \in \{1, \dots, K\}$</td>
+            <td>$P(k) = \prod_{j=1}^K p_j^{\mathbb{I}(k=j)}$</td>
+            <td>$\mathbf{p}$</td>
+            <td>$\text{diag}(\mathbf{p}) - \mathbf{p}\mathbf{p}^T$</td>
+            <td>Multi-Class Softmax Output, LLM next-token sampling</td>
+          </tr>
+          <tr>
+            <td><strong>Univariate Gaussian</strong></td>
+            <td>$x \in \mathbb{R}$</td>
+            <td>$p(x) = \frac{1}{\sqrt{2\pi\sigma^2}} \exp\left( -\frac{(x-\mu)^2}{2\sigma^2} \right)$</td>
+            <td>$\mu$</td>
+            <td>$\sigma^2$</td>
+            <td>Continuous Regression (MSE Loss), Weight Initialization</td>
+          </tr>
+          <tr>
+            <td><strong>Multivariate Gaussian</strong></td>
+            <td>$\mathbf{x} \in \mathbb{R}^d$</td>
+            <td>$p(\mathbf{x}) = \frac{1}{(2\pi)^{d/2} |\boldsymbol{\Sigma}|^{1/2}} \exp\left( -\frac{1}{2}(\mathbf{x}-\boldsymbol{\mu})^T \boldsymbol{\Sigma}^{-1} (\mathbf{x}-\boldsymbol{\mu}) \right)$</td>
+            <td>$\boldsymbol{\mu}$</td>
+            <td>$\boldsymbol{\Sigma}$</td>
+            <td>Diffusion Models, Variational Autoencoders (VAEs), Kalman Filters</td>
+          </tr>
+          <tr>
+            <td><strong>Beta</strong></td>
+            <td>$\theta \in [0, 1]$</td>
+            <td>$p(\theta) = \frac{1}{\text{B}(\alpha, \beta)} \theta^{\alpha - 1} (1 - \theta)^{\beta - 1}$</td>
+            <td>$\frac{\alpha}{\alpha + \beta}$</td>
+            <td>$\frac{\alpha\beta}{(\alpha+\beta)^2(\alpha+\beta+1)}$</td>
+            <td>Conjugate prior for Bernoulli; Thompson Sampling in Multi-Armed Bandits</td>
+          </tr>
+          <tr>
+            <td><strong>Dirichlet</strong></td>
+            <td>$\boldsymbol{\theta} \in \Delta^K$ ($\sum \theta_k = 1$)</td>
+            <td>$p(\boldsymbol{\theta}) = \frac{1}{\text{B}(\boldsymbol{\alpha})} \prod_{k=1}^K \theta_k^{\alpha_k - 1}$</td>
+            <td>$\frac{\alpha_k}{\sum \alpha_j}$</td>
+            <td>$\frac{\tilde{\alpha}_k(1-\tilde{\alpha}_k)}{\alpha_0 + 1}$</td>
+            <td>Conjugate prior for Categorical; Latent Dirichlet Allocation (Topic Modeling)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Geometry of the Multivariate Normal: The Mahalanobis Distance</h4>
+    <p>In a Multivariate Normal distribution $\mathcal{N}(\boldsymbol{\mu}, \boldsymbol{\Sigma})$, the covariance matrix $\boldsymbol{\Sigma} \in \mathbb{R}^{d \times d}$ is symmetric positive semi-definite ($\boldsymbol{\Sigma} = \boldsymbol{\Sigma}^T$ and $\mathbf{z}^T \boldsymbol{\Sigma} \mathbf{z} \ge 0$). By the Spectral Theorem, $\boldsymbol{\Sigma}$ decomposes as:</p>
+    $$\boldsymbol{\Sigma} = \mathbf{U} \boldsymbol{\Lambda} \mathbf{U}^T = \sum_{i=1}^d \lambda_i \mathbf{u}_i \mathbf{u}_i^T$$
+    <p>Contours of constant probability density form hyper-ellipsoids centered at $\boldsymbol{\mu}$. The eigenvectors $\mathbf{u}_i$ define the principal axes of the ellipsoid, and the square roots of the eigenvalues $\sqrt{\lambda_i}$ define the lengths of the semi-axes (standard deviations along those orthogonal directions).</p>
+    <p>The term inside the exponent is the squared <strong>Mahalanobis Distance</strong>:</p>
+    $$D_M^2(\mathbf{x}, \boldsymbol{\mu}) = (\mathbf{x} - \boldsymbol{\mu})^T \boldsymbol{\Sigma}^{-1} (\mathbf{x} - \boldsymbol{\mu})$$
+    <p>Unlike standard Euclidean distance $\|\mathbf{x} - \boldsymbol{\mu}\|_2^2$, the Mahalanobis distance scales distances inversely by the variance in each direction and accounts for correlated features, making it indispensable for anomaly detection.</p>
+
+    <!-- SECTION 4: BAYES THEOREM & INFERENCE -->
+    <h3>4. Bayesian Inference &amp; The Four Pillars of Bayes</h3>
+    <p>Bayes' Theorem converts a generative prior belief into an updated posterior belief after assimilating empirical data:</p>
 
     <div class="real-world-box">
-      <h4>🏆 Bayes' Theorem Dissected</h4>
-      $$P(\theta \mid \mathcal{D}) = \frac{P(\mathcal{D} \mid \theta) P(\theta)}{P(\mathcal{D})} = \frac{P(\mathcal{D} \mid \theta) P(\theta)}{\int P(\mathcal{D} \mid \theta') P(\theta') d\theta'}$$
+      <h4>🏆 Bayes' Theorem Dissected for Machine Learning</h4>
+      $$P(\boldsymbol{\theta} \mid \mathcal{D}) = \frac{P(\mathcal{D} \mid \boldsymbol{\theta}) P(\boldsymbol{\theta})}{P(\mathcal{D})} = \frac{P(\mathcal{D} \mid \boldsymbol{\theta}) P(\boldsymbol{\theta})}{\int_{\boldsymbol{\Theta}} P(\mathcal{D} \mid \boldsymbol{\theta}') P(\boldsymbol{\theta}') \, d\boldsymbol{\theta}'}$$
       <ul>
-        <li>$P(\theta)$: <strong>The Prior.</strong> Our belief about model parameters $\theta$ before seeing data $\mathcal{D}$.</li>
-        <li>$P(\mathcal{D} \mid \theta)$: <strong>The Likelihood.</strong> How probable the observed data is under parameters $\theta$.</li>
-        <li>$P(\mathcal{D})$: <strong>The Marginal Likelihood (Evidence).</strong> Normalizing constant integrating over all possible parameters.</li>
-        <li>$P(\theta \mid \mathcal{D})$: <strong>The Posterior.</strong> Our updated belief about parameters after assimilating empirical evidence $\mathcal{D}$.</li>
+        <li>$P(\boldsymbol{\theta})$: <strong>The Prior.</strong> Encapsulates our domain knowledge or regularizing inductive bias about parameters $\boldsymbol{\theta}$ before observing data $\mathcal{D}$.</li>
+        <li>$P(\mathcal{D} \mid \boldsymbol{\theta})$: <strong>The Likelihood.</strong> The probability of observing dataset $\mathcal{D}$ if the true underlying parameters were $\boldsymbol{\theta}$. Under i.i.d. sampling, $P(\mathcal{D} \mid \boldsymbol{\theta}) = \prod_{i=1}^N P(\mathbf{x}_i \mid \boldsymbol{\theta})$.</li>
+        <li>$P(\mathcal{D}) = \int P(\mathcal{D} \mid \boldsymbol{\theta}') P(\boldsymbol{\theta}') d\boldsymbol{\theta}'$: <strong>The Evidence (Marginal Likelihood).</strong> The normalizing constant ensuring the posterior integrates to 1. In deep learning with millions of parameters, computing this integral over $\mathbb{R}^{10^9}$ is intractable, necessitating MCMC or Variational Inference.</li>
+        <li>$P(\boldsymbol{\theta} \mid \mathcal{D})$: <strong>The Posterior Distribution.</strong> Our complete, uncertainty-aware updated belief over parameter space given the empirical evidence.</li>
       </ul>
     </div>
 
-    <!-- SECTION 3: MLE VS MAP -->
-    <h3>3. Estimation Theory: MLE, MAP &amp; The Loss Function Bridge</h3>
-    <p>How do we find the "best" parameters $\mathbf{w}$ for an AI model? Statistics gives two primary answers:</p>
+    <!-- SECTION 5: MLE VS MAP -->
+    <h3>5. Estimation Theory: MLE, MAP &amp; The Loss Function Bridge</h3>
+    <p>In deep learning, we frequently summarize the posterior distribution with a single optimal point estimate $\hat{\boldsymbol{\theta}}$. The two primary point-estimation frameworks are:</p>
 
-    <h4>Maximum Likelihood Estimation (MLE)</h4>
-    <p>Assuming training samples are independent and identically distributed (i.i.d.), the likelihood of observing dataset $\mathcal{D} = \{(\mathbf{x}_i, y_i)\}_{i=1}^N$ is the product of individual probabilities:
-    $$L(\mathbf{w}) = \prod_{i=1}^N P(y_i \mid \mathbf{x}_i; \mathbf{w})$$
-    Multiplying millions of probabilities leads to floating-point underflow. We take the natural logarithm, converting the product into a numerically stable sum called the <strong>Log-Likelihood</strong>:
-    $$\ell(\mathbf{w}) = \ln L(\mathbf{w}) = \sum_{i=1}^N \ln P(y_i \mid \mathbf{x}_i; \mathbf{w})$$
-    Maximizing log-likelihood is identical to minimizing the <strong>Negative Log-Likelihood (NLL)</strong>:
-    $$\hat{\mathbf{w}}_{\text{MLE}} = \arg\min_{\mathbf{w}} \left[ -\sum_{i=1}^N \ln P(y_i \mid \mathbf{x}_i; \mathbf{w}) \right]$$</p>
+    <h4>1. Maximum Likelihood Estimation (MLE)</h4>
+    <p>MLE seeks the parameter vector $\hat{\boldsymbol{\theta}}_{\text{MLE}}$ that maximizes the probability of generating the observed training dataset $\mathcal{D} = \{\mathbf{x}_1, \dots, \mathbf{x}_N\}$:</p>
+    $$\hat{\boldsymbol{\theta}}_{\text{MLE}} = \arg\max_{\boldsymbol{\theta}} \prod_{i=1}^N P(\mathbf{x}_i \mid \boldsymbol{\theta}) = \arg\max_{\boldsymbol{\theta}} \sum_{i=1}^N \ln P(\mathbf{x}_i \mid \boldsymbol{\theta}) = \arg\min_{\boldsymbol{\theta}} \left[ -\sum_{i=1}^N \ln P(\mathbf{x}_i \mid \boldsymbol{\theta}) \right]$$
+    <p>Minimizing <strong>Negative Log-Likelihood (NLL)</strong> is the foundational objective of supervised deep learning.</p>
+
+    <h4>2. Maximum A Posteriori (MAP) Estimation</h4>
+    <p>MAP incorporates prior beliefs $P(\boldsymbol{\theta})$ over parameters, finding the mode of the posterior distribution:</p>
+    $$\hat{\boldsymbol{\theta}}_{\text{MAP}} = \arg\max_{\boldsymbol{\theta}} P(\boldsymbol{\theta} \mid \mathcal{D}) = \arg\max_{\boldsymbol{\theta}} \frac{P(\mathcal{D} \mid \boldsymbol{\theta}) P(\boldsymbol{\theta})}{P(\mathcal{D})}$$
+    <p>Since the evidence $P(\mathcal{D})$ does not depend on $\boldsymbol{\theta}$, we drop it and take the natural log:</p>
+    $$\hat{\boldsymbol{\theta}}_{\text{MAP}} = \arg\max_{\boldsymbol{\theta}} \left[ \ln P(\mathcal{D} \mid \boldsymbol{\theta}) + \ln P(\boldsymbol{\theta}) \right] = \arg\min_{\boldsymbol{\theta}} \left[ -\sum_{i=1}^N \ln P(\mathbf{x}_i \mid \boldsymbol{\theta}) - \ln P(\boldsymbol{\theta}) \right]$$
 
     <div class="key-insight">
       <p><strong>The Great Mathematical Bridge of AI:</strong></p>
       <ul>
-        <li>If you assume regression errors follow a Gaussian distribution $\epsilon \sim \mathcal{N}(0, \sigma^2)$, MLE <strong>derives Mean Squared Error (MSE) loss</strong>!</li>
-        <li>If you assume binary classification labels follow a Bernoulli distribution, MLE <strong>derives Binary Cross-Entropy (BCE) loss</strong>!</li>
-        <li>If you place a zero-mean Gaussian prior on weights $P(\mathbf{w}) \sim \mathcal{N}(0, \sigma_w^2)$, Maximum A Posteriori (MAP) <strong>derives $L_2$ Weight Decay Regularization</strong>!</li>
-        <li>If you place a Laplace prior on weights $P(\mathbf{w}) \sim \text{Laplace}(0, b)$, MAP <strong>derives $L_1$ Lasso Regularization</strong>!</li>
+        <li><strong>Gaussian Noise $\implies$ Mean Squared Error (MSE):</strong> Assuming $y = f(\mathbf{x}) + \epsilon$ with $\epsilon \sim \mathcal{N}(0, \sigma^2)$, NLL is identically MSE.</li>
+        <li><strong>Bernoulli Likelihood $\implies$ Binary Cross-Entropy (BCE):</strong> Assuming $y \sim \text{Bernoulli}(p)$, NLL is identically BCE loss.</li>
+        <li><strong>Categorical Likelihood $\implies$ Multi-Class Categorical Cross-Entropy:</strong> Softmax + NLL is the cross-entropy loss used to train all neural language and vision classifiers.</li>
+        <li><strong>Gaussian Prior on Weights $\implies L_2$ Regularization (Ridge / Weight Decay):</strong> If $P(\mathbf{w}) \sim \mathcal{N}(\mathbf{0}, \sigma_w^2 \mathbf{I})$, $-\ln P(\mathbf{w}) = \frac{1}{2\sigma_w^2} \|\mathbf{w}\|_2^2 + \text{const}$. MAP directly yields $L_2$ weight decay with $\lambda = \frac{\sigma^2}{\sigma_w^2}$!</li>
+        <li><strong>Laplace Prior on Weights $\implies L_1$ Regularization (Lasso):</strong> If $P(\mathbf{w}) \propto \exp(-\frac{\|\mathbf{w}\|_1}{b})$, $-\ln P(\mathbf{w}) = \frac{1}{b} \|\mathbf{w}\|_1 + \text{const}$. The non-differentiable sharp peak at zero forces weights to exact numerical zero, producing sparse models!</li>
       </ul>
-      <em>Loss functions are not arbitrary heuristics invented by engineers; they are the direct mathematical consequence of probabilistic likelihoods!</em>
+      <em>Loss functions and regularizers are not empirical heuristics; they are the exact mathematical consequence of probabilistic likelihoods and priors!</em>
     </div>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Probability &amp; Estimation</h3>
+    <!-- SECTION 6: COMPLETE STEP-BY-STEP DERIVATION -->
+    <h3>6. Complete Mathematical Derivation: Gaussian MLE &amp; Bessel's Bias Correction</h3>
+    <p>Let $x_1, x_2, \dots, x_N \overset{\text{i.i.d.}}{\sim} \mathcal{N}(\mu, \sigma^2)$. We derive the Maximum Likelihood Estimators for both $\mu$ and $\sigma^2$, and prove whether they are biased or unbiased.</p>
 
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 1.3.1</span>
-        <span class="difficulty difficulty-medium">Medium</span>
-        <span class="company-tag company-google">Google</span>
-        <span class="company-tag company-meta">Meta</span>
+    <div class="proof-box">
+      <h4>Derivation Step 1: Write the Joint Log-Likelihood</h4>
+      $$L(\mu, \sigma^2) = \prod_{i=1}^N \frac{1}{\sqrt{2\pi\sigma^2}} \exp\left( -\frac{(x_i - \mu)^2}{2\sigma^2} \right)$$
+      $$\ell(\mu, \sigma^2) = \ln L = -\frac{N}{2} \ln(2\pi) - \frac{N}{2} \ln(\sigma^2) - \frac{1}{2\sigma^2} \sum_{i=1}^N (x_i - \mu)^2$$
+
+      <h4>Derivation Step 2: Solve for $\hat{\mu}_{\text{MLE}}$</h4>
+      <p>Differentiate $\ell$ with respect to $\mu$ and set to zero:</p>
+      $$\frac{\partial \ell}{\partial \mu} = -\frac{1}{2\sigma^2} \sum_{i=1}^N 2(x_i - \mu)(-1) = \frac{1}{\sigma^2} \sum_{i=1}^N (x_i - \mu) = 0$$
+      $$\sum_{i=1}^N x_i - N\mu = 0 \implies \hat{\mu}_{\text{MLE}} = \frac{1}{N} \sum_{i=1}^N x_i = \bar{x}$$
+      <p>Is $\hat{\mu}_{\text{MLE}}$ unbiased? Check its expectation:</p>
+      $$\mathbb{E}[\hat{\mu}_{\text{MLE}}] = \mathbb{E}\left[ \frac{1}{N} \sum_{i=1}^N x_i \right] = \frac{1}{N} \sum_{i=1}^N \mathbb{E}[x_i] = \frac{1}{N}(N\mu) = \mu$$
+      <p>Since $\mathbb{E}[\hat{\mu}_{\text{MLE}}] = \mu$, the sample mean is an <strong>unbiased estimator</strong>.</p>
+
+      <h4>Derivation Step 3: Solve for $\hat{\sigma}^2_{\text{MLE}}$</h4>
+      <p>Differentiate $\ell$ with respect to $v = \sigma^2$ and set to zero:</p>
+      $$\frac{\partial \ell}{\partial v} = -\frac{N}{2v} + \frac{1}{2v^2} \sum_{i=1}^N (x_i - \mu)^2 = 0 \implies -\frac{N}{2v} + \frac{1}{2v^2} \sum_{i=1}^N (x_i - \hat{\mu})^2 = 0$$
+      $$\frac{N}{2v} = \frac{1}{2v^2} \sum_{i=1}^N (x_i - \hat{\mu})^2 \implies \hat{\sigma}^2_{\text{MLE}} = \frac{1}{N} \sum_{i=1}^N (x_i - \bar{x})^2$$
+
+      <h4>Derivation Step 4: Prove the Bias of $\hat{\sigma}^2_{\text{MLE}}$ (Bessel's Correction)</h4>
+      <p>Compute the expected value of $\hat{\sigma}^2_{\text{MLE}}$:</p>
+      $$\mathbb{E}[\hat{\sigma}^2_{\text{MLE}}] = \mathbb{E}\left[ \frac{1}{N} \sum_{i=1}^N (x_i - \bar{x})^2 \right] = \frac{1}{N} \sum_{i=1}^N \mathbb{E}[(x_i - \bar{x})^2]$$
+      <p>Expand $(x_i - \bar{x}) = (x_i - \mu) - (\bar{x} - \mu)$:</p>
+      $$(x_i - \bar{x})^2 = (x_i - \mu)^2 - 2(x_i - \mu)(\bar{x} - \mu) + (\bar{x} - \mu)^2$$
+      $$\sum_{i=1}^N (x_i - \bar{x})^2 = \sum_{i=1}^N (x_i - \mu)^2 - 2(\bar{x} - \mu) \sum_{i=1}^N (x_i - \mu) + N(\bar{x} - \mu)^2$$
+      <p>Since $\sum_{i=1}^N (x_i - \mu) = N(\bar{x} - \mu)$, this simplifies to:</p>
+      $$\sum_{i=1}^N (x_i - \bar{x})^2 = \sum_{i=1}^N (x_i - \mu)^2 - N(\bar{x} - \mu)^2$$
+      <p>Taking expectations:</p>
+      $$\mathbb{E}\left[ \sum_{i=1}^N (x_i - \bar{x})^2 \right] = \sum_{i=1}^N \mathbb{E}[(x_i - \mu)^2] - N \mathbb{E}[(\bar{x} - \mu)^2]$$
+      <p>Recall that $\mathbb{E}[(x_i - \mu)^2] = \text{Var}(x_i) = \sigma^2$, and $\mathbb{E}[(\bar{x} - \mu)^2] = \text{Var}(\bar{x}) = \frac{\sigma^2}{N}$:</p>
+      $$\mathbb{E}\left[ \sum_{i=1}^N (x_i - \bar{x})^2 \right] = N\sigma^2 - N\left(\frac{\sigma^2}{N}\right) = N\sigma^2 - \sigma^2 = (N-1)\sigma^2$$
+      <p>Dividing by $N$:</p>
+      $$\mathbb{E}[\hat{\sigma}^2_{\text{MLE}}] = \frac{N-1}{N} \sigma^2$$
+      <p><strong>Conclusion:</strong> The MLE variance estimator systematically <em>underestimates</em> the true population variance by a factor of $\frac{N-1}{N}$ because the deviations are measured relative to the empirical sample mean $\bar{x}$ rather than the true unknown mean $\mu$ (consuming 1 degree of freedom). To obtain an <strong>unbiased estimator</strong>, we multiply by $\frac{N}{N-1}$, yielding <strong>Bessel's Correction</strong>:</p>
+      $$s^2 = \frac{1}{N-1} \sum_{i=1}^N (x_i - \bar{x})^2 \implies \mathbb{E}[s^2] = \sigma^2$$
+    </div>
+
+    <!-- SECTION 7: PRACTICE SUITE -->
+    <div class="practice-set">
+      <div class="practice-header">
+        <span class="set-tag">Complete 4-Tier Practice Suite</span>
+        <h3 class="set-title">Chapter 1.3 Practice Problems &amp; Tier-1 AI Challenge Suite</h3>
+        <p class="set-desc">Master the mathematics of probability, Bayesian inference, and parameter estimation through step-by-step numerical drills, algorithmic traces, FAANG research proofs, and conceptual trap questions.</p>
       </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> A rare medical condition affects $0.1\%$ of the population ($P(D) = 0.001$). A diagnostic AI model achieves a $99\%$ True Positive Rate (Sensitivity $P(+ \mid D) = 0.99$) and has a $5\%$ False Positive Rate ($P(+ \mid \neg D) = 0.05$).</p>
-        <ol>
-          <li>A patient tests positive. What is the exact probability that the patient actually has the disease?</li>
-          <li>Explain why intuition fails here (The Base Rate Fallacy) and how this dictates the design of production fraud-detection and spam systems.</li>
-        </ol>
+
+      <!-- TIER 1: NUMERICAL WARM-UP -->
+      <h4>Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.3.1</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-google">Google</span>
+          <span class="company-tag company-meta">Meta</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> A production payment network experiences fraudulent transactions at a base rate of $P(F) = 0.002$ ($0.2\%$). An automated AI fraud detector has a True Positive Rate (Sensitivity) of $P(+ \mid F) = 0.98$ and a False Positive Rate of $P(+ \mid \neg F) = 0.02$.</p>
+          <ol>
+            <li>A transaction flags positive ($+$). Compute the exact posterior probability $P(F \mid +)$ that the transaction is genuinely fraudulent.</li>
+            <li>Suppose a secondary independent verification model also tests positive ($+_2$) on this flagged transaction, with identical sensitivity $0.98$ and false positive rate $0.02$. Compute the updated posterior probability $P(F \mid +, +_2)$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
+
+          <p class="step"><strong>Step 1: Compute Posterior after First Positive Test:</strong><br>
+          By Bayes' Theorem:
+          $$P(F \mid +) = \frac{P(+ \mid F) P(F)}{P(+)}$$
+          Expand denominator $P(+)$ using the Law of Total Probability ($P(\neg F) = 1 - 0.002 = 0.998$):
+          $$P(+) = P(+ \mid F) P(F) + P(+ \mid \neg F) P(\neg F)$$
+          $$P(+) = (0.98 \times 0.002) + (0.02 \times 0.998) = 0.00196 + 0.01996 = 0.02192$$
+          Calculate posterior:
+          $$P(F \mid +) = \frac{0.00196}{0.02192} \approx 0.089416 = 8.94\%$$
+          <em>Insight:</em> Despite a $98\%$ accurate test, an alarm is only genuine $\approx 8.94\%$ of the time because the base rate is so small ($1$ in $500$).</p>
+
+          <p class="step"><strong>Step 2: Sequential Bayesian Updating after Second Positive Test:</strong><br>
+          In Bayesian inference, the posterior from the first test becomes the prior for the second test:
+          $$P_{\text{new}}(F) = P(F \mid +) = 0.089416, \quad P_{\text{new}}(\neg F) = 1 - 0.089416 = 0.910584$$
+          Compute the new marginal probability of testing positive $P(+_2)$:
+          $$P(+_2) = P(+_2 \mid F) P_{\text{new}}(F) + P(+_2 \mid \neg F) P_{\text{new}}(\neg F)$$
+          $$P(+_2) = (0.98 \times 0.089416) + (0.02 \times 0.910584) = 0.087628 + 0.018212 = 0.105840$$
+          Compute the updated posterior:
+          $$P(F \mid +, +_2) = \frac{0.087628}{0.105840} \approx 0.8279 = 82.79\%$$
+          <strong>Result: Two consecutive independent positive tests skyrocket the confidence from $8.94\%$ to $82.79\%$!</strong></p>
+        </div>
       </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
 
-        <p class="step"><strong>Step 1: Apply Bayes' Theorem:</strong>
-        $$P(D \mid +) = \frac{P(+ \mid D) P(D)}{P(+)}$$
-        By the Law of Total Probability, expand the denominator $P(+)$ across disease and non-disease populations:
-        $$P(+) = P(+ \mid D) P(D) + P(+ \mid \neg D) P(\neg D)$$
-        Substitute given values ($P(D) = 0.001$, $P(\neg D) = 0.999$):
-        $$P(+) = (0.99 \times 0.001) + (0.05 \times 0.999)$$
-        $$P(+) = 0.00099 + 0.04995 = 0.05094$$</p>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.3.2</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-apple">Apple</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Given a dataset of $N=4$ two-dimensional feature points:
+          $$\mathbf{x}_1 = \begin{bmatrix} 1 \\ 2 \end{bmatrix}, \quad \mathbf{x}_2 = \begin{bmatrix} 2 \\ 4 \end{bmatrix}, \quad \mathbf{x}_3 = \begin{bmatrix} 3 \\ 5 \end{bmatrix}, \quad \mathbf{x}_4 = \begin{bmatrix} 4 \\ 9 \end{bmatrix}$$
+          Compute step-by-step:
+          <ol>
+            <li>The sample mean vector $\bar{\mathbf{x}} = [\bar{x}_1, \bar{x}_2]^T$.</li>
+            <li>The unbiased sample covariance matrix $\mathbf{S} = \begin{bmatrix} s_{11} & s_{12} \\ s_{21} & s_{22} \end{bmatrix}$ (using $N-1$ denominator).</li>
+            <li>The Pearson correlation coefficient $r_{12}$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
 
-        <p class="step"><strong>Step 2: Calculate Posterior Probability:</strong>
-        $$P(D \mid +) = \frac{0.00099}{0.05094} \approx 0.01943 = 1.94\%$$
-        <strong>Result: Despite a 99% accurate test, a patient who tests positive has only a 1.94% chance of actually having the disease!</strong></p>
+          <p class="step"><strong>Step 1: Compute Sample Mean Vector:</strong>
+          $$\bar{x}_1 = \frac{1 + 2 + 3 + 4}{4} = \frac{10}{4} = 2.5$$
+          $$\bar{x}_2 = \frac{2 + 4 + 5 + 9}{4} = \frac{20}{4} = 5.0 \implies \bar{\mathbf{x}} = \begin{bmatrix} 2.5 \\ 5.0 \end{bmatrix}$$</p>
 
-        <p class="step"><strong>Step 3: Engineering Implications (The Base Rate Fallacy):</strong><br>
-        Why did this happen? Because the disease is exceedingly rare ($1$ in $1,000$). In a cohort of $100,000$ people:
-        <ul>
-          <li>$100$ people have the disease $\to 99$ test positive.</li>
-          <li>$99,900$ people are healthy $\to 5\%$ of them ($4,995$ people) test false positive!</li>
-        </ul>
-        Out of $99 + 4,995 = 5,094$ total positive tests, only $99$ are true positives ($99 / 5,094 \approx 1.94\%$).<br>
-        <em>AI Production Lesson:</em> In ad click prediction, credit card fraud detection, or cyberattack detection, the target event is rare ($&lt; 0.1\%$). Even a model with a 99% true positive rate will generate 50 times more false alarms than real detections if the false positive rate is 5%! Production AI systems must optimize for <strong>Precision-Recall AUC and calibration</strong>, never raw accuracy.</p>
+          <p class="step"><strong>Step 2: Compute Centered Deviation Vectors:</strong>
+          $$\mathbf{x}_1 - \bar{\mathbf{x}} = \begin{bmatrix} -1.5 \\ -3.0 \end{bmatrix}, \quad \mathbf{x}_2 - \bar{\mathbf{x}} = \begin{bmatrix} -0.5 \\ -1.0 \end{bmatrix}, \quad \mathbf{x}_3 - \bar{\mathbf{x}} = \begin{bmatrix} 0.5 \\ 0.0 \end{bmatrix}, \quad \mathbf{x}_4 - \bar{\mathbf{x}} = \begin{bmatrix} 1.5 \\ 4.0 \end{bmatrix}$$</p>
+
+          <p class="step"><strong>Step 3: Compute Covariance Entries with $N-1 = 3$:</strong>
+          $$s_{11} = \text{Var}(X_1) = \frac{(-1.5)^2 + (-0.5)^2 + (0.5)^2 + (1.5)^2}{3} = \frac{2.25 + 0.25 + 0.25 + 2.25}{3} = \frac{5.0}{3} \approx 1.6667$$
+          $$s_{22} = \text{Var}(X_2) = \frac{(-3.0)^2 + (-1.0)^2 + (0.0)^2 + (4.0)^2}{3} = \frac{9.0 + 1.0 + 0.0 + 16.0}{3} = \frac{26.0}{3} \approx 8.6667$$
+          $$s_{12} = \text{Cov}(X_1, X_2) = \frac{(-1.5)(-3.0) + (-0.5)(-1.0) + (0.5)(0.0) + (1.5)(4.0)}{3} = \frac{4.5 + 0.5 + 0.0 + 6.0}{3} = \frac{11.0}{3} \approx 3.6667$$
+          $$\mathbf{S} = \begin{bmatrix} 5/3 & 11/3 \\ 11/3 & 26/3 \end{bmatrix} \approx \begin{bmatrix} 1.6667 & 3.6667 \\ 3.6667 & 8.6667 \end{bmatrix}$$</p>
+
+          <p class="step"><strong>Step 4: Compute Pearson Correlation Coefficient:</strong>
+          $$r_{12} = \frac{s_{12}}{\sqrt{s_{11} s_{22}}} = \frac{11/3}{\sqrt{(5/3)(26/3)}} = \frac{11}{\sqrt{130}} = \frac{11}{11.40175} \approx 0.9648$$
+          <strong>Result: $r_{12} \approx 0.965$, demonstrating an extremely strong positive linear relationship between the two features.</strong></p>
+        </div>
+      </div>
+
+      <!-- TIER 2: APPLIED ENGINEERING & ALGORITHMIC TRACING -->
+      <h4>Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.3.3</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-meta">Meta</span>
+          <span class="company-tag company-netflix">Netflix</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> An ad-serving platform logs impressions and clicks. Model the user click action as a Bernoulli random variable $Y \sim \text{Bernoulli}(p)$ where $P(Y=1) = p$ and $P(Y=0) = 1-p$. Given $N$ i.i.d. observations containing $k$ clicks and $N-k$ non-clicks:</p>
+          <ol>
+            <li>Derive the log-likelihood function $\ell(p)$ and the score function $S(p) = \frac{\partial \ell}{\partial p}$.</li>
+            <li>Solve for the Maximum Likelihood Estimator $\hat{p}_{\text{MLE}}$ and prove strict concavity via the second derivative $\frac{\partial^2 \ell}{\partial p^2}$.</li>
+            <li>For a new campaign with $k=42$ clicks out of $N=500$ impressions, compute $\hat{p}_{\text{MLE}}$ and construct the $95\%$ Wald Confidence Interval $\hat{p} \pm 1.96 \sqrt{\frac{\hat{p}(1-\hat{p})}{N}}$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical &amp; Numerical Solution</div>
+
+          <p class="step"><strong>Step 1: Formulate Likelihood and Log-Likelihood:</strong><br>
+          For $N$ independent observations $y_1, \dots, y_N \in \{0, 1\}$ with $k = \sum_{i=1}^N y_i$:
+          $$L(p) = \prod_{i=1}^N p^{y_i} (1-p)^{1 - y_i} = p^k (1-p)^{N-k}$$
+          Take the natural logarithm to obtain the log-likelihood:
+          $$\ell(p) = \ln L(p) = k \ln(p) + (N-k) \ln(1-p)$$
+          Differentiate with respect to $p$ to find the score function:
+          $$S(p) = \frac{d\ell}{dp} = \frac{k}{p} - \frac{N-k}{1-p}$$</p>
+
+          <p class="step"><strong>Step 2: Solve for $\hat{p}_{\text{MLE}}$ and Verify Global Maximum:</strong><br>
+          Set score to zero:
+          $$\frac{k}{p} - \frac{N-k}{1-p} = 0 \implies k(1-p) = p(N-k) \implies k - kp = Np - kp \implies Np = k$$
+          $$\hat{p}_{\text{MLE}} = \frac{k}{N}$$
+          Check second derivative:
+          $$\frac{d^2\ell}{dp^2} = -\frac{k}{p^2} - \frac{N-k}{(1-p)^2}$$
+          Since $p \in (0, 1)$, $k \ge 0$, and $N-k \ge 0$, both denominators are positive. Provided $0 < k < N$, $\frac{d^2\ell}{dp^2} < 0$ strictly for all $p \in (0, 1)$. The log-likelihood is strictly concave everywhere, guaranteeing that $\hat{p}_{\text{MLE}} = \frac{k}{N}$ is the unique global maximum.</p>
+
+          <p class="step"><strong>Step 3: Numerical Computation &amp; Confidence Interval:</strong><br>
+          For $k=42$ and $N=500$:
+          $$\hat{p}_{\text{MLE}} = \frac{42}{500} = 0.084 \quad (8.40\% \text{ CTR})$$
+          Compute Standard Error (SE):
+          $$\text{SE} = \sqrt{\frac{\hat{p}(1-\hat{p})}{N}} = \sqrt{\frac{0.084 \times 0.916}{500}} = \sqrt{\frac{0.076944}{500}} = \sqrt{0.000153888} \approx 0.012405$$
+          Margin of error at $95\%$ confidence ($z^* = 1.96$):
+          $$\text{ME} = 1.96 \times 0.012405 \approx 0.02431$$
+          Confidence Interval:
+          $$\text{CI}_{95\%} = [0.084 - 0.02431, \ 0.084 + 0.02431] = [0.05969, \ 0.10831] \approx [5.97\%, \ 10.83\%]$$
+          <strong>Result: The MLE CTR is $8.40\%$, and we are $95\%$ confident the true conversion rate lies between $5.97\%$ and $10.83\%$.</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.3.4</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-amazon">Amazon</span>
+          <span class="company-tag company-spotify">Spotify</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In Thompson Sampling for recommendation bandits, an item's click-through probability $\theta \in [0, 1]$ is modeled using a conjugate $\text{Beta}(\alpha, \beta)$ prior distribution:</p>
+          $$P(\theta) = \frac{1}{\text{B}(\alpha, \beta)} \theta^{\alpha - 1} (1 - \theta)^{\beta - 1}$$
+          <ol>
+            <li>Prove that if $k$ clicks are observed across $n$ trials (a Binomial likelihood $P(k \mid \theta) = \binom{n}{k} \theta^k (1-\theta)^{n-k}$), the posterior distribution is also Beta: $P(\theta \mid k) = \text{Beta}(\alpha + k, \beta + n - k)$.</li>
+            <li>A recommender initializes an item with prior $\text{Beta}(2, 5)$ (reflecting prior mean $\frac{2}{2+5} \approx 0.2857$). Trace the sequential posterior parameters $(\alpha_t, \beta_t)$, posterior mean $\mathbb{E}[\theta]$, and posterior variance $\text{Var}(\theta)$ across 3 batches:
+              <ul>
+                <li>Batch 1: 4 clicks out of 10 impressions ($k_1=4, n_1=10$).</li>
+                <li>Batch 2: 1 click out of 20 impressions ($k_2=1, n_2=20$).</li>
+                <li>Batch 3: 15 clicks out of 30 impressions ($k_3=15, n_3=30$).</li>
+              </ul>
+            </li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical &amp; Algorithmic Trace</div>
+
+          <p class="step"><strong>Step 1: Conjugacy Proof:</strong><br>
+          Apply Bayes' Theorem, ignoring terms that do not depend on $\theta$:
+          $$P(\theta \mid k) \propto P(k \mid \theta) P(\theta) \propto \left[ \theta^k (1-\theta)^{n-k} \right] \cdot \left[ \theta^{\alpha - 1} (1-\theta)^{\beta - 1} \right]$$
+          Group exponents with the same base:
+          $$P(\theta \mid k) \propto \theta^{(\alpha + k) - 1} (1-\theta)^{(\beta + n - k) - 1}$$
+          This functional form is identically a Beta distribution with updated hyper-parameters $\alpha' = \alpha + k$ and $\beta' = \beta + (n - k)$.<br>
+          <strong>Q.E.D. The Beta distribution is strictly conjugate to the Binomial likelihood.</strong></p>
+
+          <p class="step"><strong>Step 2: Sequential Trace Across Batches:</strong><br>
+          Recall Beta moments:
+          $$\mathbb{E}[\theta] = \frac{\alpha}{\alpha + \beta}, \qquad \text{Var}(\theta) = \frac{\alpha\beta}{(\alpha+\beta)^2(\alpha+\beta+1)}$$
+          <ul>
+            <li><strong>Initial State (Prior):</strong> $\alpha_0 = 2, \beta_0 = 5$. Total pseudo-counts $T_0 = 7$.<br>
+            $\mathbb{E}[\theta]_0 = \frac{2}{7} \approx 0.2857$.<br>
+            $\text{Var}(\theta)_0 = \frac{2 \times 5}{7^2 \times 8} = \frac{10}{392} \approx 0.02551$.</li>
+
+            <li><strong>After Batch 1 ($k_1=4, n_1=10 \implies 4 \text{ successes}, 6 \text{ failures}$):</strong><br>
+            $\alpha_1 = 2 + 4 = 6, \quad \beta_1 = 5 + 6 = 11$. Total $T_1 = 17$.<br>
+            $\mathbb{E}[\theta]_1 = \frac{6}{17} \approx 0.3529$.<br>
+            $\text{Var}(\theta)_1 = \frac{6 \times 11}{17^2 \times 18} = \frac{66}{289 \times 18} = \frac{66}{5202} \approx 0.01269$. (Variance halved!).</li>
+
+            <li><strong>After Batch 2 ($k_2=1, n_2=20 \implies 1 \text{ success}, 19 \text{ failures}$):</strong><br>
+            $\alpha_2 = 6 + 1 = 7, \quad \beta_2 = 11 + 19 = 30$. Total $T_2 = 37$.<br>
+            $\mathbb{E}[\theta]_2 = \frac{7}{37} \approx 0.1892$.<br>
+            $\text{Var}(\theta)_2 = \frac{7 \times 30}{37^2 \times 38} = \frac{210}{1369 \times 38} = \frac{210}{52022} \approx 0.004037$.</li>
+
+            <li><strong>After Batch 3 ($k_3=15, n_3=30 \implies 15 \text{ successes}, 15 \text{ failures}$):</strong><br>
+            $\alpha_3 = 7 + 15 = 22, \quad \beta_3 = 30 + 15 = 45$. Total $T_3 = 67$.<br>
+            $\mathbb{E}[\theta]_3 = \frac{22}{67} \approx 0.3284$.<br>
+            $\text{Var}(\theta)_3 = \frac{22 \times 45}{67^2 \times 68} = \frac{990}{4489 \times 68} = \frac{990}{305252} \approx 0.003243$.</li>
+          </ul>
+          <em>Production Insight:</em> Notice how the variance monotonically shrinks as total evidence $N$ accumulates ($\mathcal{O}(1/N)$), shrinking the posterior exploration width during Thompson Sampling.</p>
+        </div>
+      </div>
+
+      <!-- TIER 3: FAANG / RESEARCH LAB CHALLENGES -->
+      <h4>Tier 3: FAANG &amp; Research Lab Challenges</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.3.5</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-google">Google DeepMind</span>
+          <span class="company-tag company-meta">Meta FAIR</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Prove rigorously from first principles that Maximum A Posteriori (MAP) estimation of a linear regression model with Gaussian observation noise $y_i \mid \mathbf{x}_i, \mathbf{w} \sim \mathcal{N}(\mathbf{w}^T \mathbf{x}_i, \sigma^2)$ and an isotropic zero-mean Gaussian prior over weights $\mathbf{w} \sim \mathcal{N}(\mathbf{0}, \sigma_w^2 \mathbf{I})$ produces the exact Ridge Regression ($L_2$ Regularization) closed-form solution:</p>
+          $$\hat{\mathbf{w}}_{\text{MAP}} = (\mathbf{X}^T \mathbf{X} + \lambda \mathbf{I})^{-1} \mathbf{X}^T \mathbf{y}$$
+          <p>Explicitly derive the exact formula for the regularization hyperparameter $\lambda$ in terms of the noise variance $\sigma^2$ and prior variance $\sigma_w^2$.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+          <p class="step"><strong>Step 1: Formulate the Posterior via Bayes' Theorem:</strong><br>
+          $$P(\mathbf{w} \mid \mathbf{X}, \mathbf{y}) = \frac{P(\mathbf{y} \mid \mathbf{X}, \mathbf{w}) P(\mathbf{w})}{P(\mathbf{y} \mid \mathbf{X})}$$
+          Taking the negative logarithm (and discarding $P(\mathbf{y} \mid \mathbf{X})$ which does not depend on $\mathbf{w}$):
+          $$-\ln P(\mathbf{w} \mid \mathbf{X}, \mathbf{y}) = -\ln P(\mathbf{y} \mid \mathbf{X}, \mathbf{w}) - \ln P(\mathbf{w}) + \text{const}$$</p>
+
+          <p class="step"><strong>Step 2: Expand Likelihood and Prior:</strong><br>
+          Under i.i.d. Gaussian noise with variance $\sigma^2$, the likelihood over $N$ observations in matrix form is:
+          $$P(\mathbf{y} \mid \mathbf{X}, \mathbf{w}) = \left(\frac{1}{2\pi\sigma^2}\right)^{N/2} \exp\left( -\frac{1}{2\sigma^2} \|\mathbf{y} - \mathbf{X}\mathbf{w}\|_2^2 \right)$$
+          $$-\ln P(\mathbf{y} \mid \mathbf{X}, \mathbf{w}) = \frac{1}{2\sigma^2} (\mathbf{y} - \mathbf{X}\mathbf{w})^T (\mathbf{y} - \mathbf{X}\mathbf{w}) + \frac{N}{2} \ln(2\pi\sigma^2)$$
+          The prior distribution over $d$-dimensional weight vector $\mathbf{w}$ is $\mathcal{N}(\mathbf{0}, \sigma_w^2 \mathbf{I})$:
+          $$P(\mathbf{w}) = \left(\frac{1}{2\pi\sigma_w^2}\right)^{d/2} \exp\left( -\frac{1}{2\sigma_w^2} \mathbf{w}^T \mathbf{w} \right)$$
+          $$-\ln P(\mathbf{w}) = \frac{1}{2\sigma_w^2} \mathbf{w}^T \mathbf{w} + \frac{d}{2} \ln(2\pi\sigma_w^2)$$</p>
+
+          <p class="step"><strong>Step 3: Combine and Minimize the Objective:</strong><br>
+          $$\hat{\mathbf{w}}_{\text{MAP}} = \arg\min_{\mathbf{w}} \left[ \frac{1}{2\sigma^2} (\mathbf{y} - \mathbf{X}\mathbf{w})^T (\mathbf{y} - \mathbf{X}\mathbf{w}) + \frac{1}{2\sigma_w^2} \mathbf{w}^T \mathbf{w} \right]$$
+          Multiply the entire expression by $2\sigma^2$:
+          $$\hat{\mathbf{w}}_{\text{MAP}} = \arg\min_{\mathbf{w}} \left[ (\mathbf{y} - \mathbf{X}\mathbf{w})^T (\mathbf{y} - \mathbf{X}\mathbf{w}) + \frac{\sigma^2}{\sigma_w^2} \mathbf{w}^T \mathbf{w} \right]$$
+          Define $\lambda = \frac{\sigma^2}{\sigma_w^2}$. The objective function becomes:
+          $$J(\mathbf{w}) = (\mathbf{y} - \mathbf{X}\mathbf{w})^T (\mathbf{y} - \mathbf{X}\mathbf{w}) + \lambda \mathbf{w}^T \mathbf{w}$$
+          This is the exact definition of the Ridge Regression objective function!</p>
+
+          <p class="step"><strong>Step 4: Differentiate and Solve for $\mathbf{w}$:</strong><br>
+          Expand $J(\mathbf{w})$:
+          $$J(\mathbf{w}) = \mathbf{y}^T \mathbf{y} - 2 \mathbf{w}^T \mathbf{X}^T \mathbf{y} + \mathbf{w}^T \mathbf{X}^T \mathbf{X} \mathbf{w} + \lambda \mathbf{w}^T \mathbf{w}$$
+          Compute gradient with respect to $\mathbf{w}$ using matrix calculus:
+          $$\nabla_{\mathbf{w}} J(\mathbf{w}) = -2 \mathbf{X}^T \mathbf{y} + 2 \mathbf{X}^T \mathbf{X} \mathbf{w} + 2 \lambda \mathbf{w}$$
+          Set gradient to zero:
+          $$\mathbf{X}^T \mathbf{X} \mathbf{w} + \lambda \mathbf{w} = \mathbf{X}^T \mathbf{y} \implies (\mathbf{X}^T \mathbf{X} + \lambda \mathbf{I}) \mathbf{w} = \mathbf{X}^T \mathbf{y}$$
+          Because $\mathbf{X}^T \mathbf{X}$ is positive semi-definite and $\lambda > 0$, $(\mathbf{X}^T \mathbf{X} + \lambda \mathbf{I})$ is strictly positive definite and always invertible:
+          $$\hat{\mathbf{w}}_{\text{MAP}} = (\mathbf{X}^T \mathbf{X} + \lambda \mathbf{I})^{-1} \mathbf{X}^T \mathbf{y}, \quad \text{with } \lambda = \frac{\sigma^2}{\sigma_w^2}$$
+          <strong>Q.E.D. $L_2$ regularization is the direct analytical consequence of a Gaussian prior, where the regularizer $\lambda$ represents the ratio of measurement noise variance to prior weight variance!</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.3.6</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-openai">OpenAI</span>
+          <span class="company-tag company-anthropic">Anthropic</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In Gaussian Process Regression, Kalman Filtering, and Generative Diffusion Models, we partition a joint Gaussian random vector into observed variables $\mathbf{x}_2 \in \mathbb{R}^p$ and unobserved variables $\mathbf{x}_1 \in \mathbb{R}^q$:</p>
+          $$\mathbf{x} = \begin{bmatrix} \mathbf{x}_1 \\ \mathbf{x}_2 \end{bmatrix} \sim \mathcal{N}\left( \begin{bmatrix} \boldsymbol{\mu}_1 \\ \boldsymbol{\mu}_2 \end{bmatrix}, \begin{bmatrix} \boldsymbol{\Sigma}_{11} & \boldsymbol{\Sigma}_{12} \\ \boldsymbol{\Sigma}_{21} & \boldsymbol{\Sigma}_{22} \end{bmatrix} \right)$$
+          <p>Prove that the conditional distribution $P(\mathbf{x}_1 \mid \mathbf{x}_2)$ is also a Gaussian $\mathcal{N}(\boldsymbol{\mu}_{1|2}, \boldsymbol{\Sigma}_{1|2})$, and derive the closed-form expressions for the conditional mean $\boldsymbol{\mu}_{1|2}$ and conditional covariance $\boldsymbol{\Sigma}_{1|2}$.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+          <p class="step"><strong>Step 1: Define Linear Transformation of Uncorrelated Variables:</strong><br>
+          We construct a transformation that decorrelates $\mathbf{x}_1$ from $\mathbf{x}_2$. Let:
+          $$\mathbf{z} = \mathbf{x}_1 - \mathbf{A} \mathbf{x}_2$$
+          where $\mathbf{A} \in \mathbb{R}^{q \times p}$ is a constant matrix chosen such that $\text{Cov}(\mathbf{z}, \mathbf{x}_2) = \mathbf{0}$.<br>
+          Compute the cross-covariance:
+          $$\text{Cov}(\mathbf{z}, \mathbf{x}_2) = \text{Cov}(\mathbf{x}_1 - \mathbf{A} \mathbf{x}_2, \mathbf{x}_2) = \text{Cov}(\mathbf{x}_1, \mathbf{x}_2) - \mathbf{A} \text{Cov}(\mathbf{x}_2, \mathbf{x}_2) = \boldsymbol{\Sigma}_{12} - \mathbf{A} \boldsymbol{\Sigma}_{22}$$
+          Setting this to $\mathbf{0}$ yields:
+          $$\boldsymbol{\Sigma}_{12} - \mathbf{A} \boldsymbol{\Sigma}_{22} = \mathbf{0} \implies \mathbf{A} = \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1}$$
+          Therefore, the variable $\mathbf{z} = \mathbf{x}_1 - \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1} \mathbf{x}_2$ has zero covariance with $\mathbf{x}_2$.</p>
+
+          <p class="step"><strong>Step 2: Exploit Independence of Jointly Gaussian Variables:</strong><br>
+          Because $\mathbf{x}_1$ and $\mathbf{x}_2$ are jointly Gaussian, $\mathbf{z}$ and $\mathbf{x}_2$ are also jointly Gaussian. For jointly Gaussian random vectors, <strong>zero covariance implies complete statistical independence</strong>:
+          $$\mathbf{z} \perp \mathbf{x}_2$$
+          Therefore, the conditional distribution of $\mathbf{z}$ given $\mathbf{x}_2$ is identical to its unconditional marginal distribution:
+          $$P(\mathbf{z} \mid \mathbf{x}_2) = P(\mathbf{z})$$</p>
+
+          <p class="step"><strong>Step 3: Compute Mean and Covariance of $\mathbf{z}$:</strong>
+          $$\boldsymbol{\mu}_z = \mathbb{E}[\mathbf{z}] = \mathbb{E}[\mathbf{x}_1] - \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1} \mathbb{E}[\mathbf{x}_2] = \boldsymbol{\mu}_1 - \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1} \boldsymbol{\mu}_2$$
+          $$\boldsymbol{\Sigma}_z = \text{Var}(\mathbf{z}) = \text{Var}(\mathbf{x}_1 - \mathbf{A}\mathbf{x}_2) = \text{Var}(\mathbf{x}_1) + \mathbf{A} \text{Var}(\mathbf{x}_2) \mathbf{A}^T - \mathbf{A} \text{Cov}(\mathbf{x}_2, \mathbf{x}_1) - \text{Cov}(\mathbf{x}_1, \mathbf{x}_2) \mathbf{A}^T$$
+          Substitute $\mathbf{A} = \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1}$ and note $\text{Cov}(\mathbf{x}_2, \mathbf{x}_1) = \boldsymbol{\Sigma}_{21} = \boldsymbol{\Sigma}_{12}^T$:
+          $$\boldsymbol{\Sigma}_z = \boldsymbol{\Sigma}_{11} + (\boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1}) \boldsymbol{\Sigma}_{22} (\boldsymbol{\Sigma}_{22}^{-1} \boldsymbol{\Sigma}_{21}) - 2 \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1} \boldsymbol{\Sigma}_{21}$$
+          $$\boldsymbol{\Sigma}_z = \boldsymbol{\Sigma}_{11} + \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1} \boldsymbol{\Sigma}_{21} - 2 \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1} \boldsymbol{\Sigma}_{21} = \boldsymbol{\Sigma}_{11} - \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1} \boldsymbol{\Sigma}_{21}$$</p>
+
+          <p class="step"><strong>Step 4: Recover the Conditional Distribution of $\mathbf{x}_1 \mid \mathbf{x}_2$:</strong><br>
+          Since $\mathbf{x}_1 = \mathbf{z} + \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1} \mathbf{x}_2$, and $\mathbf{x}_2$ is treated as a fixed constant condition:
+          $$\mathbb{E}[\mathbf{x}_1 \mid \mathbf{x}_2] = \mathbb{E}[\mathbf{z} \mid \mathbf{x}_2] + \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1} \mathbf{x}_2 = \boldsymbol{\mu}_z + \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1} \mathbf{x}_2$$
+          $$\boldsymbol{\mu}_{1|2} = \boldsymbol{\mu}_1 + \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1} (\mathbf{x}_2 - \boldsymbol{\mu}_2)$$
+          $$\boldsymbol{\Sigma}_{1|2} = \text{Var}(\mathbf{x}_1 \mid \mathbf{x}_2) = \text{Var}(\mathbf{z} \mid \mathbf{x}_2) = \boldsymbol{\Sigma}_z = \boldsymbol{\Sigma}_{11} - \boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1} \boldsymbol{\Sigma}_{21}$$
+          <strong>Q.E.D. The conditional distribution of a multivariate Gaussian is Gaussian, with mean shifted linearly by the residual $(\mathbf{x}_2 - \boldsymbol{\mu}_2)$ and covariance reduced by the Schur complement $\boldsymbol{\Sigma}_{12} \boldsymbol{\Sigma}_{22}^{-1} \boldsymbol{\Sigma}_{21}$!</strong></p>
+        </div>
+      </div>
+
+      <!-- TIER 4: CONCEPTUAL TRAP MCQS -->
+      <h4>Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.3.7</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> An AI research scientist estimates the noise variance $\sigma^2$ of sensor inputs using sample variance $\hat{\sigma}^2 = \frac{1}{N} \sum_{i=1}^N (x_i - \bar{x})^2$. Which of the following statements is strictly mathematically TRUE regarding this estimator?</p>
+          <ol type="A">
+            <li>$\hat{\sigma}^2$ is an unbiased estimator for all sample sizes $N \ge 2$, but its variance increases as $N \to \infty$.</li>
+            <li>$\hat{\sigma}^2$ is a biased estimator for finite $N$, but it is asymptotically unbiased and consistent as $N \to \infty$.</li>
+            <li>$\hat{\sigma}^2$ is biased because $\bar{x}$ is a biased estimator of the true population mean $\mu$.</li>
+            <li>Replacing $\frac{1}{N}$ with $\frac{1}{N-1}$ eliminates both the bias and the variance of the estimator.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: B</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of All Options:</strong>
+          <ul>
+            <li><strong>Option B is TRUE:</strong> As proven in Section 6, $\mathbb{E}[\hat{\sigma}^2] = \frac{N-1}{N} \sigma^2 \neq \sigma^2$, making it strictly biased for any finite $N$. However, $\lim_{N \to \infty} \frac{N-1}{N} \sigma^2 = \sigma^2$, so its bias vanishes asymptotically ($\lim_{N \to \infty} \text{Bias} = 0$). Furthermore, by the Weak Law of Large Numbers, $\text{Var}(\hat{\sigma}^2) \to 0$ as $N \to \infty$, which proves that $\hat{\sigma}^2 \overset{P}{\to} \sigma^2$ (it is a statistically <em>consistent</em> estimator).</li>
+            <li><strong>Option A is FALSE:</strong> $\hat{\sigma}^2$ is not unbiased for finite $N$; it has a systematic negative bias. Furthermore, its variance decreases as $\mathcal{O}(1/N)$, never increases.</li>
+            <li><strong>Option C is FALSE:</strong> The sample mean $\bar{x}$ is perfectly <em>unbiased</em> ($\mathbb{E}[\bar{x}] = \mu$). The source of bias in $\hat{\sigma}^2$ is that squared deviations are computed around $\bar{x}$ (which minimizes the sum of squared deviations for that specific sample) rather than $\mu$, systematically underestimating true variance.</li>
+            <li><strong>Option D is FALSE:</strong> Bessel's correction $\frac{1}{N-1}$ eliminates the <em>bias</em>, but it does NOT eliminate the <em>variance</em> of the estimator. Any finite sample estimator has strictly positive variance.</li>
+          </ul></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.3.8</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-deepmind">DeepMind</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Consider the following Assertion (A) and Reason (R):</p>
+          <p><strong>Assertion (A):</strong> Among all continuous probability distributions supported on $\mathbb{R}^d$ with a specified mean $\boldsymbol{\mu}$ and fixed covariance matrix $\boldsymbol{\Sigma}$, the Multivariate Normal distribution $\mathcal{N}(\boldsymbol{\mu}, \boldsymbol{\Sigma})$ uniquely maximizes differential Shannon entropy.</p>
+          <p><strong>Reason (R):</strong> When training a neural network with weight decay ($L_2$ penalty), the optimizer implicitly places an uninformative Jeffreys prior over the model weight parameters.</p>
+          <ol type="A">
+            <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+            <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+            <li>(A) is true, but (R) is false.</li>
+            <li>(A) is false, but (R) is true.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: C</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of Assertion &amp; Reason:</strong>
+          <ul>
+            <li><strong>Assertion (A) is TRUE:</strong> By the Principle of Maximum Entropy (Jaynes), given only constraints on the first and second moments ($\mathbb{E}[\mathbf{x}] = \boldsymbol{\mu}$ and $\mathbb{E}[(\mathbf{x}-\boldsymbol{\mu})(\mathbf{x}-\boldsymbol{\mu})^T] = \boldsymbol{\Sigma}$), the Gaussian distribution makes the fewest unverified assumptions and maximizes differential entropy $H(p) = \frac{1}{2} \ln((2\pi e)^d |\boldsymbol{\Sigma}|)$. Any other distribution with the same covariance contains more structure/constraints and thus less entropy. This is the theoretical foundation for why Gaussian noise is the default model in diffusion and physics.</li>
+            <li><strong>Reason (R) is FALSE:</strong> As proven in Problem 1.3.5, an $L_2$ weight decay penalty corresponds to an <strong>informative zero-mean Gaussian prior</strong> $P(\mathbf{w}) \sim \mathcal{N}(\mathbf{0}, \sigma_w^2 \mathbf{I})$. A Jeffreys prior is an invariant uninformative prior proportional to the square root of the Fisher Information determinant ($P(\theta) \propto \sqrt{\det \mathcal{I}(\theta)}$), which for a location parameter is uniform/flat ($P(w) \propto 1$), resulting in zero regularization penalty.</li>
+            <li>Therefore, Assertion (A) is true, but Reason (R) is completely false.</li>
+          </ul></p>
+        </div>
       </div>
     </div>
 
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 1.3.2</span>
-        <span class="difficulty difficulty-hard">Hard</span>
-        <span class="company-tag company-amazon">Amazon</span>
-        <span class="company-tag company-google">Google DeepMind</span>
-      </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> Prove mathematically from first principles that maximizing the Log-Likelihood of a linear regression model with Gaussian additive noise $y_i = \mathbf{w}^T \mathbf{x}_i + \epsilon_i$ where $\epsilon_i \sim \mathcal{N}(0, \sigma^2)$ is mathematically identical to minimizing the Mean Squared Error (MSE) loss function.</p>
-      </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
-
-        <p class="step"><strong>Step 1: Write the Conditional Probability Density:</strong><br>
-        Since $\epsilon_i = y_i - \mathbf{w}^T \mathbf{x}_i \sim \mathcal{N}(0, \sigma^2)$, the conditional distribution of target $y_i$ given input $\mathbf{x}_i$ is Gaussian with mean $\mathbf{w}^T \mathbf{x}_i$ and variance $\sigma^2$:
-        $$P(y_i \mid \mathbf{x}_i; \mathbf{w}, \sigma^2) = \frac{1}{\sqrt{2\pi\sigma^2}} \exp\left( -\frac{(y_i - \mathbf{w}^T \mathbf{x}_i)^2}{2\sigma^2} \right)$$</p>
-
-        <p class="step"><strong>Step 2: Construct the Total Log-Likelihood over $N$ i.i.d. Samples:</strong>
-        $$\ell(\mathbf{w}) = \sum_{i=1}^N \ln P(y_i \mid \mathbf{x}_i; \mathbf{w}, \sigma^2)$$
-        Substitute the Gaussian density into the logarithm:
-        $$\ell(\mathbf{w}) = \sum_{i=1}^N \left[ \ln\left(\frac{1}{\sqrt{2\pi\sigma^2}}\right) - \frac{(y_i - \mathbf{w}^T \mathbf{x}_i)^2}{2\sigma^2} \right]$$
-        Expand the summation:
-        $$\ell(\mathbf{w}) = -N \ln(\sqrt{2\pi\sigma^2}) - \frac{1}{2\sigma^2} \sum_{i=1}^N (y_i - \mathbf{w}^T \mathbf{x}_i)^2$$</p>
-
-        <p class="step"><strong>Step 3: Maximize Log-Likelihood with Respect to $\mathbf{w}$:</strong><br>
-        Notice that the first term $-N \ln(\sqrt{2\pi\sigma^2})$ is a constant with respect to $\mathbf{w}$. Furthermore, the factor $\frac{1}{2\sigma^2}$ is a strictly positive constant.<br>
-        Therefore:
-        $$\arg\max_{\mathbf{w}} \ell(\mathbf{w}) = \arg\max_{\mathbf{w}} \left[ -\frac{1}{2\sigma^2} \sum_{i=1}^N (y_i - \mathbf{w}^T \mathbf{x}_i)^2 \right]$$
-        Multiplying by the negative constant $-2\sigma^2$ flips the maximization into a minimization:
-        $$\arg\max_{\mathbf{w}} \ell(\mathbf{w}) = \arg\min_{\mathbf{w}} \sum_{i=1}^N (y_i - \mathbf{w}^T \mathbf{x}_i)^2$$
-        Dividing by $N$ produces the exact definition of <strong>Mean Squared Error (MSE)</strong>:
-        $$\hat{\mathbf{w}}_{\text{MLE}} = \arg\min_{\mathbf{w}} \frac{1}{N} \sum_{i=1}^N (y_i - \mathbf{w}^T \mathbf{x}_i)^2 = \arg\min_{\mathbf{w}} \text{MSE}(\mathbf{w})$$
-        <strong>Q.E.D. Mean Squared Error is the maximum likelihood estimator under Gaussian noise!</strong></p>
-      </div>
-    </div>
-
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 1.3: Monte Carlo Probability &amp; Bayesian Updating</h3>
+    <!-- SECTION 8: CODE LAB -->
+    <h3>7. Production Code Lab 1.3: Monte Carlo Probability &amp; Bayesian Updating</h3>
     <p>Below is a Python simulation verifying the Law of Large Numbers, empirical convergence to theoretical priors, and Bayesian belief updates under streaming evidence.</p>
 
     <div class="code-lab">
@@ -188,7 +643,7 @@ if __name__ == "__main__":
     simulate_bayesian_coin(true_bias=0.7, n_flips=5000)</code></pre>
     </div>
 
-    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <!-- SECTION 9: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 1.3 Dedicated Project &amp; Case Study</span>

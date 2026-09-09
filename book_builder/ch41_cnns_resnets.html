@@ -5,12 +5,21 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 4.1</span>
     <h2 class="chapter-title">Convolutional Neural Networks &amp; ResNets</h2>
-    <span class="chapter-subtitle">Spatial Translation Invariance, Receptive Field Arithmetic &amp; The Identity Shortcut Highway</span>
+    <span class="chapter-subtitle">Spatial Translation Equivariance, Receptive Field Calculus, Depthwise Separable Convolutions &amp; Residual Highways</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"The visual world has structure. A pixel's meaning is defined by its neighbors, and an object remains the same whether it appears in the top-left corner or bottom-right corner of your retina."</p>
+    <p>"The visual world has structure. A pixel's meaning is defined by its spatial neighborhood, and an object remains the same semantic entity whether it appears in the top-left corner or bottom-right corner of your retina."</p>
+
+    <!-- FIGURE 4.1.1: resnet_block_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="resnet_block_diagram.png" alt="Figure 4.1.1: resnet_block_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 4.1.1:</em> The canonical ResNet residual block. The identity shortcut connection creates an uninterrupted additive gradient highway $\frac{\partial \mathcal{L}}{\partial \mathbf{x}} = \frac{\partial \mathcal{L}}{\partial \mathbf{y}} \cdot \frac{\partial \mathcal{F}}{\partial \mathbf{x}} + \frac{\partial \mathcal{L}}{\partial \mathbf{y}} \cdot \mathbf{I}$, preventing vanishing gradients even in networks exceeding 100+ layers.
+      </p>
+    </div>
+
     <p class="attribution">— Yann LeCun</p>
   </div>
 
@@ -19,48 +28,85 @@
 
     <!-- SECTION 1: WHY MLPS FAIL ON IMAGES -->
     <h3>1. Why Dense Networks Fail on Visual Data</h3>
-    <p>Suppose you want to classify a standard high-resolution color photograph ($1000 \times 1000$ pixels, 3 color channels: RGB). Flattening this image into a 1D vector produces:</p>
-    $$d_{\text{in}} = 1000 \times 1000 \times 3 = 3,000,000 \text{ inputs}$$
+    <p>Suppose you seek to classify a standard high-resolution color photograph ($1000 \times 1000$ pixels, 3 color channels: RGB). Flattening this image into an unstructured 1D vector produces:</p>
+    $$d_{\text{in}} = 1000 \times 1000 \times 3 = 3,000,000 \text{ scalar inputs}$$
     <p>If the first hidden layer has 1,000 neurons, the weight matrix alone contains:</p>
-    $$W \in \mathbb{R}^{3,000,000 \times 1,000} \implies \mathbf{3 \text{ BILLION parameters!}}$$
-    <p>At 4 bytes per float, storing the first layer requires <strong>12 Gigabytes of RAM</strong> before a single computation is executed! Worse still, dense networks have zero <strong>Spatial Translation Invariance</strong>: if the network learns to recognize a cat in the center of the image, shifting the cat 5 pixels to the left changes all 3 million input indices, forcing the model to re-learn the cat from scratch.</p>
+    $$\mathbf{W} \in \mathbb{R}^{1,000 \times 3,000,000} \implies \mathbf{3 \times 10^9 \text{ parameters (3 Billion weights!)}}$$
+    <p>At 4 bytes per 32-bit float, storing the first layer requires <strong>12 Gigabytes of VRAM</strong> before executing a single forward pass! Furthermore, dense networks lack two fundamental physical inductive biases:</p>
+    <ul>
+      <li><strong>Local Spatial Correlation:</strong> Natural images obey the principle of locality — adjacent pixels exhibit high mutual information, whereas pixels separated by 800 coordinates are statistically near-independent. MLPs treat adjacent pixels and distant pixels identically.</li>
+      <li><strong>Spatial Translation Equivariance:</strong> If a network learns to recognize an edge or an eye in the top-left corner of an image, an MLP cannot reuse that knowledge if the eye appears in the bottom-right corner; it must re-learn all 3 million weights from scratch!</li>
+    </ul>
 
     <!-- SECTION 2: 2D CONVOLUTION -->
-    <h3>2. The 2D Convolution Operation</h3>
-    <p><strong>Convolutional Neural Networks (CNNs)</strong> enforce two biological inductive biases:</p>
+    <h3>2. The Mathematics of 2D Convolution &amp; Cross-Correlation</h3>
+    <p><strong>Convolutional Neural Networks (CNNs)</strong> enforce biological visual cortex principles (Hubel &amp; Wiesel, 1962) via two constraints:</p>
     <ol>
-      <li><strong>Local Connectivity:</strong> Each neuron connects only to a small local receptive field of size $K \times K$ (e.g. $3 \times 3$ pixels).</li>
-      <li><strong>Weight Sharing:</strong> The exact same kernel filter slides across the entire image. If a $3 \times 3$ filter learns to detect a vertical edge, it detects vertical edges <em>everywhere</em> in the image!</li>
+      <li><strong>Local Connectivity:</strong> Each hidden neuron connects only to a small local receptive field of size $K \times K$ (e.g. $3 \times 3$ or $5 \times 5$ pixels).</li>
+      <li><strong>Weight Sharing:</strong> The identical kernel filter slides across the entire spatial grid, guaranteeing translation equivariance.</li>
     </ol>
 
-    <p>For an input feature map $X \in \mathbb{R}^{H \times W \times C_{\text{in}}}$ and a bank of $C_{\text{out}}$ kernel filters $K \in \mathbb{R}^{k_h \times k_w \times C_{\text{in}}}$ with bias $b$:</p>
-    $$S(i, j, c_{\text{out}}) = \sum_{c=1}^{C_{\text{in}}} \sum_{m=1}^{k_h} \sum_{n=1}^{k_w} X(i \cdot s + m, j \cdot s + n, c) \cdot K(m, n, c, c_{\text{out}}) + b(c_{\text{out}})$$
+    <p>In deep learning libraries (PyTorch, TensorFlow, JAX), the operation implemented as "convolution" is technically <strong>Cross-Correlation</strong> (convolution without kernel reflection):</p>
+    $$\mathbf{S}(i, j, c_{\text{out}}) = \sum_{c=1}^{C_{\text{in}}} \sum_{m=0}^{K_h-1} \sum_{n=0}^{K_w-1} \mathbf{X}(i \cdot s + m, j \cdot s + n, c) \cdot \mathbf{K}(m, n, c, c_{\text{out}}) + \mathbf{b}(c_{\text{out}})$$
 
-    <h4>The Spatial Output Dimension Formula</h4>
-    <p>Given input spatial dimension $W_{\text{in}}$, kernel size $K$, padding $P$, stride $S$, and dilation $D$:</p>
+    <h4>2.1 The Universal Spatial Output Dimension Formula</h4>
+    <p>Given an input spatial dimension $W_{\text{in}}$, kernel size $K$, padding $P$, stride $S$, and dilation rate $D$ (where $D=1$ denotes standard convolution):</p>
     $$W_{\text{out}} = \left\lfloor \frac{W_{\text{in}} + 2P - D(K - 1) - 1}{S} \right\rfloor + 1$$
+    <p>where $D(K - 1) + 1$ represents the <em>effective kernel size</em> under atrous dilation.</p>
 
-    <!-- SECTION 3: RESNET & IDENTITY SHORTCUT -->
-    <h3>3. Deep Residual Networks (ResNet): He et al., 2015</h3>
-    <p>Until 2015, stacking more than 20 convolutional layers caused training accuracy to degrade rapidly. This was not overfitting (both training and test error increased); it was an optimization failure where gradients shattered and vanished.</p>
+    <!-- SECTION 3: RECEPTIVE FIELD CALCULUS -->
+    <h3>3. Receptive Field Calculus &amp; Theoretical Gradients</h3>
+    <p>The <strong>Receptive Field (RF)</strong> of a neuron at layer $L$ is the spatial diameter in the original input image that directly influences that neuron's activation. Understanding RF growth is crucial for object detection and semantic segmentation:</p>
 
-    <p>Kaiming He et al. solved this by introducing the <strong>Residual Connection (Skip Connection)</strong>:</p>
-    $$\mathcal{H}(\mathbf{x}) = \mathcal{F}(\mathbf{x}) + \mathbf{x}$$
-    <p>Where $\mathbf{x}$ is the identity mapping passed directly around the convolutional layers $\mathcal{F}(\mathbf{x})$.</p>
+    <h4>3.1 The Layer-Wise Recursive Receptive Field Formula</h4>
+    <p>Let layer $l$ have kernel size $k_l$ and stride $s_l$. Define the <strong>cumulative stride (jump)</strong> $j_l$ as the distance between adjacent features in layer $l$ relative to the input image:</p>
+    $$j_0 = 1, \quad j_l = j_{l-1} \cdot s_l$$
+    <p>The receptive field $RF_l$ after layer $l$ satisfies the recurrence:</p>
+    $$RF_0 = 1, \quad RF_l = RF_{l-1} + (k_l - 1) \cdot j_{l-1}$$
 
-    <div class="real-world-box">
-      <h4>🏆 Mathematical Proof: The ResNet Gradient Highway</h4>
-      <p>Let $\mathbf{x}_l$ be the input to residual block $l$, and $\mathbf{x}_{l+1} = \mathbf{x}_l + \mathcal{F}(\mathbf{x}_l, \mathcal{W}_l)$. For any deeper layer $L &gt; l$, unrolling the recurrence yields:</p>
-      $$\mathbf{x}_L = \mathbf{x}_l + \sum_{i=l}^{L-1} \mathcal{F}(\mathbf{x}_i, \mathcal{W}_i)$$
-      <p>Now, compute the backpropagation gradient of the scalar loss $\mathcal{E}$ with respect to layer $l$ using the multivariable chain rule:</p>
-      $$\frac{\partial \mathcal{E}}{\partial \mathbf{x}_l} = \frac{\partial \mathcal{E}}{\partial \mathbf{x}_L} \frac{\partial \mathbf{x}_L}{\partial \mathbf{x}_l} = \frac{\partial \mathcal{E}}{\partial \mathbf{x}_L} \left( \mathbf{I} + \frac{\partial}{\partial \mathbf{x}_l} \sum_{i=l}^{L-1} \mathcal{F}(\mathbf{x}_i, \mathcal{W}_i) \right)$$
-      <p>Notice the identity matrix $\mathbf{I}$! Even if the gradient through the convolutional layers $\frac{\partial \mathcal{F}}{\partial \mathbf{x}_l}$ vanishes completely to zero, the identity term $\mathbf{I}$ guarantees that the error signal $\frac{\partial \mathcal{E}}{\partial \mathbf{x}_L}$ flows <strong>completely unattenuated directly back to layer $l$</strong>!</p>
-      <p>This single mathematical formulation allowed He et al. to train networks <strong>152 layers deep</strong>, winning the ImageNet 2015 competition and surpassing human visual classification accuracy.</p>
+    <div class="key-insight">
+      <p><strong>The Effective Receptive Field (ERF) Discovery:</strong><br>
+      While the <em>theoretical</em> receptive field grows linearly with depth, Luo et al. (2016) proved that the <strong>Effective Receptive Field (ERF)</strong> — the region where input pixels have non-negligible gradient magnitude $\frac{\partial y}{\partial x}$ — follows a <strong>2D Gaussian distribution</strong> that concentrates over only a central fraction ($\approx 20\% - 30\%$) of the theoretical window!</p>
     </div>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Computer Vision</h3>
+    <!-- SECTION 4: 1x1 CONVOLUTIONS & DEPTHWISE SEPARABLE CONVOLUTIONS -->
+    <h3>4. 1x1 Convolutions &amp; Depthwise Separable Convolutions (MobileNet)</h3>
+    <p>In standard convolution, a kernel processes spatial coordinates and channel cross-correlations <em>simultaneously</em>. In 2017, Google introduced <strong>Depthwise Separable Convolutions</strong> (Howard et al., MobileNet), factorizing standard convolution into two independent steps:</p>
 
+    <ol>
+      <li><strong>Depthwise Convolution:</strong> Applies a single spatial $K \times K$ filter per input channel independently (zero cross-channel mixing):
+      $$\text{Parameters} = C_{\text{in}} \times K \times K, \quad \text{FLOPs} = C_{\text{in}} \times K \times K \times H_{\text{out}} \times W_{\text{out}}$$</li>
+      <li><strong>Pointwise Convolution ($1 \times 1$ Conv):</strong> Computes a linear projection across all $C_{\text{in}}$ channels to produce $C_{\text{out}}$ output channels (zero spatial extent):
+      $$\text{Parameters} = C_{\text{in}} \times C_{\text{out}} \times 1 \times 1, \quad \text{FLOPs} = C_{\text{in}} \times C_{\text{out}} \times H_{\text{out}} \times W_{\text{out}}$$</li>
+    </ol>
+
+    <p>The ratio of computational FLOPs between Depthwise Separable Conv and Standard Conv is:</p>
+    $$\text{FLOP Ratio} = \frac{C_{\text{in}} K^2 \cdot HW + C_{\text{in}} C_{\text{out}} \cdot HW}{C_{\text{in}} C_{\text{out}} K^2 \cdot HW} = \frac{K^2 + C_{\text{out}}}{C_{\text{out}} K^2} = \mathbf{\frac{1}{C_{\text{out}}} + \frac{1}{K^2}}$$
+    <p>For standard $3 \times 3$ filters ($K=3$) and large channel depths ($C_{\text{out}} \ge 128$):</p>
+    $$\text{FLOP Ratio} \approx \frac{1}{K^2} = \frac{1}{9} \approx \mathbf{0.111} \implies \mathbf{89\% \text{ Reduction in Compute!}}$$
+
+    <!-- SECTION 5: RESNET & THE GRADIENT HIGHWAY -->
+    <h3>5. Deep Residual Networks (ResNet): The Identity Shortcut Highway</h3>
+    <p>Prior to 2015, stacking more than 20 convolutional layers resulted in the <strong>Degradation Problem</strong>: both training and test error increased sharply. This was not overfitting; it was an optimization failure caused by gradient attenuation and shattering across deep compositions.</p>
+
+    <p>Kaiming He et al. (2015) resolved this with the <strong>Residual Block (Skip Connection)</strong>:</p>
+    $$\mathbf{x}_{l+1} = \mathbf{x}_l + \mathcal{F}(\mathbf{x}_l, \mathcal{W}_l)$$
+    <p>where $\mathbf{x}_l$ is the identity shortcut passed directly around the convolutional residual branch $\mathcal{F}(\mathbf{x}_l, \mathcal{W}_l)$.</p>
+
+    <div class="real-world-box">
+      <h4>🏆 Mathematical Proof: Unattenuated Gradient Propagation in ResNet</h4>
+      <p>For any deep layer $L > l$, unrolling the residual recurrence yields:</p>
+      $$\mathbf{x}_L = \mathbf{x}_l + \sum_{i=l}^{L-1} \mathcal{F}(\mathbf{x}_i, \mathcal{W}_i)$$
+      <p>Computing the backpropagation gradient of the scalar loss $\mathcal{E}$ with respect to layer $l$ via the multivariable chain rule:</p>
+      $$\frac{\partial \mathcal{E}}{\partial \mathbf{x}_l} = \frac{\partial \mathcal{E}}{\partial \mathbf{x}_L} \frac{\partial \mathbf{x}_L}{\partial \mathbf{x}_l} = \frac{\partial \mathcal{E}}{\partial \mathbf{x}_L} \left( \mathbf{I} + \frac{\partial}{\partial \mathbf{x}_l} \sum_{i=l}^{L-1} \mathcal{F}(\mathbf{x}_i, \mathcal{W}_i) \right)$$
+      <p>Notice the identity matrix $\mathbf{I}$! Even if the gradient through the convolutional layers $\frac{\partial \mathcal{F}}{\partial \mathbf{x}_l}$ vanishes completely to zero, the identity term $\mathbf{I}$ guarantees that the error signal $\frac{\partial \mathcal{E}}{\partial \mathbf{x}_L}$ flows <strong>completely unattenuated directly back to layer $l$</strong>!</p>
+      <p>This formulation allowed He et al. to train networks <strong>152 layers deep</strong>, outperforming human vision on ImageNet 2015.</p>
+    </div>
+
+    <!-- SECTION 6: 4-TIER PRACTICE SUITE -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Computer Vision &amp; ResNets</h3>
+
+    <!-- PROBLEM 4.1.1: TIER 1 NUMERICAL WARMUP -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 4.1.1</span>
@@ -69,31 +115,412 @@
         <span class="company-tag company-meta">Meta</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Why does modern computer vision (e.g. VGG, ResNet) stack two consecutive $3 \times 3$ convolutional layers instead of using a single $5 \times 5$ convolutional layer? Compare the receptive field and calculate the exact parameter savings.</p>
+        <p><strong>QUESTION (Kernel Factorization Parameter &amp; FLOP Comparison):</strong> In modern computer vision architectures (e.g. VGG, ResNet), a single $5 \times 5$ convolution is replaced by a cascade of two consecutive $3 \times 3$ convolutions with stride $S=1$ and padding $P=1$. Let input and output channels be $C_{\text{in}} = C_{\text{out}} = C$, and feature map spatial dimension be $H \times W$.</p>
+        <ol>
+          <li>Prove that the receptive field of two stacked $3 \times 3$ convolutions equals the receptive field of a single $5 \times 5$ convolution.</li>
+          <li>Calculate the exact parameter ratio $\frac{P_{2 \times (3 \times 3)}}{P_{1 \times (5 \times 5)}}$ and compute the percentage savings.</li>
+          <li>Calculate the exact FLOP ratio and explain the additional representational advantage conferred by two non-linear activations.</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+        <div class="solution-label">✓ Complete Architectural &amp; Mathematical Solution</div>
 
-        <p class="step"><strong>Step 1: Receptive Field Calculation:</strong><br>
-        Let each layer have stride $S = 1$.<br>
-        The receptive field $RF_{l}$ after layer $l$ with kernel size $K_l$ is $RF_{l} = RF_{l-1} + (K_l - 1)$.<br>
-        After the 1st $3 \times 3$ conv: $RF_1 = 1 + (3 - 1) = 3 \times 3$.<br>
-        After the 2nd $3 \times 3$ conv: $RF_2 = 3 + (3 - 1) = \mathbf{5 \times 5}$.<br>
-        Two stacked $3 \times 3$ layers cover the <strong>exact same $5 \times 5$ spatial receptive field</strong> as a single $5 \times 5$ layer!</p>
-
-        <p class="step"><strong>Step 2: Parameter Count Comparison:</strong><br>
-        Let both architectures map $C$ input channels to $C$ output channels:
+        <p class="step"><strong>Step 1: Receptive Field Calculation:</strong>
+        Using the recursive formula $RF_l = RF_{l-1} + (k_l - 1) j_{l-1}$ with stride $s=1 \implies j=1$:
         <ul>
-          <li>Single $5 \times 5$ Conv: $5 \times 5 \times C \times C = \mathbf{25 C^2 \text{ parameters}}$.</li>
-          <li>Two $3 \times 3$ Convs: $2 \times (3 \times 3 \times C \times C) = 2 \times 9 C^2 = \mathbf{18 C^2 \text{ parameters}}$.</li>
+          <li>After Layer 1 ($3 \times 3$): $RF_1 = 1 + (3 - 1) \times 1 = 3 \times 3$</li>
+          <li>After Layer 2 ($3 \times 3$): $RF_2 = 3 + (3 - 1) \times 1 = \mathbf{5 \times 5}$</li>
         </ul>
-        $$\text{Parameter Reduction} = \frac{18 C^2}{25 C^2} = \mathbf{0.72} \implies \mathbf{28\% \text{ Fewer Parameters}}!$$
-        Furthermore, two stacked layers incorporate <strong>two non-linear activation functions (ReLUs)</strong> instead of one, giving the network higher non-linear discriminative power with 28% less compute!</p>
+        A single $5 \times 5$ conv with $k=5$ yields $RF = 1 + (5 - 1) = 5 \times 5$. The receptive fields are <strong>spatially identical</strong>.</p>
+
+        <p class="step"><strong>Step 2: Parameter Count Comparison:</strong>
+        Without biases:
+        <ul>
+          <li>Single $5 \times 5$ Conv: $P_{5 \times 5} = 5 \times 5 \times C \times C = 25 C^2$</li>
+          <li>Two $3 \times 3$ Convs: $P_{2 \times 3 \times 3} = 2 \times (3 \times 3 \times C \times C) = 2 \times 9 C^2 = 18 C^2$</li>
+        </ul>
+        $$\text{Parameter Ratio} = \frac{18 C^2}{25 C^2} = \mathbf{0.72} \implies \mathbf{28\% \text{ Fewer Parameters}}!$$</p>
+
+        <p class="step"><strong>Step 3: FLOP Ratio &amp; Non-Linear Capacity:</strong>
+        For feature map size $H \times W$, multiply-accumulate operations (MACs) are:
+        $$\text{MACs}_{5 \times 5} = 25 C^2 H W, \quad \text{MACs}_{2 \times 3 \times 3} = 18 C^2 H W$$
+        FLOPs are similarly reduced by $\mathbf{28\%}$.
+        Furthermore, two stacked layers incorporate <strong>two non-linear activations (e.g. ReLUs)</strong> rather than one. This expands the expressive capacity of the function hypothesis space, allowing the network to learn more discriminative non-linear decision boundaries with strictly fewer parameters.</p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 4.1: ResNet Residual Block in PyTorch</h3>
+    <!-- PROBLEM 4.1.2: TIER 1 NUMERICAL WARMUP -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.1.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-apple">Apple</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Comprehensive Receptive Field &amp; Output Sizing Drill):</strong> A convolutional neural network processes an input image of size $224 \times 224 \times 3$ through the following sequential layers:</p>
+        <ul>
+          <li><strong>Layer 1 (Conv1):</strong> Kernel $k_1 = 7 \times 7$, stride $s_1 = 2$, padding $p_1 = 3$.</li>
+          <li><strong>Layer 2 (MaxPool1):</strong> Kernel $k_2 = 3 \times 3$, stride $s_2 = 2$, padding $p_2 = 1$.</li>
+          <li><strong>Layer 3 (Conv2):</strong> Kernel $k_3 = 3 \times 3$, stride $s_3 = 1$, padding $p_3 = 1$.</li>
+          <li><strong>Layer 4 (Conv3):</strong> Kernel $k_4 = 3 \times 3$, stride $s_4 = 2$, padding $p_4 = 1$.</li>
+        </ul>
+        <ol>
+          <li>Calculate the spatial output dimensions $(H, W)$ at the output of each of the 4 layers.</li>
+          <li>Calculate the cumulative stride $j_l$ after each layer.</li>
+          <li>Calculate the exact theoretical receptive field $RF_l$ after each of the 4 layers.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Spatial &amp; Receptive Field Trace</div>
+
+        <p class="step"><strong>Step 1: Spatial Output Dimensions:</strong>
+        Formula: $W_{\text{out}} = \lfloor \frac{W_{\text{in}} + 2P - K}{S} \rfloor + 1$.
+        <ul>
+          <li><strong>Layer 1 (Conv1):</strong> $\lfloor \frac{224 + 2(3) - 7}{2} \rfloor + 1 = \lfloor \frac{223}{2} \rfloor + 1 = 111 + 1 = \mathbf{112 \times 112}$</li>
+          <li><strong>Layer 2 (MaxPool1):</strong> $\lfloor \frac{112 + 2(1) - 3}{2} \rfloor + 1 = \lfloor \frac{111}{2} \rfloor + 1 = 55 + 1 = \mathbf{56 \times 56}$</li>
+          <li><strong>Layer 3 (Conv2):</strong> $\lfloor \frac{56 + 2(1) - 3}{1} \rfloor + 1 = \lfloor \frac{55}{1} \rfloor + 1 = 55 + 1 = \mathbf{56 \times 56}$</li>
+          <li><strong>Layer 4 (Conv3):</strong> $\lfloor \frac{56 + 2(1) - 3}{2} \rfloor + 1 = \lfloor \frac{55}{2} \rfloor + 1 = 27 + 1 = \mathbf{28 \times 28}$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2 &amp; 3: Cumulative Stride $j_l$ and Receptive Field $RF_l$:</strong>
+        Recurrence: $j_0 = 1, RF_0 = 1$.
+        $$j_l = j_{l-1} \cdot s_l, \quad RF_l = RF_{l-1} + (k_l - 1) j_{l-1}$$
+
+        <table class="table table-bordered">
+          <thead>
+            <tr>
+              <th>Layer $l$</th>
+              <th>Kernel $k_l$</th>
+              <th>Stride $s_l$</th>
+              <th>Cumulative Jump $j_l$</th>
+              <th>Receptive Field $RF_l$ Calculation</th>
+              <th>$RF_l$</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Input (0)</strong></td>
+              <td>—</td>
+              <td>—</td>
+              <td>$j_0 = 1$</td>
+              <td>Base input pixel</td>
+              <td>$\mathbf{1 \times 1}$</td>
+            </tr>
+            <tr>
+              <td><strong>1 (Conv1)</strong></td>
+              <td>$7$</td>
+              <td>$2$</td>
+              <td>$j_1 = 1 \times 2 = 2$</td>
+              <td>$1 + (7 - 1) \times 1 = 1 + 6$</td>
+              <td>$\mathbf{7 \times 7}$</td>
+            </tr>
+            <tr>
+              <td><strong>2 (MaxPool1)</strong></td>
+              <td>$3$</td>
+              <td>$2$</td>
+              <td>$j_2 = 2 \times 2 = 4$</td>
+              <td>$7 + (3 - 1) \times 2 = 7 + 4$</td>
+              <td>$\mathbf{11 \times 11}$</td>
+            </tr>
+            <tr>
+              <td><strong>3 (Conv2)</strong></td>
+              <td>$3$</td>
+              <td>$1$</td>
+              <td>$j_3 = 4 \times 1 = 4$</td>
+              <td>$11 + (3 - 1) \times 4 = 11 + 8$</td>
+              <td>$\mathbf{19 \times 19}$</td>
+            </tr>
+            <tr>
+              <td><strong>4 (Conv3)</strong></td>
+              <td>$3$</td>
+              <td>$2$</td>
+              <td>$j_4 = 4 \times 2 = 8$</td>
+              <td>$19 + (3 - 1) \times 4 = 19 + 8$</td>
+              <td>$\mathbf{27 \times 27}$</td>
+            </tr>
+          </tbody>
+        </table>
+        After Layer 4, each output activation in the $28 \times 28$ feature map "sees" a window of $\mathbf{27 \times 27}$ pixels in the raw $224 \times 224$ input image.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.1.3: TIER 2 APPLIED ENGINEERING -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.1.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-nvidia">NVIDIA</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Depthwise Separable Convolution Hardware Audit):</strong> You are profiling a feature extraction block on an NVIDIA Jetson embedded GPU. The input feature map has spatial size $H = 14, W = 14$ with $C_{\text{in}} = 512$ channels. The target output has $C_{\text{out}} = 1024$ channels using kernel size $K = 3 \times 3$, stride $S = 1$, padding $P = 1$.</p>
+        <ol>
+          <li>Calculate the exact parameter count and FLOP count (Multiply-Accumulate operations) for a <strong>Standard 2D Convolution</strong>.</li>
+          <li>Calculate the exact parameter count and FLOP count for a <strong>Depthwise Separable Convolution</strong> (Depthwise $3 \times 3$ + Pointwise $1 \times 1$).</li>
+          <li>Compute the exact compression ratio and determine how many additional frames per second (FPS) this block can process under a compute-bound regime.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Systems &amp; Hardware Audit</div>
+
+        <p class="step"><strong>Step 1: Standard 2D Convolution:</strong>
+        Input: $14 \times 14 \times 512$. Output: $14 \times 14 \times 1024$.
+        <ul>
+          <li><strong>Parameters:</strong>
+          $$P_{\text{std}} = K \times K \times C_{\text{in}} \times C_{\text{out}} = 3 \times 3 \times 512 \times 1024 = 9 \times 524,288 = \mathbf{4,718,592 \text{ parameters}} \quad (\approx 4.72 \text{ M})$$</li>
+          <li><strong>FLOPs (MACs):</strong>
+          $$\text{MACs}_{\text{std}} = P_{\text{std}} \times H_{\text{out}} \times W_{\text{out}} = 4,718,592 \times 14 \times 14 = 4,718,592 \times 196 = \mathbf{924,844,032 \text{ MACs}} \quad (\approx 924.8 \text{ MMACs})$$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2: Depthwise Separable Convolution:</strong>
+        Decomposed into Depthwise ($3 \times 3$) and Pointwise ($1 \times 1$):
+        <ul>
+          <li><strong>Phase 1: Depthwise Conv ($3 \times 3$):</strong>
+          $$P_{\text{dw}} = K \times K \times C_{\text{in}} = 3 \times 3 \times 512 = 4,608 \text{ parameters}$$
+          $$\text{MACs}_{\text{dw}} = 4,608 \times 14 \times 14 = 4,608 \times 196 = \mathbf{903,168 \text{ MACs}}$$</li>
+          <li><strong>Phase 2: Pointwise Conv ($1 \times 1$):</strong>
+          $$P_{\text{pw}} = 1 \times 1 \times C_{\text{in}} \times C_{\text{out}} = 1 \times 1 \times 512 \times 1024 = \mathbf{524,288 \text{ parameters}}$$
+          $$\text{MACs}_{\text{pw}} = 524,288 \times 14 \times 14 = 524,288 \times 196 = \mathbf{102,760,448 \text{ MACs}}$$</li>
+          <li><strong>Total Separable:</strong>
+          $$P_{\text{sep}} = 4,608 + 524,288 = \mathbf{528,896 \text{ parameters}} \quad (\approx 0.53 \text{ M})$$
+          $$\text{MACs}_{\text{sep}} = 903,168 + 102,760,448 = \mathbf{103,663,616 \text{ MACs}} \quad (\approx 103.7 \text{ MMACs})$$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 3: Compression Ratio &amp; Throughput Speedup:</strong>
+        <ul>
+          <li>Parameter Savings:
+          $$\frac{P_{\text{sep}}}{P_{\text{std}}} = \frac{528,896}{4,718,592} \approx \mathbf{0.1121} \implies \mathbf{88.79\% \text{ parameter reduction}}$$</li>
+          <li>Compute Savings:
+          $$\frac{\text{MACs}_{\text{sep}}}{\text{MACs}_{\text{std}}} = \frac{103,663,616}{924,844,032} \approx \mathbf{0.1121} \implies \mathbf{88.79\% \text{ FLOP reduction}}$$</li>
+        </ul>
+        In a purely compute-bound regime, inference latency scales linearly with FLOP count:
+        $$\text{Speedup Factor} = \frac{924,844,032}{103,663,616} \approx \mathbf{8.92\times}$$
+        If the baseline standard convolution ran at $15 \text{ FPS}$, the depthwise separable block achieves $\approx 15 \times 8.92 = \mathbf{133.8 \text{ FPS}}$, elevating the model to real-time embedded viability!</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.1.4: TIER 2 APPLIED ENGINEERING -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.1.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-tesla">Tesla Autopilot</span>
+        <span class="company-tag company-waymo">Waymo</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Hand-Tracing 2D Conv Forward &amp; Backward Gradients):</strong> Consider a single-channel $3 \times 3$ input image $\mathbf{X}$ and a $2 \times 2$ kernel $\mathbf{W}$ (stride $S=1$, no padding $P=0$, zero bias $b=0$):</p>
+        $$\mathbf{X} = \begin{bmatrix} 1 & 2 & 0 \\ 0 & 3 & 1 \\ 2 & 1 & 2 \end{bmatrix}, \quad \mathbf{W} = \begin{bmatrix} 2 & -1 \\ 1 & 1 \end{bmatrix}$$
+        <ol>
+          <li>Compute the full $2 \times 2$ output feature map $\mathbf{Y} = \mathbf{X} * \mathbf{W}$.</li>
+          <li>Suppose the upstream loss gradient is $\frac{\partial \mathcal{L}}{\partial \mathbf{Y}} = \begin{bmatrix} 1 & -2 \\ 3 & 1 \end{bmatrix}$. Hand-trace and compute the weight gradient matrix $\frac{\partial \mathcal{L}}{\partial \mathbf{W}} \in \mathbb{R}^{2 \times 2}$.</li>
+          <li>Compute the input gradient matrix $\frac{\partial \mathcal{L}}{\partial \mathbf{X}} \in \mathbb{R}^{3 \times 3}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Forward &amp; Backward Hand-Trace</div>
+
+        <p class="step"><strong>Step 1: Forward 2D Convolution:</strong>
+        Output dimensions: $H_{\text{out}} = (3 - 2) + 1 = 2, W_{\text{out}} = 2$.
+        $$\mathbf{Y}_{ij} = \sum_{m=0}^1 \sum_{n=0}^1 \mathbf{X}_{i+m, j+n} \mathbf{W}_{mn}$$
+        <ul>
+          <li>$Y_{00} = (1)(2) + (2)(-1) + (0)(1) + (3)(1) = 2 - 2 + 0 + 3 = \mathbf{3}$</li>
+          <li>$Y_{01} = (2)(2) + (0)(-1) + (3)(1) + (1)(1) = 4 - 0 + 3 + 1 = \mathbf{8}$</li>
+          <li>$Y_{10} = (0)(2) + (3)(-1) + (2)(1) + (1)(1) = 0 - 3 + 2 + 1 = \mathbf{0}$</li>
+          <li>$Y_{11} = (3)(2) + (1)(-1) + (1)(1) + (2)(1) = 6 - 1 + 1 + 2 = \mathbf{8}$</li>
+        </ul>
+        $$\mathbf{Y} = \begin{bmatrix} 3 & 8 \\ 0 & 8 \end{bmatrix}$$</p>
+
+        <p class="step"><strong>Step 2: Weight Gradient $\frac{\partial \mathcal{L}}{\partial \mathbf{W}}$:</strong>
+        Let $\mathbf{G} = \frac{\partial \mathcal{L}}{\partial \mathbf{Y}} = \begin{bmatrix} 1 & -2 \\ 3 & 1 \end{bmatrix}$.
+        The gradient with respect to kernel weight $W_{mn}$ is the cross-correlation between input patches and upstream gradient $\mathbf{G}$:
+        $$\frac{\partial \mathcal{L}}{\partial W_{mn}} = \sum_{i=0}^1 \sum_{j=0}^1 G_{ij} X_{i+m, j+n}$$
+        <ul>
+          <li>$\frac{\partial \mathcal{L}}{\partial W_{00}} = (1)X_{00} + (-2)X_{01} + (3)X_{10} + (1)X_{11} = 1(1) - 2(2) + 3(0) + 1(3) = 1 - 4 + 0 + 3 = \mathbf{0}$</li>
+          <li>$\frac{\partial \mathcal{L}}{\partial W_{01}} = (1)X_{01} + (-2)X_{02} + (3)X_{11} + (1)X_{12} = 1(2) - 2(0) + 3(3) + 1(1) = 2 - 0 + 9 + 1 = \mathbf{12}$</li>
+          <li>$\frac{\partial \mathcal{L}}{\partial W_{10}} = (1)X_{10} + (-2)X_{11} + (3)X_{20} + (1)X_{21} = 1(0) - 2(3) + 3(2) + 1(1) = 0 - 6 + 6 + 1 = \mathbf{1}$</li>
+          <li>$\frac{\partial \mathcal{L}}{\partial W_{11}} = (1)X_{11} + (-2)X_{12} + (3)X_{21} + (1)X_{22} = 1(3) - 2(1) + 3(1) + 1(2) = 3 - 2 + 3 + 2 = \mathbf{6}$</li>
+        </ul>
+        $$\frac{\partial \mathcal{L}}{\partial \mathbf{W}} = \begin{bmatrix} 0 & 12 \\ 1 & 6 \end{bmatrix}$$</p>
+
+        <p class="step"><strong>Step 3: Input Gradient $\frac{\partial \mathcal{L}}{\partial \mathbf{X}}$:</strong>
+        The gradient with respect to input $\mathbf{X}$ is obtained by "full" convolution of upstream gradient $\mathbf{G}$ with the $180^\circ$-rotated kernel $\mathbf{W}^{\text{rot}} = \begin{bmatrix} 1 & 1 \\ -1 & 2 \end{bmatrix}$:
+        $$\frac{\partial \mathcal{L}}{\partial X_{rs}} = \sum_{i} \sum_{j} G_{ij} W_{r-i, s-j} \quad (\text{where } 0 \le r-i \le 1, 0 \le s-j \le 1)$$
+        <ul>
+          <li>$X_{00}: G_{00} W_{00} = (1)(2) = \mathbf{2}$</li>
+          <li>$X_{01}: G_{00} W_{01} + G_{01} W_{00} = 1(-1) + (-2)(2) = -1 - 4 = \mathbf{-5}$</li>
+          <li>$X_{02}: G_{01} W_{01} = (-2)(-1) = \mathbf{2}$</li>
+          <li>$X_{10}: G_{00} W_{10} + G_{10} W_{00} = 1(1) + 3(2) = 1 + 6 = \mathbf{7}$</li>
+          <li>$X_{11}: G_{00} W_{11} + G_{01} W_{10} + G_{10} W_{01} + G_{11} W_{00} = 1(1) + (-2)(1) + 3(-1) + 1(2) = 1 - 2 - 3 + 2 = \mathbf{-2}$</li>
+          <li>$X_{12}: G_{01} W_{11} + G_{11} W_{01} = (-2)(1) + 1(-1) = -2 - 1 = \mathbf{-3}$</li>
+          <li>$X_{20}: G_{10} W_{10} = (3)(1) = \mathbf{3}$</li>
+          <li>$X_{21}: G_{10} W_{11} + G_{11} W_{10} = 3(1) + 1(1) = 3 + 1 = \mathbf{4}$</li>
+          <li>$X_{22}: G_{11} W_{11} = (1)(1) = \mathbf{1}$</li>
+        </ul>
+        $$\frac{\partial \mathcal{L}}{\partial \mathbf{X}} = \begin{bmatrix} 2 & -5 & 2 \\ 7 & -2 & -3 \\ 3 & 4 & 1 \end{bmatrix}$$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.1.5: TIER 3 MATHEMATICAL PROOF -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.1.5</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google Brain</span>
+        <span class="company-tag company-deepmind">DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Mathematical Proof of Translational Equivariance):</strong> Let an image feature map be represented as a 2D discrete function $x: \mathbb{Z}^2 \to \mathbb{R}$, and a kernel as $w: \mathbb{Z}^2 \to \mathbb{R}$ with finite support. Define the translation operator $T_\mathbf{u}$ for any spatial displacement vector $\mathbf{u} = (u_1, u_2) \in \mathbb{Z}^2$ as:</p>
+        $$(T_\mathbf{u} x)(\mathbf{p}) = x(\mathbf{p} - \mathbf{u})$$
+        <ol>
+          <li>Prove that the 2D cross-correlation operator $(x * w)(\mathbf{p}) = \sum_{\mathbf{k} \in \mathbb{Z}^2} x(\mathbf{p} + \mathbf{k}) w(\mathbf{k})$ is strictly <strong>translationally equivariant</strong> with respect to $T_\mathbf{u}$:
+          $$(T_\mathbf{u} x) * w = T_\mathbf{u}(x * w)$$</li>
+          <li>Explain mathematically why introducing a subsampling operator with stride $S > 1$ (e.g. strided convolution or max-pooling) <strong>breaks strict translational equivariance</strong>, causing aliasing and high-frequency flicker in video models.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete First-Principles Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Proof of Translation Equivariance:</strong>
+        Let $y = x * w$. The translated output is:
+        $$(T_\mathbf{u} y)(\mathbf{p}) = y(\mathbf{p} - \mathbf{u}) = \sum_{\mathbf{k} \in \mathbb{Z}^2} x((\mathbf{p} - \mathbf{u}) + \mathbf{k}) w(\mathbf{k})$$
+        Now, consider applying the convolution operator to the translated input $\tilde{x} = T_\mathbf{u} x$:
+        $$(\tilde{x} * w)(\mathbf{p}) = \sum_{\mathbf{k} \in \mathbb{Z}^2} \tilde{x}(\mathbf{p} + \mathbf{k}) w(\mathbf{k})$$
+        By definition of the translation operator:
+        $$\tilde{x}(\mathbf{p} + \mathbf{k}) = (T_\mathbf{u} x)(\mathbf{p} + \mathbf{k}) = x((\mathbf{p} + \mathbf{k}) - \mathbf{u}) = x((\mathbf{p} - \mathbf{u}) + \mathbf{k})$$
+        Substituting this back:
+        $$(\tilde{x} * w)(\mathbf{p}) = \sum_{\mathbf{k} \in \mathbb{Z}^2} x((\mathbf{p} - \mathbf{u}) + \mathbf{k}) w(\mathbf{k}) = (T_\mathbf{u} y)(\mathbf{p}) = T_\mathbf{u}(x * w)(\mathbf{p})$$
+        Since this equality holds for all spatial coordinates $\mathbf{p} \in \mathbb{Z}^2$:
+        $$(T_\mathbf{u} x) * w = T_\mathbf{u}(x * w) \quad \blacksquare$$
+        The convolution operator commutes with translation, proving strict translation equivariance.</p>
+
+        <p class="step"><strong>Step 2: Breakdown Under Striding ($S > 1$):</strong>
+        Let $D_S$ be the downsampling operator with stride $S$:
+        $$(D_S y)(\mathbf{m}) = y(S \mathbf{m})$$
+        A strided convolution evaluates $f(x) = D_S (x * w)$.
+        Now compare the two paths:
+        <ul>
+          <li><strong>Path 1 (Translate input then strided conv):</strong>
+          $$f(T_\mathbf{u} x)(\mathbf{m}) = (T_\mathbf{u} (x * w))(S \mathbf{m}) = (x * w)(S \mathbf{m} - \mathbf{u})$$</li>
+          <li><strong>Path 2 (Strided conv then translate output by $\mathbf{v}$):</strong>
+          $$(T_\mathbf{v} f(x))(\mathbf{m}) = f(x)(\mathbf{m} - \mathbf{v}) = (x * w)(S (\mathbf{m} - \mathbf{v})) = (x * w)(S \mathbf{m} - S \mathbf{v})$$</li>
+        </ul>
+        For Path 1 and Path 2 to match, we require:
+        $$S \mathbf{v} = \mathbf{u} \implies \mathbf{v} = \frac{\mathbf{u}}{S}$$
+        Since $\mathbf{v} \in \mathbb{Z}^2$, this condition can <strong>only hold if the translation $\mathbf{u}$ is an exact integer multiple of the stride $S$</strong>!
+        For any sub-stride displacement (e.g. shifting an image by $\mathbf{u} = (1, 0)$ when $S = 2$), $\mathbf{v} = (0.5, 0) \notin \mathbb{Z}^2$.
+        The downsampled features change non-linearly, violating equivariance and causing high-frequency temporal flicker. This is why architectures like BlurPool (Zhang, 2019) apply anti-aliasing low-pass filters prior to downsampling.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.1.6: TIER 3 MATHEMATICAL PROOF -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.1.6</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-meta">Meta FAIR</span>
+        <span class="company-tag company-microsoft">Microsoft Research</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Mathematical Proof of the Necessity of Pure Identity Shortcuts):</strong> In their 2016 follow-up work <em>"Identity Mappings in Deep Residual Networks"</em>, He et al. analyzed generalized residual formulations:</p>
+        $$\mathbf{x}_{l+1} = \lambda_l \mathbf{x}_l + \mathcal{F}(\mathbf{x}_l, \mathcal{W}_l)$$
+        <p>where $\lambda_l$ is a scalar shortcut multiplier (e.g., $\lambda_l = 0.9$ or a gating factor $\sigma(z) < 1$).</p>
+        <ol>
+          <li>Derive the unrolled forward equation for $\mathbf{x}_L$ from an arbitrary shallow layer $\mathbf{x}_l$ as a function of the scalar product $\prod_{i=l}^{L-1} \lambda_i$.</li>
+          <li>Derive the exact backward loss gradient $\frac{\partial \mathcal{E}}{\partial \mathbf{x}_l}$ in terms of $\frac{\partial \mathcal{E}}{\partial \mathbf{x}_L}$.</li>
+          <li>Prove that if $\lambda_i = \lambda < 1$ for all layers, the error signal decays exponentially as $\mathcal{O}(\lambda^{L-l})$, reintroducing the exact vanishing gradient failure that ResNet was designed to eliminate!</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete First-Principles Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Unrolling the Generalized Residual Recurrence:</strong>
+        Starting from $\mathbf{x}_{l+1} = \lambda_l \mathbf{x}_l + \mathcal{F}_l$:
+        $$\mathbf{x}_{l+2} = \lambda_{l+1} \mathbf{x}_{l+1} + \mathcal{F}_{l+1} = \lambda_{l+1} \lambda_l \mathbf{x}_l + \lambda_{l+1} \mathcal{F}_l + \mathcal{F}_{l+1}$$
+        By mathematical induction, for any layer $L > l$:
+        $$\mathbf{x}_L = \left( \prod_{i=l}^{L-1} \lambda_i \right) \mathbf{x}_l + \sum_{i=l}^{L-1} \left( \prod_{j=i+1}^{L-1} \lambda_j \right) \mathcal{F}(\mathbf{x}_i, \mathcal{W}_i)$$</p>
+
+        <p class="step"><strong>Step 2: Backward Loss Gradient Derivation:</strong>
+        Differentiating the scalar loss $\mathcal{E}$ with respect to $\mathbf{x}_l$ using the multivariable chain rule:
+        $$\frac{\partial \mathcal{E}}{\partial \mathbf{x}_l} = \frac{\partial \mathcal{E}}{\partial \mathbf{x}_L} \frac{\partial \mathbf{x}_L}{\partial \mathbf{x}_l} = \frac{\partial \mathcal{E}}{\partial \mathbf{x}_L} \left[ \left(\prod_{i=l}^{L-1} \lambda_i\right) \mathbf{I} + \frac{\partial}{\partial \mathbf{x}_l} \sum_{i=l}^{L-1} \left(\prod_{j=i+1}^{L-1} \lambda_j\right) \mathcal{F}_i \right]$$</p>
+
+        <p class="step"><strong>Step 3: Exponential Decay Proof for $\lambda < 1$:</strong>
+        Assume a constant scaling factor $\lambda_i = \lambda < 1$ across all layers (e.g. $\lambda = 0.9$):
+        $$\prod_{i=l}^{L-1} \lambda_i = \lambda^{L - l}$$
+        The gradient expression becomes:
+        $$\frac{\partial \mathcal{E}}{\partial \mathbf{x}_l} = \frac{\partial \mathcal{E}}{\partial \mathbf{x}_L} \left[ \lambda^{L - l} \mathbf{I} + \frac{\partial}{\partial \mathbf{x}_l} \sum_{i=l}^{L-1} \lambda^{L - 1 - i} \mathcal{F}_i \right]$$
+        For a deep 152-layer network with $(L - l) = 100$ and $\lambda = 0.9$:
+        $$\lambda^{100} = 0.9^{100} \approx 2.65 \times 10^{-5}$$
+        The identity shortcut term $\lambda^{L-l} \mathbf{I}$ attenuates to zero exponentially! The gradient signal from the loss cannot reach shallow layers.
+        Conversely, if $\lambda > 1$ (e.g. $\lambda = 1.1$), $\lambda^{100} \approx 13,780$, causing exponential gradient explosion.
+        Therefore, $\lambda = \mathbf{1.0}$ is the <strong>unique singular operating point</strong> that allows gradient signals to propagate across arbitrarily deep networks without exponential decay or explosion ($\mathbf{1}^{L-l} = 1.0 \ \forall L, l$). This proves that identity mappings are mathematically non-negotiable for extreme depth. $\quad \blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.1.7: TIER 4 CONCEPTUAL TRAP MCQ -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.1.7</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-tesla">Tesla</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (The 1x1 Convolution Mathematical Interpretation Trap):</strong> What algebraic operation does a $1 \times 1$ convolutional layer with $C_{\text{out}}$ filters and bias perform on an input tensor $\mathbf{X} \in \mathbb{R}^{B \times C_{\text{in}} \times H \times W}$?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> It computes a 2D spatial blur across adjacent $H \times W$ coordinates while preserving channel depth.</li>
+          <li><strong>(B)</strong> It applies an independent Multi-Layer Perceptron (Dense Linear Projection) $\mathbf{y} = \mathbf{W}\mathbf{x} + \mathbf{b}$ across the $C_{\text{in}}$ channels at <em>each spatial coordinate $(h, w)$ independently</em>, with identical shared weights across all $H \times W$ spatial locations.</li>
+          <li><strong>(C)</strong> It computes a spatial pooling operation that reduces $H \times W$ to $1 \times 1$.</li>
+          <li><strong>(D)</strong> It acts as a Fast Fourier Transform converting spatial frequencies into spectral coefficients.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: (B)</div>
+
+        <p class="step"><strong>Exhaustive Distractor Analysis:</strong>
+        <ul>
+          <li><strong>(B) is CORRECT:</strong> A $1 \times 1$ convolution has kernel spatial dimensions $1 \times 1$. At each pixel location $(h, w)$, the input slice is a 1D vector $\mathbf{x}_{h, w} \in \mathbb{R}^{C_{\text{in}}}$. The layer computes:
+          $$\mathbf{y}_{h, w} = \mathbf{W} \mathbf{x}_{h, w} + \mathbf{b} \in \mathbb{R}^{C_{\text{out}}}$$
+          where $\mathbf{W} \in \mathbb{R}^{C_{\text{out}} \times C_{\text{in}}}$ is the weight matrix. Because the identical weight matrix $\mathbf{W}$ is applied across all $H \times W$ spatial coordinates, a $1 \times 1$ conv is mathematically identical to a <strong>Shared Dense Linear Layer applied independently along the channel axis</strong>! This allows cross-channel information fusion and dimensionality reduction (e.g. shrinking $512$ channels down to $64$ in ResNet bottleneck blocks) without altering spatial resolution.</li>
+          <li><strong>(A) is INCORRECT:</strong> A $1 \times 1$ conv has zero spatial extent; it cannot blur or mix adjacent pixels in $(H, W)$.</li>
+          <li><strong>(C) is INCORRECT:</strong> Global Average Pooling reduces spatial dimensions to $1 \times 1$; a $1 \times 1$ conv preserves the spatial dimensions $H \times W$ exactly.</li>
+          <li><strong>(D) is INCORRECT:</strong> $1 \times 1$ convolution is a standard linear matrix projection, not a Fourier transform.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.1.8: TIER 4 CONCEPTUAL TRAP MCQ -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.1.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-waymo">Waymo</span>
+        <span class="company-tag company-cruise">Cruise</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Dilated Convolutions and The Gridding Artifact Pathology):</strong> In semantic segmentation and autonomous driving perception, <strong>Dilated (Atrous) Convolutions</strong> are used to expand the receptive field without downsampling spatial resolution. However, stacking multiple layers with the same dilation rate $D=2$ creates severe <strong>Gridding Artifacts (Checkerboard Effect)</strong>. Which of the following explanations correctly identifies the mathematical cause and the structural solution?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> Dilated convolution introduces negative eigenvalues into the kernel Gram matrix; the solution is spectral norm regularizer.</li>
+          <li><strong>(B)</strong> When consecutive layers share dilation rate $D > 1$, a kernel only samples every $D$-th location, skipping intermediate pixels entirely. Stacking layers with identical dilation rate $D=2$ partitions the image into $D \times D = 4$ mutually disjoint, uncoupled grids where pixels never exchange information, causing localized pixelation. The solution is <strong>Hybrid Dilated Convolution (HDC)</strong>, varying dilation rates across layers (e.g. $D = [1, 2, 3]$) such that the greatest common divisor $\gcd(D_1, D_2, \dots) = 1$.</li>
+          <li><strong>(C)</strong> Dilation rates greater than 1 cause floating-point NaN underflow in CUDA Tensor Cores; the solution is switching to FP64 precision.</li>
+          <li><strong>(D)</strong> Gridding artifacts are caused by Batch Normalization running statistics during inference; the solution is replacing BatchNorm with GroupNorm.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: (B)</div>
+
+        <p class="step"><strong>Exhaustive Computer Vision Analysis:</strong>
+        <ul>
+          <li><strong>(B) is CORRECT:</strong> A 1D dilated convolution with dilation $D=2$ samples inputs at indices $\{i - 2, i, i + 2\}$. If three consecutive layers use $D=2$, the effective receptive field samples a sparse grid with step size 2. An entire subgrid of pixels at odd indices $\{i - 1, i + 1, i + 3\}$ is completely skipped and has zero contribution to the output neuron! In 2D, this creates four completely independent checkerboard subgrids that never aggregate contextual information across one another. Wang et al. (2018) introduced <strong>Hybrid Dilated Convolution (HDC)</strong> to eliminate this pathology by enforcing a sawtooth dilation schedule (e.g. $D_1 = 1, D_2 = 2, D_3 = 3$) satisfying $M_i = \max(M_{i+1} - 2 D_i, M_{i+1} - 2(M_{i+1} - D_i), D_i) \le K$, guaranteeing complete, gap-free receptive field coverage!</li>
+          <li><strong>(A) is INCORRECT:</strong> Gridding is a spatial sampling coverage pathology, completely unrelated to kernel eigenvalues.</li>
+          <li><strong>(C) is INCORRECT:</strong> Dilation is an index stride lookup in memory; it does not alter numerical stability or cause NaNs.</li>
+          <li><strong>(D) is INCORRECT:</strong> While normalization choice affects training stability, it cannot fill spatial sampling gaps created by dilated convolution grids.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- SECTION 7: PRODUCTION CODE LAB -->
+    <h3>6. Production Code Lab 4.1: ResNet Residual Block in PyTorch</h3>
     <p>Below is an industrial implementation of the classical ResNet Residual Block with 1x1 projection shortcuts and batch normalization in PyTorch.</p>
 
     <div class="code-lab">
@@ -117,7 +544,7 @@ class ResidualBlock(nn.Module):
         # Shortcut connection
         self.shortcut = nn.Sequential()
         if stride != 1 or in_channels != out_channels:
-            # 1x1 conv to match dimensions
+            # 1x1 conv projection to match spatial dimensions and channel depth
             self.shortcut = nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False),
                 nn.BatchNorm2d(out_channels)
@@ -127,7 +554,7 @@ class ResidualBlock(nn.Module):
         residual = self.shortcut(x)
         out = self.relu(self.bn1(self.conv1(x)))
         out = self.bn2(self.conv2(out))
-        out += residual # Identity skip connection!
+        out += residual # Identity skip connection highway!
         return self.relu(out)
 
 if __name__ == "__main__":
@@ -138,7 +565,7 @@ if __name__ == "__main__":
     print(f"ResNet Block Output Shape: {out.shape} (Downsampled by 2x, Channels doubled!)")</code></pre>
     </div>
 
-    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <!-- SECTION 8: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 4.1 Dedicated Project &amp; Case Study</span>

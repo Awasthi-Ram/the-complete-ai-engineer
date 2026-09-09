@@ -1,0 +1,1105 @@
+================================================================================
+[Chapter 0.1] How to Learn AI (2287 words)
+Subtitle: The AI Engineer Operating System, Hardware Foundations &amp; Cognitive Architecture
+File: ch01_how_to_learn.html
+Sections (H3):
+   - 1. The Cognitive Architecture of AI Engineering
+   - 2. The Tripartite Mastery Model
+   - 3. Hardware Realities: CPUs, GPUs, TPUs &amp; Memory Bandwidth
+   - FAANG &amp; Tier-1 AI Interview Problems — Hardware &amp; Mathematical Fundamentals
+   - 4. Production Code Lab 0.1: The AI Engineer Hardware Benchmark Suite
+Subsections (H4 sample):
+     * 🏢 Real-World Problem Mapping: The Multi-Million Dollar Medical AI Collapse
+     * The CPU vs. GPU Microarchitecture Divide
+Practice Problems (2):
+     ? You are tasked with sizing the GPU cluster infrastructure for training a 70-billion parameter decoder-only transformer m...
+     ? Explain the architectural differences between IEEE 754 Single-Precision (FP32), Half-Precision (FP16), and Bfloat16 (Bra...
+Code Labs (1):
+     [LAB] Code Lab 0.1 — Hardware Telemetry &amp; Memory Bandwidth Profiler
+
+================================================================================
+[Chapter 0.2] Python Foundations for AI: A to Z (2400 words)
+Subtitle: CPython Internals, Memory Allocation, OOP, Concurrency &amp; Advanced Paradigms
+File: ch02_python_a_to_z.html
+Sections (H3):
+   - 1. The CPython Execution Model &amp; Memory Internals
+   - 2. Reference Counting &amp; The Tri-Generational Garbage Collector
+   - 3. Core Data Structures: Time Complexity &amp; Memory Layout
+   - 4. First-Class Functions, Closures &amp; Production Decorators
+   - 5. Generators, Iterators &amp; Memory-Efficient Streaming
+   - 7. Concurrency, Parallelism &amp; The Global Interpreter Lock (GIL)
+   - FAANG &amp; Tier-1 AI Interview Problems — Advanced Python Systems
+   - 8. Production Code Lab 0.2: Custom Tensor Container from First Principles
+Subsections (H4 sample):
+     * From Source Code to Machine Silicon
+     * Primary System: Reference Counting
+     * Secondary System: Cyclic Garbage Collection (Generations 0, 1, 2)
+     * The Mechanics of a Decorator
+     * Essential Dunder (Double Underscore) Methods for AI Engineers
+     * Threading vs. Multiprocessing Decision Matrix
+Practice Problems (1):
+     ? Design and implement a thread-safe ...
+Code Labs (1):
+     [LAB] Code Lab 0.2 — Pure Python Strided Tensor Engine
+
+================================================================================
+[Chapter 0.3] The AI Toolchain (1281 words)
+Subtitle: NumPy SIMD Vectorization, Pandas Data Wrangling &amp; PyTorch GPU Tensors
+File: ch03_ai_toolchain.html
+Sections (H3):
+   - 1. NumPy &amp; C-BLAS Under the Hood
+   - 2. The Universal Broadcasting Rules
+   - 3. PyTorch Tensor Mechanics &amp; GPU Memory Allocators
+   - FAANG &amp; Tier-1 AI Interview Problems — Vectorization &amp; Memory Geometry
+   - 4. Production Code Lab 0.3: SIMD Vectorization vs. Python Loops
+Subsections (H4 sample):
+     * 📐 The Two Immutable Rules of Broadcasting
+     * Broadcasting Trace Example
+     * Host-to-Device Bottlenecks &amp; Page-Locked (Pinned) Memory
+Practice Problems (1):
+     ? You are given two matrices of embedding vectors: $X \in \mathbb{R}^{M \times D}$ and $Y \in \mathbb{R}^{N \times D}$. Yo...
+Code Labs (1):
+     [LAB] Code Lab 0.3 — The 100x Speedup of Vectorization
+
+================================================================================
+[Chapter 0.4] Large-Scale Data Systems for AI (1216 words)
+Subtitle: Apache Arrow, Parquet, Polars, DuckDB &amp; Distributed Ray
+File: ch04_large_scale_data.html
+Sections (H3):
+   - 1. The Columnar Storage Revolution
+   - 2. Apache Arrow: The Universal In-Memory Standard
+   - 3. High-Performance Engines: Polars &amp; DuckDB
+   - 4. Distributed Compute with Ray
+   - FAANG &amp; Tier-1 AI Interview Problems — Large-Scale Data Systems
+   - 5. Production Code Lab 0.4: Benchmarking CSV vs. Parquet vs. Polars
+Subsections (H4 sample):
+     * The Core Primitives of Ray
+Practice Problems (1):
+     ? You are architecting the training data pipeline for a video recommendation model training on 50 Terabytes of user watch ...
+Code Labs (1):
+     [LAB] Code Lab 0.4 — High-Throughput Columnar Data Processing
+
+================================================================================
+[Chapter 1.1] Linear Algebra &amp; Matrix Decompositions (1976 words)
+Subtitle: Vectors, High-Dimensional Geometry, SVD, Eckart-Young &amp; Pseudoinverses
+File: ch11_linear_algebra.html
+Sections (H3):
+   - 1. Geometric Foundations: Space, Bases &amp; Projections
+   - 2. Matrix Multiplication: Four Perspectives
+   - 3. Singular Value Decomposition (SVD) &amp; The Eckart-Young Theorem
+   - 4. The Moore-Penrose Pseudoinverse
+   - FAANG &amp; Tier-1 AI Interview Problems — Linear Algebra &amp; SVD
+   - 5. Production Code Lab 1.1: Truncated SVD from First Principles
+Subsections (H4 sample):
+     * Linear Combinations, Span &amp; Linear Independence
+     * The Dot Product, Norms &amp; Cosine Similarity
+     * The Eckart-Young-Mirsky Theorem
+     * 🏆 The Eckart-Young-Mirsky Theorem (1936)
+     * Properties of the Pseudoinverse
+Practice Problems (2):
+     ? You are building a movie recommendation engine for a streaming platform with $M = 10,000$ users and $N = 2,000$ movies. ...
+     ? Let $\mathbf{u}, \mathbf{v} \in \mathbb{R}^d$ be two non-zero embedding vectors. Derive the analytical gradient of the C...
+Code Labs (1):
+     [LAB] Code Lab 1.1 — SVD Matrix Compression &amp; Frobenius Error Verification
+
+================================================================================
+[Chapter 1.2] Multivariable Calculus &amp; Automatic Differentiation (1423 words)
+Subtitle: Gradients, Jacobians, Hessians, Vector-Jacobian Products &amp; Autograd from Scratch
+File: ch12_calculus_autograd.html
+Sections (H3):
+   - 1. Gradients: The Direction of Steepest Descent
+   - 2. Higher-Order Derivatives: Jacobians &amp; Hessians
+   - 3. Forward-Mode vs. Reverse-Mode Automatic Differentiation
+   - FAANG &amp; Tier-1 AI Interview Problems — Calculus &amp; Gradients
+   - 5. Production Code Lab 1.2: A Micro-Autograd Engine from Scratch
+Subsections (H4 sample):
+     * The Gradient Vector
+     * 📐 Mathematical Proof: Why the Gradient Points in the Direction of Steepest Ascent
+     * The Jacobian Matrix (Vector-to-Vector Derivatives)
+     * The Hessian Matrix &amp; Loss Surface Curvature
+Practice Problems (1):
+     ? In classification models, the Softmax activation function maps raw logit scores $\mathbf{z} \in \mathbb{R}^C$ into proba...
+Code Labs (1):
+     [LAB] Code Lab 1.2 — Micro-Autograd Scalar Engine
+
+================================================================================
+[Chapter 1.3] Probability &amp; Bayesian Inference (1369 words)
+Subtitle: Uncertainty, Bayes' Theorem, Gaussian Distributions &amp; Maximum Likelihood Estimation
+File: ch13_probability_bayes.html
+Sections (H3):
+   - 1. The Mathematics of Uncertainty
+   - 2. Conditional Probability &amp; Bayes' Theorem
+   - 3. Estimation Theory: MLE, MAP &amp; The Loss Function Bridge
+   - FAANG &amp; Tier-1 AI Interview Problems — Probability &amp; Estimation
+   - 4. Production Code Lab 1.3: Monte Carlo Probability &amp; Bayesian Updating
+Subsections (H4 sample):
+     * Kolmogorov's Axioms of Probability
+     * 🏆 Bayes' Theorem Dissected
+     * Maximum Likelihood Estimation (MLE)
+Practice Problems (2):
+     ? A rare medical condition affects $0.1\%$ of the population ($P(D) = 0.001$). A diagnostic AI model achieves a $99\%$ Tru...
+     ? Prove mathematically from first principles that maximizing the Log-Likelihood of a linear regression model with Gaussian...
+Code Labs (1):
+     [LAB] Code Lab 1.3 — Bayesian Updating &amp; Monte Carlo Engine
+
+================================================================================
+[Chapter 1.4] Information Theory (1188 words)
+Subtitle: Surprise, Shannon Entropy, Cross-Entropy &amp; KL Divergence
+File: ch14_information_theory.html
+Sections (H3):
+   - 1. Quantifying Uncertainty: Surprise &amp; Entropy
+   - 2. Cross-Entropy &amp; Kullback-Leibler (KL) Divergence
+   - FAANG &amp; Tier-1 AI Interview Problems — Information Theory
+   - 3. Production Code Lab 1.4: Information Theory Engine
+Subsections (H4 sample):
+     * The Mathematical Definition of Surprise
+     * Shannon Entropy
+     * Kullback-Leibler (KL) Divergence (Relative Entropy)
+     * The Asymmetry of KL Divergence: Forward vs. Reverse KL
+Practice Problems (1):
+     ? Prove ...
+Code Labs (1):
+     [LAB] Code Lab 1.4 — Entropy, Cross-Entropy &amp; KL Divergence Calculator
+
+================================================================================
+[Chapter 1.5] Convex Optimization &amp; Duality (1208 words)
+Subtitle: Convex Sets, The Lagrangian, KKT Conditions &amp; The Dual Problem
+File: ch15_convex_optimization.html
+Sections (H3):
+   - 1. The Geometry of Convexity
+   - 2. Constrained Optimization &amp; The Karush-Kuhn-Tucker (KKT) Conditions
+   - FAANG &amp; Tier-1 AI Interview Problems — Optimization &amp; KKT
+   - 3. Production Code Lab 1.5: Constrained Optimization with Projected Gradient Descent
+Subsections (H4 sample):
+     * Convex Sets &amp; Convex Functions
+     * The Lagrangian Function
+     * 🏆 The Karush-Kuhn-Tucker (KKT) Conditions
+Practice Problems (1):
+     ? In a Hard-Margin Support Vector Machine, we seek a hyperplane $(\mathbf{w}, b)$ that separates two classes with maximum ...
+Code Labs (1):
+     [LAB] Code Lab 1.5 — Projected Gradient Descent on the Probability Simplex
+
+================================================================================
+[Chapter 2.10] Reinforcement Learning: From Bellman Equations to Deep Q-Networks (2214 words)
+Subtitle: MDPs, Value Functions, Q-Learning, Policy Gradients, DQN &amp; PPO
+File: ch210_reinforcement_learning.html
+Sections (H3):
+   - 1. The Third Paradigm of Machine Learning
+   - 2. Markov Decision Processes (MDPs)
+   - 3. Value Functions &amp; The Bellman Equations
+   - 4. Q-Learning: Model-Free Temporal Difference Learning
+   - 5. Deep Q-Networks (DQN): Mnih et al., DeepMind 2013
+   - 6. Policy Gradient Methods: REINFORCE &amp; Actor-Critic
+   - 7. Proximal Policy Optimization (PPO): Schulman et al., 2017
+   - FAANG &amp; Tier-1 AI Interview Problems — Reinforcement Learning
+   - 8. Production Code Lab 2.10: Tabular Q-Learning from Scratch
+Subsections (H4 sample):
+     * The Goal: Maximize Cumulative Discounted Return
+     * The State-Value Function $V^\pi(s)$
+     * The Action-Value Function $Q^\pi(s, a)$
+     * 🏆 The Bellman Equation: The Foundation of All RL Algorithms
+     * The Exploration-Exploitation Dilemma
+     * Two Critical Innovations of DQN
+Practice Problems (1):
+     ? Consider a simple grid-world MDP with discount factor $\gamma = 0.9$....
+Code Labs (1):
+     [LAB] Code Lab 2.10 — Q-Learning Agent from First Principles
+
+================================================================================
+[Chapter 2.1] The ML Paradigm &amp; Generalization Theory (1187 words)
+Subtitle: Inductive Bias, The No Free Lunch Theorem &amp; The Bias-Variance Decomposition
+File: ch21_ml_paradigm.html
+Sections (H3):
+   - 1. The Fundamental Paradigm Shift
+   - 2. The Bias-Variance Decomposition
+   - FAANG &amp; Tier-1 AI Interview Problems — Generalization Theory
+   - 3. Production Code Lab 2.1: Purged &amp; Embargoed Cross-Validation
+Subsections (H4 sample):
+     * The No Free Lunch Theorem &amp; Inductive Bias
+     * 🏆 The Bias-Variance Identity
+Practice Problems (1):
+     ? Prove the ...
+Code Labs (1):
+     [LAB] Code Lab 2.1 — Purged &amp; Embargoed Time-Series Cross-Validator
+
+================================================================================
+[Chapter 2.2] Linear Regression: Normal Equations &amp; SGD (1446 words)
+Subtitle: Ordinary Least Squares, Matrix Calculus, Ridge, Lasso &amp; Coordinate Descent
+File: ch22_linear_regression.html
+Sections (H3):
+   - 1. The Ordinary Least Squares (OLS) Formulation
+   - 2. Analytical Solution: The Normal Equations
+   - 3. Regularization: Ridge ($L_2$) vs. Lasso ($L_1$)
+   - FAANG &amp; Tier-1 AI Interview Problems — Linear Models
+   - 4. Production Code Lab 2.2: OLS vs. Mini-Batch SGD from Scratch
+Subsections (H4 sample):
+     * Ridge Regression ($L_2$ Regularization)
+     * Lasso Regression ($L_1$ Regularization &amp; Exact Sparsity)
+Practice Problems (1):
+     ? In high-dimensional linear regression where the number of features exceeds observations ($d &gt; N$):...
+Code Labs (1):
+     [LAB] Code Lab 2.2 — OLS Normal Equations vs. Mini-Batch SGD
+
+================================================================================
+[Chapter 2.3] Logistic Regression &amp; Maximum Likelihood (1196 words)
+Subtitle: Odds Ratios, The Sigmoid Identity, BCE Loss &amp; Iteratively Reweighted Least Squares
+File: ch23_logistic_regression.html
+Sections (H3):
+   - 1. From Linear Output to Calibrated Probability
+   - 2. Binary Cross-Entropy Loss &amp; The Gradient Identity
+   - FAANG &amp; Tier-1 AI Interview Problems — Logistic Regression
+   - 3. Production Code Lab 2.3: Logistic Regression with Newton-Raphson IRLS
+Subsections (H4 sample):
+     * The Log-Odds (Logit) Transformation
+     * Deriving the Gradient Vector
+Practice Problems (1):
+     ? Prove that Binary Cross-Entropy loss for Logistic Regression is ...
+Code Labs (1):
+     [LAB] Code Lab 2.3 — Logistic Regression &amp; Second-Order IRLS Solver
+
+================================================================================
+[Chapter 2.4] Decision Trees &amp; Information Gain (1223 words)
+Subtitle: CART, Gini Impurity, Axis-Aligned Partitioning &amp; Cost-Complexity Pruning
+File: ch24_decision_trees.html
+Sections (H3):
+   - 1. The Recursive Axis-Aligned Partitioning Paradigm
+   - 2. Splitting Criteria: Gini Impurity vs. Entropy
+   - 3. Overfitting &amp; Minimal Cost-Complexity Pruning
+   - FAANG &amp; Tier-1 AI Interview Problems — Decision Trees
+   - 4. Production Code Lab 2.4: CART Decision Tree from First Principles
+Subsections (H4 sample):
+     * Gini Impurity (Breiman's CART)
+     * Information Gain
+     * Minimal Cost-Complexity Pruning ($L_0$ Regularization)
+Practice Problems (1):
+     ? A parent node $S$ contains $N = 10$ samples: $6$ Positive ($+$) and $4$ Negative ($-$). A candidate split partitions the...
+Code Labs (1):
+     [LAB] Code Lab 2.4 — Recursive Binary CART Classifier
+
+================================================================================
+[Chapter 2.5] Ensemble Methods: Random Forests &amp; Bagging (1298 words)
+Subtitle: Variance Reduction, The 63.2% Bootstrap Theorem, Out-of-Bag Error &amp; Feature Importance
+File: ch25_random_forests.html
+Sections (H3):
+   - 1. The Mathematics of Ensemble Variance Reduction
+   - 2. Bootstrap Aggregation (Bagging) &amp; The 63.2% Theorem
+   - 3. Random Forests: Random Feature Subspaces
+   - FAANG &amp; Tier-1 AI Interview Problems — Ensembles
+   - 4. Production Code Lab 2.5: Random Forest with OOB Scoring from Scratch
+Subsections (H4 sample):
+     * The Variance of Averaged Correlated Estimators
+     * 📐 The 63.2% Bootstrap Theorem Dissected
+     * Out-of-Bag (OOB) Validation Error
+Practice Problems (1):
+     ? You are training an ensemble of $B = 100$ classifiers to predict fraudulent financial transactions. Each individual clas...
+Code Labs (1):
+     [LAB] Code Lab 2.5 — Random Forest &amp; Out-of-Bag Evaluator
+
+================================================================================
+[Chapter 2.5B] Gradient Boosted Decision Trees (GBDT) (1268 words)
+Subtitle: Functional Gradient Descent, The XGBoost Taylor Expansion, LightGBM GOSS &amp; CatBoost
+File: ch25b_gradient_boosting.html
+Sections (H3):
+   - 1. From Bagging to Boosting: Functional Gradient Descent
+   - 2. The XGBoost Formulation: Second-Order Taylor Expansion
+   - 3. High-Scale Engineering: LightGBM &amp; CatBoost
+   - FAANG &amp; Tier-1 AI Interview Problems — Gradient Boosting
+   - 4. Production Code Lab 2.5B: Minimal Gradient Boosting Regressor
+Subsections (H4 sample):
+     * Gradient Boosting as Gradient Descent in Function Space
+     * 🏆 The XGBoost Objective Derivation
+     * LightGBM (Microsoft Research)
+     * CatBoost (Yandex)
+Practice Problems (1):
+     ? In XGBoost, prove why the regularization parameter $\lambda$ in the denominator of the optimal leaf weight formula $w_j^...
+Code Labs (1):
+     [LAB] Code Lab 2.5B — Gradient Boosting Regressor from Scratch
+
+================================================================================
+[Chapter 2.6] Support Vector Machines &amp; Kernel Methods (996 words)
+Subtitle: Geometric Margins, Slack Variables, Mercer's Theorem &amp; Infinite-Dimensional Hilbert Spaces
+File: ch26_svm.html
+Sections (H3):
+   - 1. The Maximum Margin Principle
+   - 2. Soft-Margin SVM &amp; Hinge Loss
+   - 3. The Kernel Trick: Mapping into Infinite Dimensions
+   - FAANG &amp; Tier-1 AI Interview Problems — Support Vector Machines
+   - 4. Production Code Lab 2.6: Pegasos Stochastic Subgradient SVM
+Subsections (H4 sample):
+     * Derivation of the Geometric Margin
+     * The Radial Basis Function (RBF / Gaussian) Kernel
+Practice Problems (1):
+     ? Prove mathematically that the 1D Radial Basis Function (RBF) Kernel $K(x, z) = \exp\left( -\frac{(x - z)^2}{2} \right)$ ...
+Code Labs (1):
+     [LAB] Code Lab 2.6 — Pegasos Linear SVM from Scratch
+
+================================================================================
+[Chapter 2.7] Unsupervised Learning: K-Means++ &amp; PCA (1166 words)
+Subtitle: Clustering Inertia, The K-Means++ $D^2$ Theorem &amp; PCA Variance Maximization
+File: ch27_unsupervised_kmeans_pca.html
+Sections (H3):
+   - 1. K-Means Clustering &amp; The $D^2$ Initialization Theorem
+   - 2. Principal Component Analysis (PCA): Maximum Variance
+   - FAANG &amp; Tier-1 AI Interview Problems — Unsupervised Learning
+   - 3. Production Code Lab 2.7: SVD-Based PCA from First Principles
+Subsections (H4 sample):
+     * Lloyd's Alternating Algorithm
+     * 🏆 The K-Means++ $D^2$ Initialization Theorem (Arthur &amp; Vassilvitskii, 2007)
+     * Mathematical Derivation via Lagrange Multipliers
+Practice Problems (1):
+     ? Prove the mathematical equivalence between Principal Component Analysis (PCA) and Singular Value Decomposition (SVD). Gi...
+Code Labs (1):
+     [LAB] Code Lab 2.7 — High-Stability SVD PCA Engine
+
+================================================================================
+[Chapter 2.8] Feature Engineering &amp; Data Leakage Prevention (1180 words)
+Subtitle: Target Encoding, Robust Scaling, Outlier Geometry &amp; The Cardinal Sin of ML
+File: ch28_feature_engineering.html
+Sections (H3):
+   - 1. Categorical Encoding Strategies
+   - 2. Numerical Normalization &amp; Outlier Geometry
+   - 3. The Cardinal Sin of ML: Data Leakage
+   - FAANG &amp; Tier-1 AI Interview Problems — Feature Engineering
+   - 4. Production Code Lab 2.8: Leak-Free Feature Preprocessor Pipeline
+Subsections (H4 sample):
+     * The Spectrum of Encodings
+     * 🚨 The Three Primary Vectors of Data Leakage
+Practice Problems (1):
+     ? In high-scale ad click prediction, why does naive Target Encoding cause massive overfitting? Explain how ...
+Code Labs (1):
+     [LAB] Code Lab 2.8 — Out-of-Fold Target Encoder from Scratch
+
+================================================================================
+[Chapter 2.9] Model Evaluation, ROC-AUC &amp; Calibration (1179 words)
+Subtitle: The Mann-Whitney U Theorem, Precision-Recall Dynamics &amp; Expected Calibration Error
+File: ch29_model_evaluation.html
+Sections (H3):
+   - 1. The Tyranny of Accuracy &amp; The Confusion Matrix
+   - 2. Receiver Operating Characteristic (ROC) &amp; The Mann-Whitney U Theorem
+   - 3. Probability Calibration: Expected Calibration Error (ECE)
+   - FAANG &amp; Tier-1 AI Interview Problems — Evaluation &amp; Metrics
+   - 4. Production Code Lab 2.9: ROC-AUC, PR-AUC &amp; ECE from Scratch
+Subsections (H4 sample):
+     * 🏆 The Mann-Whitney U Equivalence Theorem
+     * Expected Calibration Error (ECE)
+Practice Problems (1):
+     ? Prove that the Area Under the Receiver Operating Characteristic Curve ($\text{ROC-AUC}$) is mathematically equivalent to...
+Code Labs (1):
+     [LAB] Code Lab 2.9 — High-Precision Metric &amp; Calibration Evaluator
+
+================================================================================
+[Chapter 3.1] The Neuron, Perceptron &amp; The XOR Barrier (1240 words)
+Subtitle: Biological Foundations, Rosenblatt's Learning Rule, Novikoff's Theorem &amp; The 1969 Collapse
+File: ch31_perceptron_xor.html
+Sections (H3):
+   - 1. Biological Foundations to Artificial Modeling
+   - 2. Novikoff's Perceptron Convergence Theorem (1962)
+   - 3. The Historic AI Winter &amp; The Minsky-Papert XOR Proof (1969)
+   - 4. Production Code Lab 3.1: Perceptron Convergence &amp; XOR Failure from Scratch
+Subsections (H4 sample):
+     * The Perceptron Learning Rule
+     * 🏆 Novikoff's Mistake Bound Theorem
+Practice Problems (1):
+     ? Prove mathematically from first principles that a single-layer perceptron $\hat{y} = \text{sign}(w_1 x_1 + w_2 x_2 + b)$...
+Code Labs (1):
+     [LAB] Code Lab 3.1 — Perceptron Learning Rule &amp; XOR Failure Proof
+
+================================================================================
+[Chapter 3.2] Multi-Layer Perceptrons &amp; Modern Activations (1190 words)
+Subtitle: Universal Approximation, The Vanishing Gradient Problem, GELU &amp; SwiGLU
+File: ch32_mlp_activations.html
+Sections (H3):
+   - 1. Bypassing the Linear Barrier with Hidden Layers
+   - 2. The Universal Approximation Theorem (Cybenko, 1989)
+   - 3. The Modern Activation Function Taxonomy
+   - FAANG &amp; Tier-1 AI Interview Problems — Activations
+   - 4. Production Code Lab 3.2: Modern Activation Function Arena
+Subsections (H4 sample):
+     * Why Non-Linearity Is Mandatory
+     * 🏆 The Universal Approximation Theorem
+     * Depth vs. Width: Why Modern AI Builds Deep Networks
+Practice Problems (1):
+     ? Prove mathematically that the maximum value of the derivative of the Sigmoid function $\sigma'(z)$ is exactly $0.25$. Us...
+Code Labs (1):
+     [LAB] Code Lab 3.2 — SwiGLU &amp; Modern Activations from Scratch
+
+================================================================================
+[Chapter 3.3] Analytical Backpropagation from Scratch (1038 words)
+Subtitle: Matrix Calculus, Vector-Jacobian Products, Tensor Geometry &amp; Gradient Checking
+File: ch33_backprop_scratch.html
+Sections (H3):
+   - 1. The Forward Pass in Matrix Form
+   - 2. Rigorous Derivation of the Backward Pass
+   - FAANG &amp; Tier-1 AI Interview Problems — Matrix Backprop
+   - 3. Production Code Lab 3.3: 3-Layer Neural Network with Gradient Checking from Scratch
+Subsections (H4 sample):
+     * 📐 Forward Equations &amp; Dimensional Specifications
+     * 1. Deriving Weight Gradients $\frac{\partial \mathcal{L}}{\partial W^{[l]}}$
+     * 2. Deriving Bias Gradients $\frac{\partial \mathcal{L}}{\partial \mathbf{b}^{[l]}}$
+     * 3. Propagating Errors to Previous Layer ($\delta^{[l-1]}$)
+Practice Problems (1):
+     ? You are building a custom C++ CUDA kernel for a fully connected layer with Cross-Entropy Loss and Softmax output. How do...
+Code Labs (1):
+     [LAB] Code Lab 3.3 — Pure NumPy MLP &amp; Gradient Checking Engine
+
+================================================================================
+[Chapter 3.4] Deep Optimization: SGD, Momentum, Adam &amp; AdamW (1325 words)
+Subtitle: Saddle Point Geometry, Adaptive Moments, Bias Correction &amp; Decoupled Weight Decay
+File: ch34_deep_optimization.html
+Sections (H3):
+   - 1. The Geometry of Deep Loss Surfaces
+   - 2. Momentum: The Physics of Heavy Balls
+   - 3. Adam: Adaptive Moment Estimation (Kingma &amp; Ba, 2014)
+   - 4. The AdamW Revolution: Decoupled Weight Decay (Loshchilov &amp; Hutter, 2017)
+   - FAANG &amp; Tier-1 AI Interview Problems — Deep Optimization
+   - 5. Production Code Lab 3.4: AdamW from Scratch in Pure Python
+Subsections (H4 sample):
+     * 🏆 Derivation of Adam's Bias Correction Terms
+     * The Flaw in Traditional Adam $L_2$ Regularization
+     * The AdamW Solution
+Practice Problems (1):
+     ? Why does training a 70B parameter LLM with AdamW require ...
+Code Labs (1):
+     [LAB] Code Lab 3.4 — AdamW Optimizer from First Principles
+
+================================================================================
+[Chapter 3.5] Regularization &amp; Normalization: BatchNorm to RMSNorm (1130 words)
+Subtitle: Kaiming Initialization, Signal Variance Preservation, Inverted Dropout &amp; RMSNorm
+File: ch35_normalization_regularization.html
+Sections (H3):
+   - 1. The Signal Propagation Problem &amp; Kaiming He Initialization
+   - 2. The Normalization Taxonomy: BatchNorm, LayerNorm &amp; RMSNorm
+   - 3. Inverted Dropout (Srivastava et al., 2014)
+   - FAANG &amp; Tier-1 AI Interview Problems — Normalization
+   - 4. Production Code Lab 3.5: RMSNorm from Scratch in PyTorch
+Subsections (H4 sample):
+     * 🏆 Why Xavier Fails on ReLU: The Kaiming Derivation (He et al., 2015)
+     * 1. Batch Normalization (Ioffe &amp; Szegedy, 2015)
+     * 2. Layer Normalization (Ba, Kiros, Hinton, 2016)
+     * 3. RMSNorm: Root Mean Square Normalization (Zhang &amp; Sennrich, 2019)
+Practice Problems (1):
+     ? Derive the analytical backpropagation gradient for ...
+Code Labs (1):
+     [LAB] Code Lab 3.5 — LLaMA 3 RMSNorm Layer in PyTorch
+
+================================================================================
+[Chapter 3.6] Production PyTorch Engineering: AMP &amp; DDP (1145 words)
+Subtitle: Pinned Memory DMA, GradScaler Underflow Protection, Gradient Accumulation &amp; Checkpointing
+File: ch36_pytorch_production.html
+Sections (H3):
+   - 1. Eradicating the Host-to-Device Data Bottleneck
+   - 2. Automatic Mixed Precision (AMP) &amp; The GradScaler
+   - 3. Gradient Accumulation: Simulating Megabatches
+   - FAANG &amp; Tier-1 AI Interview Problems — PyTorch Systems
+   - 4. Production Code Lab 3.6: Resilient PyTorch Training Harness
+Subsections (H4 sample):
+     * The Three Pillars of High-Throughput PyTorch Data Loading
+     * 🚨 The FP16 Underflow Trap &amp; Dynamic Loss Scaling
+Practice Problems (1):
+     ? You are training a vision model with $N = 500,000,000$ parameters ($500\text{M}$) using AdamW. Compare the exact static ...
+Code Labs (1):
+     [LAB] Code Lab 3.6 — Production PyTorch Training Pipeline
+
+================================================================================
+[Chapter 3.7] JAX &amp; Functional Deep Learning (1079 words)
+Subtitle: Pure Functions, Autodiff (grad), XLA Kernel Fusion (jit), Auto-Batching (vmap) &amp; SPMD (pmap)
+File: ch37_jax_functional_dl.html
+Sections (H3):
+   - 1. The Paradigm Shift: Imperative vs. Purely Functional
+   - 2. The Four Composable Function Transformations
+   - FAANG &amp; Tier-1 AI Interview Problems — JAX &amp; Compilers
+   - 3. Production Code Lab 3.7: Neural Network Training in Pure JAX
+Subsections (H4 sample):
+Practice Problems (1):
+     ? Explain what happens when a Python function decorated with ...
+Code Labs (1):
+     [LAB] Code Lab 3.7 — Deep Neural Network Training in Pure JAX
+
+================================================================================
+[Chapter 3.8] Recurrent Neural Networks, LSTMs &amp; The Vanishing Gradient Crisis (2625 words)
+Subtitle: Backpropagation Through Time, LSTM Gates, GRU, Bidirectional RNNs &amp; Bahdanau Attention
+File: ch38_rnns_lstms.html
+Sections (H3):
+   - 1. The Challenge of Sequential Data
+   - 2. The Vanilla Recurrent Neural Network (Elman, 1990)
+   - 3. Backpropagation Through Time (BPTT) &amp; The Vanishing Gradient Crisis
+   - 4. Long Short-Term Memory (LSTM): Hochreiter &amp; Schmidhuber, 1997
+   - 5. The Gated Recurrent Unit (GRU): Cho et al., 2014
+   - 6. Bidirectional RNNs: Reading the Future
+   - 7. Bahdanau Attention: The Bridge to Transformers
+   - FAANG &amp; Tier-1 AI Interview Problems — Recurrent Architectures
+   - 8. Production Code Lab 3.8: LSTM Cell from Scratch in Pure NumPy
+Subsections (H4 sample):
+     * 🏆 Mathematical Proof: Why Vanilla RNN Gradients Vanish Exponentially
+     * Gate 1: The Forget Gate — "What should I erase from memory?"
+     * Gate 2: The Input Gate — "What new information should I write to memory?"
+     * Cell State Update — The Information Highway
+     * Gate 3: The Output Gate — "What should I expose as my output?"
+     * 📐 The Historical Arc: From RNN to Transformer
+Practice Problems (1):
+     ? Consider a vanilla RNN with hidden dimension $d_h = 128$ and $\tanh$ activation, processing a sequence of length $T = 10...
+Code Labs (1):
+     [LAB] Code Lab 3.8 — LSTM Cell &amp; Vanilla RNN from First Principles
+
+================================================================================
+[Chapter 4.1] Convolutional Neural Networks &amp; ResNets (1087 words)
+Subtitle: Spatial Translation Invariance, Receptive Field Arithmetic &amp; The Identity Shortcut Highway
+File: ch41_cnns_resnets.html
+Sections (H3):
+   - 1. Why Dense Networks Fail on Visual Data
+   - 2. The 2D Convolution Operation
+   - 3. Deep Residual Networks (ResNet): He et al., 2015
+   - FAANG &amp; Tier-1 AI Interview Problems — Computer Vision
+   - 4. Production Code Lab 4.1: ResNet Residual Block in PyTorch
+Subsections (H4 sample):
+     * The Spatial Output Dimension Formula
+     * 🏆 Mathematical Proof: The ResNet Gradient Highway
+Practice Problems (1):
+     ? Why does modern computer vision (e.g. VGG, ResNet) stack two consecutive $3 \times 3$ convolutional layers instead of us...
+Code Labs (1):
+     [LAB] Code Lab 4.1 — ResNet Residual Block from Scratch
+
+================================================================================
+[Chapter 4.2] Medical Image Segmentation &amp; U-Net (1176 words)
+Subtitle: Pixel-Level Dense Prediction, Skip Concatenation &amp; The Soft Dice Loss Derivation
+File: ch42_segmentation_unet.html
+Sections (H3):
+   - 1. From Image Classification to Dense Pixel Segmentation
+   - 2. The U-Net Architecture (Ronneberger et al., 2015)
+   - 3. The Soft Dice Loss for Extreme Pixel Imbalance
+   - FAANG &amp; Tier-1 AI Interview Problems — Medical AI
+   - 4. Production Code Lab 4.2: U-Net Architecture &amp; Soft Dice Loss in PyTorch
+Subsections (H4 sample):
+     * 1. The Contracting Encoder (Analysis Path)
+     * 2. The Bottleneck
+     * 3. The Expanding Decoder (Synthesis Path) &amp; Skip Connections
+Practice Problems (1):
+     ? Derive the analytical gradient of the Soft Dice Loss $\frac{\partial \mathcal{L}_{\text{Dice}}}{\partial p_k}$ with resp...
+Code Labs (1):
+     [LAB] Code Lab 4.2 — U-Net Segmentation Architecture &amp; Dice Loss
+
+================================================================================
+[Chapter 4.3] Generative Modeling: VAEs &amp; GANs (1132 words)
+Subtitle: The ELBO Derivation, The Reparameterization Trick &amp; Wasserstein GAN-GP
+File: ch43_vaes_gans.html
+Sections (H3):
+   - 1. From Discrimination to Generation
+   - 2. Variational Autoencoders (VAEs): Kingma &amp; Welling, 2013
+   - 3. The Reparameterization Trick
+   - FAANG &amp; Tier-1 AI Interview Problems — Generative Models
+   - 4. Production Code Lab 4.3: Variational Autoencoder from Scratch in PyTorch
+Subsections (H4 sample):
+     * 🏆 The Evidence Lower Bound (ELBO) Derivation
+Practice Problems (1):
+     ? Prove that the KL Divergence between the variational Gaussian posterior $q_\phi(\mathbf{z} \mid \mathbf{x}) = \mathcal{N...
+Code Labs (1):
+     [LAB] Code Lab 4.3 — Variational Autoencoder (VAE) Engine
+
+================================================================================
+[Chapter 4.4] Generative Visual Synthesis &amp; Diffusion Models (1301 words)
+Subtitle: Non-Equilibrium Thermodynamics, The Closed-Form DDPM Theorem, CFG &amp; Latent Diffusion
+File: ch44_diffusion_models.html
+Sections (H3):
+   - 1. Why Diffusion Succeeded Where GANs Failed
+   - 2. The Forward and Reverse Markov Chains
+   - 3. Classifier-Free Guidance (CFG): Ho &amp; Salimans, 2021
+   - 4. Latent Diffusion Models (Stable Diffusion): Rombach et al., 2022
+   - FAANG &amp; Tier-1 AI Interview Problems — Diffusion Models
+   - 5. Production Code Lab 4.4: DDPM Noise Schedule &amp; Sampler from Scratch
+Subsections (H4 sample):
+     * 1. The Forward (Noising) Process
+     * 🏆 The Closed-Form Forward Sampling Shortcut
+     * 2. The Reverse (Denoising) Process
+Practice Problems (1):
+     ? Prove the closed-form forward sampling formula $\mathbf{x}_t = \sqrt{\bar{\alpha}_t} \mathbf{x}_0 + \sqrt{1 - \bar{\alph...
+Code Labs (1):
+     [LAB] Code Lab 4.4 — DDPM Closed-Form Forward &amp; Reverse Engine
+
+================================================================================
+[Chapter 4.5] Vision Transformers &amp; Masked Autoencoders (1119 words)
+Subtitle: Patch Embeddings, Global Self-Attention &amp; The 75% Masked Visual Pre-Training Paradigm
+File: ch45_vit_mae.html
+Sections (H3):
+   - 1. An Image Is Worth 16x16 Words: ViT (Dosovitskiy et al., Google 2020)
+   - 2. The Patch Embedding Transformation
+   - 3. Masked Autoencoders (MAE): He et al., Meta 2021
+   - FAANG &amp; Tier-1 AI Interview Problems — Vision Transformers
+   - 4. Production Code Lab 4.5: ViT Patch Embedding in PyTorch
+Subsections (H4 sample):
+     * The Inductive Bias Trade-Off
+     * 📐 Mathematical Formulation of Patch Projections
+Practice Problems (1):
+     ? Why does natural language masked pre-training (BERT) use a ...
+Code Labs (1):
+     [LAB] Code Lab 4.5 — Vision Transformer Patch Embedding Engine
+
+================================================================================
+[Chapter 4.6] Audio Intelligence &amp; Whisper Architecture (982 words)
+Subtitle: The Fourier Transform, Log-Mel Spectrograms, Acoustic Attention &amp; Multitask Sequence Decoding
+File: ch46_audio_whisper.html
+Sections (H3):
+   - 1. From Physical Pressure Waves to Digital Waveforms
+   - 2. The Short-Time Fourier Transform (STFT) &amp; Mel Spectrograms
+   - 3. The Whisper Architecture (Radford et al., OpenAI 2022)
+   - FAANG &amp; Tier-1 AI Interview Problems — Audio AI
+   - 4. Production Code Lab 4.6: Audio Spectrogram &amp; Acoustic Encoder in PyTorch
+Subsections (H4 sample):
+     * 📐 The Nyquist-Shannon Sampling Theorem
+     * 1. The Short-Time Fourier Transform (STFT)
+     * 2. The Mel Filterbank &amp; Log Compression
+     * 1. The Audio Encoder
+     * 2. The Multitask Autoregressive Decoder
+Practice Problems (1):
+     ? Why does Whisper pad or truncate every audio input to an exact ...
+Code Labs (1):
+     [LAB] Code Lab 4.6 — Whisper Audio Feature Extractor &amp; Front-End
+
+================================================================================
+[Chapter 4.7] NLP Foundations: Word2Vec, GloVe &amp; Semantic Embeddings (2845 words)
+Subtitle: From One-Hot Sparsity to Dense Vector Geometry, Skip-Gram with Negative Sampling, GloVe &amp; Subword Models
+File: ch47_nlp_embeddings.html
+Sections (H3):
+   - 1. The Evolution of Text Representation
+   - 2. The Distributional Hypothesis &amp; Dense Vector Spaces
+   - 3. Word2Vec Architecture (Mikolov et al., 2013)
+   - 4. Skip-Gram with Negative Sampling (SGNS)
+   - 5. GloVe: Global Vectors for Word Representation (Pennington et al., 2014)
+   - 6. FastText: Enriching Word Vectors with Subword Information (Bojanowski et al., 2017)
+   - 7. The Fatal Flaw of Static Embeddings &amp; The Bridge to Transformers
+   - 8. Silicon Valley / FAANG Interview Challenge
+   - 9. Production Code Lab: Complete PyTorch Skip-Gram with Negative Sampling
+   - 10. Capstone Project: Vector Analogy Arithmetic &amp; Cosine Evaluation
+Subsections (H4 sample):
+     * 1.1 One-Hot Encoding and the Curse of Orthogonality
+     * 1.2 Bag-of-Words &amp; TF-IDF
+     * 3.1 Continuous Bag-of-Words (CBOW)
+     * 3.2 The Skip-Gram Architecture
+     * Mathematical Derivation of SGNS Gradients
+     * The Ratio of Co-occurrence Probabilities
+Practice Problems (0):
+Code Labs (0):
+
+================================================================================
+[Chapter 5.10] High-Throughput Low-Latency LLM Serving (998 words)
+Subtitle: PagedAttention, Continuous Batching, Speculative Decoding &amp; Streaming Gateways
+File: ch510_llm_serving_vllm.html
+Sections (H3):
+   - 1. The Two Phases of LLM Inference
+   - 2. PagedAttention: Virtual Memory for KV Caches (Kwon et al., 2023)
+   - 3. Continuous (Iteration-Level) Batching
+   - 4. Speculative Decoding (Leviathan et al., 2022)
+   - FAANG &amp; Tier-1 AI Interview Problems — High-Scale LLM Serving
+   - 5. Production Code Lab 5.10: Paged Block Allocator from Scratch
+Subsections (H4 sample):
+     * 🏆 The vLLM PagedAttention Architecture
+Practice Problems (1):
+     ? An NVIDIA H100 GPU has $80 \text{ GB}$ of HBM3 memory ($3.35 \text{ TB/s}$ memory bandwidth). You are serving an unquant...
+Code Labs (1):
+     [LAB] Code Lab 5.10 — PagedAttention Block Manager Simulator
+
+================================================================================
+[Chapter 5.1] The Transformer Architecture from First Principles (2617 words)
+Subtitle: Scaled Dot-Product Attention, Multi-Head Attention, RoPE, KV Cache, SwiGLU, Pre-LN &amp; Distributed Parallelism
+File: ch51_transformer_architecture.html
+Sections (H3):
+   - 1. The Paradigm Shift: From Recurrence to Direct Attention
+   - 2. The Modern Transformer Block Architecture
+   - 3. Scaled Dot-Product Attention &amp; The $\sqrt{d_k}$ Derivation
+   - 4. Multi-Head Attention, MQA &amp; Grouped-Query Attention (GQA)
+   - 5. Rotary Position Embeddings (RoPE)
+   - 6. The KV Cache Memory Formula for Production Inference
+   - 7. Training Dynamics: Warmup, Cosine Decay &amp; Gradient Clipping
+   - 8. Distributed Model Parallelism: TP, PP &amp; ZeRO / FSDP
+   - 9. FAANG &amp; Tier-1 AI Interview Problems — Transformers
+   - 10. Production Code Lab 5.1: Scaled Dot-Product, SwiGLU &amp; RoPE from Scratch
+Subsections (H4 sample):
+     * 2.1 Normalization Placement: Pre-LN vs Post-LN Stability
+     * 2.2 The Feed-Forward Sub-Layer: SwiGLU Activations
+     * 🏆 The Mathematical Derivation: Why Must We Scale by $\sqrt{d_k}$?
+     * The Evolution of Attention for Inference Efficiency
+     * 7.1 Warmup + Cosine Decay Schedule
+     * 7.2 Gradient Clipping by Global L2 Norm
+Practice Problems (1):
+     ? In modern high-throughput LLM inference engines (e.g. Meta LLaMA 3 70B):...
+Code Labs (1):
+     [LAB] Code Lab 5.1 — Modern Transformer Block from First Principles
+
+================================================================================
+[Chapter 5.1B] BERT, Encoder Transformers &amp; Sentence Embeddings (2129 words)
+Subtitle: Bidirectional Self-Attention, Masked Language Modeling, RoBERTa, DeBERTa, SBERT &amp; Bi-Encoder vs Cross-Encoder Search
+File: ch51b_bert_encoders.html
+Sections (H3):
+   - 1. The Transformer Trinity: Encoders, Decoders &amp; Seq2Seq
+   - 2. BERT: Bidirectional Encoder Representations from Transformers
+   - 3. Evolution of Encoders: RoBERTa and DeBERTa
+   - 4. Sentence-BERT (SBERT): Bi-Encoders vs Cross-Encoders
+   - 5. Silicon Valley / FAANG Interview Challenge
+   - 6. Production Code Lab: Bi-Encoder with Multiple Negatives Ranking Loss (MNRL)
+   - 7. Capstone: Cross-Encoder Neural Re-Ranking Pipeline
+Subsections (H4 sample):
+     * 2.1 Input Representation &amp; Special Tokens
+     * 2.2 Pre-training Objective 1: Masked Language Modeling (MLM)
+     * 2.3 Pre-training Objective 2: Next Sentence Prediction (NSP)
+     * 3.1 RoBERTa: A Robustly Optimized BERT Pretraining Approach (Liu et al., 2019)
+     * 3.2 DeBERTa: Disentangled Attention &amp; Enhanced Mask Decoder (He et al., 2020)
+     * The $\mathcal{O}(N^2)$ Cross-Encoder Bottleneck
+Practice Problems (0):
+Code Labs (0):
+
+================================================================================
+[Chapter 5.2] Tokenization &amp; The Hugging Face Ecosystem (1186 words)
+Subtitle: BPE, WordPiece, SentencePiece, Nucleus Sampling &amp; Production Model Pipelines
+File: ch52_tokenization_huggingface.html
+Sections (H3):
+   - 1. The Subword Tokenization Revolution
+   - 2. The Byte-Pair Encoding (BPE) Algorithm
+   - 3. Text Generation Strategies: Temperature, Top-$k$ &amp; Top-$p$ (Nucleus)
+   - FAANG &amp; Tier-1 AI Interview Problems — Tokenization &amp; Generation
+   - 4. Production Code Lab 5.2: BPE Tokenizer from First Principles
+Subsections (H4 sample):
+     * The Two Historic Failures
+     * 📐 The BPE Training Algorithm Step-by-Step
+     * Temperature Scaling
+     * Top-$p$ (Nucleus) Sampling (Holtzman et al., 2019)
+Practice Problems (1):
+     ? You are given a training corpus containing the following word frequencies:...
+Code Labs (1):
+     [LAB] Code Lab 5.2 — Byte-Pair Encoding (BPE) from Scratch
+
+================================================================================
+[Chapter 5.3] Enterprise Retrieval-Augmented Generation (RAG) (1776 words)
+Subtitle: Hybrid Search, BM25, Reciprocal Rank Fusion, Cross-Encoder Re-Rankers, Agentic RAG &amp; RAGAS Evaluation
+File: ch53_enterprise_rag.html
+Sections (H3):
+   - 1. Parametric Memory vs. Non-Parametric Retrieval
+   - 2. The Science of Chunking
+   - 3. Hybrid Search: BM25 + Dense Vectors via Reciprocal Rank Fusion
+   - 4. Two-Stage Retrieval: Bi-Encoders vs. Cross-Encoders
+   - 5. Advanced RAG Paradigms: Agentic, Self-RAG &amp; RAPTOR
+   - 6. Quantitative RAG Evaluation: The RAGAS Framework
+   - 7. FAANG &amp; Tier-1 AI Interview Problems — Enterprise RAG
+   - 8. Production Code Lab 5.3: End-to-End Hybrid RAG &amp; RRF Pipeline
+Subsections (H4 sample):
+     * The BM25 Keyword Formula
+     * Reciprocal Rank Fusion (RRF)
+     * 5.1 Agentic RAG
+     * 5.2 Self-RAG: Self-Reflective Retrieval (Asai et al., 2023)
+     * 5.3 RAPTOR: Tree-Organized Retrieval (Sarthi et al., 2024)
+Practice Problems (1):
+     ? An enterprise vector search cluster indexes $N = 50,000,000$ document chunks with 1536-dimensional float32 embeddings (O...
+Code Labs (1):
+     [LAB] Code Lab 5.3 — Hybrid RAG with Reciprocal Rank Fusion
+
+================================================================================
+[Chapter 5.4] Advanced RAG with LlamaIndex &amp; Knowledge Graphs (1096 words)
+Subtitle: Sub-Question Query Engines, Router Engines, Entity Triples &amp; Multi-Hop GraphRAG
+File: ch54_llamaindex_graphrag.html
+Sections (H3):
+   - 1. Why Flat Vector Search Fails on Multi-Hop Questions
+   - 2. Advanced LlamaIndex Architectures
+   - 3. Knowledge Graph RAG (GraphRAG): Relational Entity Triples
+   - FAANG &amp; Tier-1 AI Interview Problems — Advanced RAG
+   - 4. Production Code Lab 5.4: Sub-Question Decomposition &amp; Entity Triple Store
+Subsections (H4 sample):
+     * 1. The Sub-Question Query Engine
+     * 2. The Router Query Engine
+     * 🏆 The Power of Multi-Hop Graph Traversal
+Practice Problems (1):
+     ? You are designing a financial intelligence system indexing $1,000,000$ news articles. Compare the computational complexi...
+Code Labs (1):
+     [LAB] Code Lab 5.4 — Knowledge Graph Triple Traversal from Scratch
+
+================================================================================
+[Chapter 5.5] Parameter-Efficient Fine-Tuning: LoRA, QLoRA &amp; DoRA (1981 words)
+Subtitle: The Intrinsic Rank Hypothesis, Low-Rank Adaptation, NF4 Quantization, DoRA, SFT Workflow &amp; GGUF Export
+File: ch55_lora_qlora.html
+Sections (H3):
+   - 1. The Physical Memory Wall of Full Fine-Tuning
+   - 2. Low-Rank Adaptation (LoRA): Hu et al., 2021
+   - 3. QLoRA: Quantized Low-Rank Adaptation (Dettmers et al., 2023)
+   - 4. DoRA: Weight-Decomposed Low-Rank Adaptation (Liu et al., 2024)
+   - 5. Production Supervised Fine-Tuning (SFT) Workflow
+   - 6. Merging Adapters &amp; GGUF Export for Local Inference
+   - 7. Systematic Evaluation Benchmarks for Fine-Tuned Models
+   - 8. FAANG &amp; Tier-1 AI Interview Problems — PEFT &amp; Fine-Tuning
+   - 9. Production Code Lab 5.5: Custom LoRA Layer from First Principles
+Subsections (H4 sample):
+     * The Three Pillars of QLoRA
+     * 5.1 Dataset Formatting: Alpaca vs ChatML
+Practice Problems (1):
+     ? Consider a single attention projection matrix $W \in \mathbb{R}^{4096 \times 4096}$ in a Transformer layer....
+Code Labs (1):
+     [LAB] Code Lab 5.5 — Custom LoRA Linear Layer in PyTorch
+
+================================================================================
+[Chapter 5.6] Preference Alignment: RLHF, PPO &amp; DPO (1396 words)
+Subtitle: Bradley-Terry Preference Models, KL Divergence Penalties &amp; The DPO Analytical Derivation
+File: ch56_alignment_rlhf_dpo.html
+Sections (H3):
+   - 1. Why Supervised Fine-Tuning (SFT) Is Not Enough
+   - 2. Reinforcement Learning from Human Feedback (RLHF)
+   - 3. Direct Preference Optimization (DPO): Rafailov et al., Stanford 2023
+   - FAANG &amp; Tier-1 AI Interview Problems — Alignment &amp; DPO
+   - 4. Production Code Lab 5.6: DPO Loss Function from Scratch
+Subsections (H4 sample):
+     * Stage 1: The Bradley-Terry Reward Model
+     * Stage 2: Proximal Policy Optimization (PPO)
+     * 🏆 The DPO Mathematical Derivation
+Practice Problems (1):
+     ? Analyze the gradient of the DPO loss function with respect to parameter vector $\theta$....
+Code Labs (1):
+     [LAB] Code Lab 5.6 — Direct Preference Optimization (DPO) Loss Engine
+
+================================================================================
+[Chapter 5.7] LangChain &amp; Production LCEL Pipelines (1468 words)
+Subtitle: The Runnable Protocol, Declarative Composition, Memory, Tools, LangSmith Tracing &amp; Async Streaming
+File: ch57_langchain_lcel.html
+Sections (H3):
+   - 1. From Brittle Chains to Declarative LCEL
+   - 2. The Core LCEL Primitives
+   - 3. Deterministic Structured Outputs with Pydantic
+   - 4. Conversational Memory &amp; State Management in LCEL
+   - 6. Production Observability with LangSmith
+   - 7. FAANG &amp; Tier-1 AI Interview Problems — LCEL Architecture
+   - 8. Production Code Lab 5.7: Complete LCEL Pipeline with Pydantic &amp; Tool Calling
+Subsections (H4 sample):
+Practice Problems (1):
+     ? You are architecting a mission-critical financial AI gateway handling $10,000$ queries per minute....
+Code Labs (1):
+     [LAB] Code Lab 5.7 — Production LCEL Pipeline with Structured Outputs
+
+================================================================================
+[Chapter 5.8] LangGraph &amp; Stateful Multi-Agent Swarms (1365 words)
+Subtitle: Pregel Graph Compute, StateGraph, Dynamic Send/Command Routing, Sub-Graphs, Checkpointers &amp; Human-in-the-Loop
+File: ch58_langgraph_agents.html
+Sections (H3):
+   - 1. Why True Agency Requires Cyclic State Graphs
+   - 2. The Core Architecture of LangGraph
+   - 4. Real-Time Streaming Modes in LangGraph
+   - 5. Multi-Agent Orchestration Patterns
+   - 6. FAANG &amp; Tier-1 AI Interview Problems — Multi-Agent Systems
+   - 7. Production Code Lab 5.8: Multi-Agent Swarm with Cycles from Scratch
+Subsections (H4 sample):
+     * 2. Nodes (The Workers)
+     * 3. Edges &amp; Conditional Routing
+     * 4. Checkpointers &amp; "Time Travel"
+     * 3.3 Sub-Graphs &amp; Hierarchical Modularity
+Practice Problems (1):
+     ? Design an autonomous Multi-Agent Financial Investment Swarm using LangGraph consisting of three agents: a ...
+Code Labs (1):
+     [LAB] Code Lab 5.8 — Stateful Multi-Agent Graph Engine from Scratch
+
+================================================================================
+[Chapter 5.9] Autonomous Coding &amp; Software Engineering Agents (1029 words)
+Subtitle: The ReAct Loop, Tool Architecture, Surgical Diffs &amp; Self-Healing Debugging
+File: ch59_coding_agents.html
+Sections (H3):
+   - 1. The ReAct (Reasoning + Acting) Paradigm
+   - 2. Tool Architecture: Why Surgical Diffs Dominate
+   - 3. The Self-Healing Test-Driven Debug Cycle
+   - FAANG &amp; Tier-1 AI Interview Problems — Autonomous Agents
+   - 4. Production Code Lab 5.9: Autonomous ReAct Debug Loop from Scratch
+Subsections (H4 sample):
+Practice Problems (1):
+     ? You are designing the context window management policy for an autonomous coding agent resolving an issue in a repository...
+Code Labs (1):
+     [LAB] Code Lab 5.9 — ReAct Autonomous Coding Agent Loop
+
+================================================================================
+[Chapter 6.1] Experiment Tracking &amp; Artifact Registries (866 words)
+Subtitle: Reproducibility Architecture, Hyperparameter Metaspaces, Lineage Graphs &amp; MLflow
+File: ch61_experiment_tracking.html
+Sections (H3):
+   - 1. The Chaos of Unmanaged Machine Learning
+   - 2. The Architecture of an Experiment Tracking Engine
+   - FAANG &amp; Tier-1 AI Interview Problems — Experiment Tracking
+   - 3. Production Code Lab 6.1: Asynchronous Metric Logger &amp; Model Registry from Scratch
+Subsections (H4 sample):
+     * 📐 The 4 Fundamental Tracking Primitives
+Practice Problems (1):
+     ? You are architecting an enterprise experiment tracking system for a team of 500 AI researchers running 10,000 concurrent...
+Code Labs (1):
+     [LAB] Code Lab 6.1 — Non-Blocking Experiment Tracker &amp; Registry
+
+================================================================================
+[Chapter 6.2] Feature Stores &amp; Online/Offline Consistency (949 words)
+Subtitle: Train/Serve Skew, The Dual-Store Topology, Point-in-Time Joins &amp; Feast
+File: ch62_feature_stores.html
+Sections (H3):
+   - 1. The Train/Serve Skew Catastrophe
+   - 2. The Dual-Store Architecture
+   - 3. Point-in-Time (AS-OF) Joins: Eradicating Future Leakage
+   - FAANG &amp; Tier-1 AI Interview Problems — Feature Stores
+   - 4. Production Code Lab 6.2: Dual-Storage Feature Store &amp; AS-OF Join from Scratch
+Subsections (H4 sample):
+     * 📐 Offline vs. Online Storage Topology
+Practice Problems (1):
+     ? Design a real-time feature store serving 500 features per request at $100,000 \text{ Queries Per Second (QPS)}$ with a s...
+Code Labs (1):
+     [LAB] Code Lab 6.2 — Dual-Store &amp; Point-in-Time Join Engine
+
+================================================================================
+[Chapter 6.3] Containerization &amp; Deterministic Packaging (969 words)
+Subtitle: Linux Namespaces, The NVIDIA Container Toolkit, Multi-Stage Builds &amp; Rootless Security
+File: ch63_containerization_docker.html
+Sections (H3):
+   - 1. The GPU Dependency Matrix of Doom
+   - 2. How Containers Access Physical GPUs: NVIDIA Container Toolkit
+   - 3. Multi-Stage Dockerfile Engineering: From 15GB to 1GB
+   - FAANG &amp; Tier-1 AI Interview Problems — Containerization
+   - 4. Production Code Lab 6.3: Multi-Stage Rootless GPU Dockerfile
+Subsections (H4 sample):
+     * ⚙️ The OCI Runtime Hook Architecture
+Practice Problems (1):
+     ? You deploy a PyTorch container to a production Kubernetes cluster. The container crashes on startup with: ...
+Code Labs (1):
+     [LAB] Code Lab 6.3 — Hardened Multi-Stage Production Dockerfile
+
+================================================================================
+[Chapter 6.4] High-Throughput Serving: Triton &amp; TensorRT (1153 words)
+Subtitle: Operator Fusion, INT8 Calibration, Dynamic Batching &amp; Microsecond gRPC Gateways
+File: ch64_triton_serving.html
+Sections (H3):
+   - 1. The Serving Latency Wall: Why Flask &amp; FastAPI Fail
+   - 2. NVIDIA TensorRT: Silicon-Level Kernel Optimization
+   - 3. NVIDIA Triton Inference Server &amp; Dynamic Batching
+   - FAANG &amp; Tier-1 AI Interview Problems — High-Throughput Serving
+   - 4. Production Code Lab 6.4: Dynamic Batching Engine Simulation in Python
+Subsections (H4 sample):
+     * ⚙️ The 3 Core TensorRT Compiler Optimizations
+Practice Problems (1):
+     ? You are architecting an inference cluster for an e-commerce recommendation model handling a peak load of ...
+Code Labs (1):
+     [LAB] Code Lab 6.4 — Dynamic Batching Engine from Scratch
+
+================================================================================
+[Chapter 6.5] Drift Observability &amp; Automated Retraining (1057 words)
+Subtitle: Covariate Shift, The Population Stability Index (PSI), KS-Tests &amp; Closed-Loop Pipelines
+File: ch65_drift_observability.html
+Sections (H3):
+   - 1. The Silent Degradation of Production AI
+   - 2. The Population Stability Index (PSI)
+   - 3. Closed-Loop Continuous Retraining (CT) Pipelines
+   - FAANG &amp; Tier-1 AI Interview Problems — Observability
+   - 4. Production Code Lab 6.5: Population Stability Index &amp; Drift Sentinel from Scratch
+Subsections (H4 sample):
+     * The Three Pillars of Distribution Shift
+     * 🏆 Mathematical Formulation of PSI
+     * Industrial Decision Thresholds
+Practice Problems (1):
+     ? Prove that the Population Stability Index (PSI) is mathematically equivalent to the ...
+Code Labs (1):
+     [LAB] Code Lab 6.5 — Population Stability Index (PSI) Drift Sentinel
+
+================================================================================
+[Chapter 7.1] Billion-Scale Recommendation Systems (1137 words)
+Subtitle: The Multi-Stage Funnel, Two-Tower Dual Encoders, Meta DLRM &amp; In-Batch Sampled Softmax
+File: ch71_recsys_twotower.html
+Sections (H3):
+   - 1. The Scale Challenge of Modern Information Filtering
+   - 2. Two-Tower Neural Networks (Google YouTube 2016, 2019)
+   - 3. In-Batch Negative Sampling &amp; Sampled Softmax
+   - FAANG &amp; Tier-1 AI Interview Problems — Recommendation Systems
+   - 4. Production Code Lab 7.1: Two-Tower Recommendation Model in PyTorch
+Subsections (H4 sample):
+     * The Industrial Multi-Stage Recommendation Funnel
+     * 📐 Mathematical Formulation of the Two-Tower Architecture
+Practice Problems (1):
+     ? You are designing Meta's Instagram Reels recommendation retrieval engine. The platform has $100,000,000$ active videos. ...
+Code Labs (1):
+     [LAB] Code Lab 7.1 — Two-Tower Dual Encoder Architecture
+
+================================================================================
+[Chapter 7.2] Distributed Vector Search at Scale (1371 words)
+Subtitle: The Exact Search Complexity Wall, HNSW Multi-Layer Graphs, IVF-PQ Compression &amp; Sharding
+File: ch72_vector_search_scale.html
+Sections (H3):
+   - 1. The Exact k-NN Complexity Wall
+   - 2. Hierarchical Navigable Small World (HNSW): Malkov &amp; Yashunin, 2018
+   - 3. Inverted File with Product Quantization (IVF-PQ)
+   - FAANG &amp; Tier-1 AI Interview Problems — Distributed Vector Search
+   - 4. Production Code Lab 7.2: Product Quantization &amp; Asymmetric Distance Computation
+Subsections (H4 sample):
+     * 🌐 The Multi-Layer Proximity Graph Architecture
+     * Asymmetric Distance Computation (ADC)
+Practice Problems (1):
+     ? You are designing a distributed vector search cluster for ...
+Code Labs (1):
+     [LAB] Code Lab 7.2 — Product Quantization &amp; ADC Engine
+
+================================================================================
+[Chapter 7.3] Edge AI, Model Compression &amp; Quantization (1174 words)
+Subtitle: Quantization-Aware Training (QAT), Straight-Through Estimators, MobileNet &amp; ONNX
+File: ch73_edge_ai_quantization.html
+Sections (H3):
+   - 1. The Physical Constraints of Edge Hardware
+   - 2. MobileNet: Depthwise Separable Convolutions (Howard et al., Google 2017)
+   - 3. Quantization-Aware Training (QAT) &amp; Straight-Through Estimators
+   - FAANG &amp; Tier-1 AI Interview Problems — Edge AI
+   - 4. Production Code Lab 7.3: Depthwise Separable Convolutions &amp; Knowledge Distillation
+Subsections (H4 sample):
+     * 🏆 The Mathematical FLOPs Reduction Derivation
+     * Uniform Affine Quantization Formula
+Practice Problems (1):
+     ? You are deploying an image classification model to the Apple Neural Engine (ANE) on an iPhone 16. The model must have a ...
+Code Labs (1):
+     [LAB] Code Lab 7.3 — Depthwise Separable Block &amp; Distillation Loss
+
+================================================================================
+[Chapter 8.1] The Model Context Protocol (MCP) (1025 words)
+Subtitle: The USB-C of AI Agents, JSON-RPC 2.0 Transport, Resource Introspection &amp; Sandboxed Tools
+File: ch81_mcp_standard.html
+Sections (H3):
+   - 1. The Integration Hell of Proprietary AI Tooling
+   - 2. The Model Context Protocol (Anthropic, 2024)
+   - 3. JSON-RPC 2.0 Transport &amp; Security Handshakes
+   - FAANG &amp; Tier-1 AI Interview Problems — Agent Protocols
+   - 4. Production Code Lab 8.1: Minimal MCP Server from Scratch in Python
+Subsections (H4 sample):
+     * 🔌 The MCP Three-Tier Architecture
+     * The 3 Core Server Primitives
+Practice Problems (1):
+     ? You are designing an enterprise Model Context Protocol (MCP) server that exposes access to an internal PostgreSQL databa...
+Code Labs (1):
+     [LAB] Code Lab 8.1 — Production MCP JSON-RPC Server
+
+================================================================================
+[Chapter 8.2] Test-Time Compute &amp; Reasoning Models (1045 words)
+Subtitle: The Second Scaling Law, Hidden Chains of Thought, Monte Carlo Tree Search &amp; PRMs
+File: ch82_test_time_compute.html
+Sections (H3):
+   - 1. The Second Scaling Law: Beyond Pre-Training
+   - 2. Process-Supervised Reward Models (PRMs) vs. ORMs
+   - 3. Search Algorithms in Thought Space
+   - FAANG &amp; Tier-1 AI Interview Problems — Reasoning Models
+   - 4. Production Code Lab 8.2: Tree-Search Reasoning Engine with Self-Verification
+Subsections (H4 sample):
+     * ⚡ The Test-Time Compute Paradigm
+     * 1. Outcome-Supervised Reward Models (ORMs)
+     * 2. Process-Supervised Reward Models (PRMs: Lightman et al., OpenAI 2023)
+Practice Problems (1):
+     ? Explain how Test-Time Compute Scaling alters the serving economics and latency SLAs of enterprise AI applications. Contr...
+Code Labs (1):
+     [LAB] Code Lab 8.2 — Tree-Search Reasoning Engine
+
+================================================================================
+[Chapter 8.3] The Physical Energy &amp; Hardware Limits of AI (1184 words)
+Subtitle: Landauer's Thermodynamic Bound, The Gigawatt Datacenter Wall, Photonic Compute &amp; SMRs
+File: ch83_energy_hardware_limits.html
+Sections (H3):
+   - 1. The Fundamental Physics of Computation
+   - 2. The Gigawatt Datacenter Wall
+   - 3. The Energy Revolution: Small Modular Reactors &amp; Photonic Compute
+   - FAANG &amp; Tier-1 AI Interview Problems — Datacenter Infrastructure
+   - 4. Production Code Lab 8.3: Datacenter Energy &amp; Carbon Profiling Simulator
+Subsections (H4 sample):
+     * 🏆 Landauer's Principle (Rolf Landauer, IBM 1961)
+     * Cluster Power Sizing: From Megawatts to Gigawatts
+     * The Power Grid Transmission Bottleneck
+     * 1. Dedicated Small Modular Nuclear Reactors (SMRs)
+     * 2. Optical &amp; Photonic Computing
+Practice Problems (1):
+     ? You are tasked with sizing the electrical power, cooling water consumption, and operational carbon footprint for trainin...
+Code Labs (1):
+     [LAB] Code Lab 8.3 — Green AI Energy &amp; Carbon Profiling Suite
+

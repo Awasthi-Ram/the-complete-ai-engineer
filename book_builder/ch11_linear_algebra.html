@@ -42,7 +42,7 @@
 
     <!-- SECTION 2: MATRIX MULTIPLICATION AS LINEAR TRANSFORMATION -->
     <h3>2. Matrix Multiplication: Four Perspectives</h3>
-    <p>A matrix $A \in \mathbb{R}^{m \times n}$ is not a static 2D grid; it is a <strong>Linear Transformation</strong> mapping vectors from $\mathbb{R}^n$ into $\mathbb{R}^m$. To master deep learning, you must understand all four mathematical perspectives of matrix multiplication $C = A B$ (where $A \in \mathbb{R}^{m \times k}$ and $B \in \mathbb{R}^{k \times n}$):</p>
+    <p>A matrix $A \in \mathbb{R}^{m \times n}$ is not a static 2D grid; it is a <strong>Linear Transformation</strong> mapping vectors from $\mathbb{R}^n$ into $\mathbb{R}^{m}$. To master deep learning, you must understand all four mathematical perspectives of matrix multiplication $C = A B$ (where $A \in \mathbb{R}^{m \times k}$ and $B \in \mathbb{R}^{k \times n}$):</p>
 
     <ol>
       <li><strong>The Element Perspective (Dot Products):</strong> Each element $C_{ij}$ is the dot product of row $i$ of $A$ and column $j$ of $B$:
@@ -56,9 +56,18 @@
       <em>Hardware Insight:</em> Modern GPU Tensor Cores perform fused multiply-accumulate (FMA) across outer products to maximize arithmetic throughput.</li>
     </ol>
 
-    <!-- SECTION 3: MATRIX RANK & SVD -->
+    <!-- SECTION 3: SVD & ECKART-YOUNG -->
     <h3>3. Singular Value Decomposition (SVD) &amp; The Eckart-Young Theorem</h3>
     <p>Eigenvalue decomposition ($A = Q \Lambda Q^{-1}$) is limited because it requires $A$ to be a square, diagonalizable matrix. In real-world AI, data matrices are almost always rectangular: $N$ samples by $d$ features ($N \neq d$).</p>
+
+    <!-- FIGURE 1.1.1: svd_geometry_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="svd_geometry_diagram.png" alt="Figure 1.1.1: svd_geometry_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 1.1.1:</em> The geometric transformation of Singular Value Decomposition ($\mathbf{A} = \mathbf{U} \mathbf{\Sigma} \mathbf{V}^T$). Any real linear map transforms a unit sphere through an orthogonal rotation ($\mathbf{V}^T$), axis-aligned stretching by singular values $\sigma_i$, and an orthogonal rotation ($\mathbf{U}$) into an ellipsoid in $\mathbb{R}^m$.
+      </p>
+    </div>
+
 
     <p><strong>Singular Value Decomposition (SVD)</strong> is the pinnacle of linear algebra because it factorizes <strong>ANY</strong> rectangular matrix $A \in \mathbb{R}^{m \times n}$ into three geometrically pristine matrices:</p>
     $$A = U \Sigma V^T$$
@@ -68,18 +77,40 @@
       <li>$V \in \mathbb{R}^{n \times n}$: An orthogonal matrix ($V^T V = I_n$). Its columns $\mathbf{v}_i$ are the <strong>Right Singular Vectors</strong> (eigenvectors of $A^T A$).</li>
     </ul>
 
-    <h4>The Eckart-Young-Mirsky Theorem</h4>
-    <p>The practical superpower of SVD in machine learning is optimal low-rank matrix approximation. Suppose matrix $A$ has full rank $r$. What is the best possible rank-$k$ matrix $A_k$ (where $k &lt; r$) that approximates $A$?</p>
+    <h4>Step-by-Step Hand-Worked SVD Walkthrough</h4>
+    <p>Let us trace SVD with zero skipped steps on a concrete rectangular matrix $A = \begin{bmatrix} 3 & 2 & 2 \\ 2 & 3 & -2 \end{bmatrix} \in \mathbb{R}^{2 \times 3}$:</p>
 
+    <p class="step"><strong>Step 1: Compute $A A^T \in \mathbb{R}^{2 \times 2}$:</strong>
+    $$A A^T = \begin{bmatrix} 3 & 2 & 2 \\ 2 & 3 & -2 \end{bmatrix} \begin{bmatrix} 3 & 2 \\ 2 & 3 \\ 2 & -2 \end{bmatrix} = \begin{bmatrix} 9+4+4 & 6+6-4 \\ 6+6-4 & 4+9+4 \end{bmatrix} = \begin{bmatrix} 17 & 8 \\ 8 & 17 \end{bmatrix}$$</p>
+
+    <p class="step"><strong>Step 2: Find Eigenvalues of $A A^T$:</strong><br>
+    Solve the characteristic polynomial $\det(A A^T - \lambda I) = 0$:
+    $$\det \begin{bmatrix} 17 - \lambda & 8 \\ 8 & 17 - \lambda \end{bmatrix} = (17 - \lambda)^2 - 64 = 0$$
+    $$(17 - \lambda)^2 = 64 \implies 17 - \lambda = \pm 8 \implies \lambda_1 = 25, \quad \lambda_2 = 9$$</p>
+
+    <p class="step"><strong>Step 3: Determine Singular Values $\sigma_i = \sqrt{\lambda_i}$:</strong>
+    $$\sigma_1 = \sqrt{25} = 5, \quad \sigma_2 = \sqrt{9} = 3 \implies \Sigma = \begin{bmatrix} 5 & 0 & 0 \\ 0 & 3 & 0 \end{bmatrix}$$</p>
+
+    <p class="step"><strong>Step 4: Find Left Singular Vectors $U$ (Eigenvectors of $A A^T$):</strong><br>
+    For $\lambda_1 = 25$:
+    $$(A A^T - 25 I)\mathbf{u}_1 = \begin{bmatrix} -8 & 8 \\ 8 & -8 \end{bmatrix} \begin{bmatrix} u_{11} \\ u_{12} \end{bmatrix} = \mathbf{0} \implies u_{11} = u_{12} \implies \mathbf{u}_1 = \frac{1}{\sqrt{2}} \begin{bmatrix} 1 \\ 1 \end{bmatrix}$$
+    For $\lambda_2 = 9$:
+    $$(A A^T - 9 I)\mathbf{u}_2 = \begin{bmatrix} 8 & 8 \\ 8 & 8 \end{bmatrix} \begin{bmatrix} u_{21} \\ u_{22} \end{bmatrix} = \mathbf{0} \implies u_{21} = -u_{22} \implies \mathbf{u}_2 = \frac{1}{\sqrt{2}} \begin{bmatrix} 1 \\ -1 \end{bmatrix}$$
+    $$U = \frac{1}{\sqrt{2}} \begin{bmatrix} 1 & 1 \\ 1 & -1 \end{bmatrix}$$</p>
+
+    <p class="step"><strong>Step 5: Compute Right Singular Vectors $\mathbf{v}_i = \frac{1}{\sigma_i} A^T \mathbf{u}_i$:</strong>
+    $$\mathbf{v}_1 = \frac{1}{5} \begin{bmatrix} 3 & 2 \\ 2 & 3 \\ 2 & -2 \end{bmatrix} \left( \frac{1}{\sqrt{2}} \begin{bmatrix} 1 \\ 1 \end{bmatrix} \right) = \frac{1}{5\sqrt{2}} \begin{bmatrix} 5 \\ 5 \\ 0 \end{bmatrix} = \frac{1}{\sqrt{2}} \begin{bmatrix} 1 \\ 1 \\ 0 \end{bmatrix}$$
+    $$\mathbf{v}_2 = \frac{1}{3} \begin{bmatrix} 3 & 2 \\ 2 & 3 \\ 2 & -2 \end{bmatrix} \left( \frac{1}{\sqrt{2}} \begin{bmatrix} 1 \\ -1 \end{bmatrix} \right) = \frac{1}{3\sqrt{2}} \begin{bmatrix} 1 \\ -1 \\ 4 \end{bmatrix}$$
+    Find the third orthogonal vector $\mathbf{v}_3$ via cross product: $\mathbf{v}_3 = \frac{1}{3} \begin{bmatrix} 2 \\ -2 \\ -1 \end{bmatrix}$. We have factored $A$ completely!</p>
+
+    <h4>The Eckart-Young-Mirsky Theorem</h4>
     <div class="real-world-box">
       <h4>🏆 The Eckart-Young-Mirsky Theorem (1936)</h4>
       <p>The optimal rank-$k$ approximation of $A$ under both the Frobenius norm and the spectral $L_2$ norm is obtained by truncating the SVD summation to the top $k$ terms:</p>
       $$A_k = \sum_{i=1}^k \sigma_i \mathbf{u}_i \mathbf{v}_i^T = U_k \Sigma_k V_k^T$$
-      <p>Furthermore, the exact approximation error is bounded by the sum of discarded singular values:</p>
-      $$\|A - A_k\|_F = \sqrt{\sum_{i=k+1}^{\min(m, n)} \sigma_i^2}$$
-      $$\|A - A_k\|_2 = \sigma_{k+1}$$
+      <p>Furthermore, the exact approximation error is bounded by the discarded singular values:</p>
+      $$\|A - A_k\|_F = \sqrt{\sum_{i=k+1}^{\min(m, n)} \sigma_i^2} \quad \text{and} \quad \|A - A_k\|_2 = \sigma_{k+1}$$
     </div>
-    <p>This single theorem forms the mathematical foundation of Principal Component Analysis (PCA), latent semantic analysis in NLP, recommender systems (matrix factorization), and modern parameter-efficient fine-tuning (LoRA)!</p>
 
     <!-- SECTION 4: MOORE-PENROSE PSEUDOINVERSE -->
     <h3>4. The Moore-Penrose Pseudoinverse</h3>
@@ -89,96 +120,265 @@
     $$X^+ = V \Sigma^+ U^T$$
     <p>Where $\Sigma^+$ is formed by inverting all non-zero singular values ($\frac{1}{\sigma_i}$) and transposing the matrix.</p>
 
-    <h4>Properties of the Pseudoinverse</h4>
-    <ul>
-      <li><strong>Overdetermined Systems ($N &gt; d$, full column rank):</strong> $X^+ = (X^T X)^{-1} X^T$. The solution $\mathbf{w} = X^+ \mathbf{y}$ is the exact Ordinary Least Squares (OLS) solution that minimizes the residual sum of squares $\|X \mathbf{w} - \mathbf{y}\|_2^2$.</li>
-      <li><strong>Underdetermined Systems ($N &lt; d$, full row rank):</strong> $X^+ = X^T (X X^T)^{-1}$. The solution $\mathbf{w} = X^+ \mathbf{y}$ is the unique interpolating solution ($X \mathbf{w} = \mathbf{y}$) with the <strong>minimum $L_2$ norm</strong> $\|\mathbf{w}\|_2$.</li>
-    </ul>
+    <!-- SECTION 5: THE 4-TIER GRADED PRACTICE SUITE -->
+    <div class="practice-set">
+      <h3>The 4-Tier Graded Practice Suite — Chapter 1.1</h3>
+      <p class="section-intro">Master high-dimensional linear algebra through 10 graded problems: from direct norm and projection drills to manual eigenvalue traces, Eckart-Young low-rank compression proofs, and conceptual MCQs.</p>
 
-    <!-- SECTION 5: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Linear Algebra &amp; SVD</h3>
+      <!-- ==================== TIER 1: FORMULA DRILLS ==================== -->
+      <h4>Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
 
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 1.1.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
-        <span class="company-tag company-netflix">Netflix</span>
-        <span class="company-tag company-google">Google</span>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.1.1</span>
+          <span class="difficulty difficulty-easy">Level 1: Formula Drill</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Given two vectors $\mathbf{u} = [3, -4, 12]^T$ and $\mathbf{v} = [-2, 1, 2]^T$ in $\mathbb{R}^3$:
+          <ol>
+            <li>Compute the $L_1$ norm $\|\mathbf{u}\|_1$, $L_2$ norm $\|\mathbf{u}\|_2$, and $L_\infty$ norm $\|\mathbf{u}\|_\infty$.</li>
+            <li>Compute the inner product $\mathbf{u} \cdot \mathbf{v}$.</li>
+            <li>Compute the Cosine Similarity $\cos(\theta)$ between $\mathbf{u}$ and $\mathbf{v}$.</li>
+          </ol></p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Solution</div>
+          <p class="step"><strong>Step 1: Compute Vector Norms of $\mathbf{u}$:</strong><br>
+          - $L_1$ Norm (Manhattan): $\|\mathbf{u}\|_1 = |3| + |-4| + |12| = 3 + 4 + 12 = \mathbf{19}$.<br>
+          - $L_2$ Norm (Euclidean): $\|\mathbf{u}\|_2 = \sqrt{3^2 + (-4)^2 + 12^2} = \sqrt{9 + 16 + 144} = \sqrt{169} = \mathbf{13}$.<br>
+          - $L_\infty$ Norm (Max): $\|\mathbf{u}\|_\infty = \max(|3|, |-4|, |12|) = \mathbf{12}$.</p>
+
+          <p class="step"><strong>Step 2: Compute Dot Product $\mathbf{u} \cdot \mathbf{v}$:</strong><br>
+          $$\mathbf{u} \cdot \mathbf{v} = (3 \times -2) + (-4 \times 1) + (12 \times 2) = -6 - 4 + 24 = \mathbf{14}$$</p>
+
+          <p class="step"><strong>Step 3: Compute Cosine Similarity:</strong><br>
+          First compute $\|\mathbf{v}\|_2$:
+          $$\|\mathbf{v}\|_2 = \sqrt{(-2)^2 + 1^2 + 2^2} = \sqrt{4 + 1 + 4} = \sqrt{9} = 3$$
+          Now apply the formula:
+          $$\cos(\theta) = \frac{\mathbf{u} \cdot \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2} = \frac{14}{13 \times 3} = \frac{14}{39} \approx \mathbf{0.35897}$$</p>
+        </div>
       </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> You are building a movie recommendation engine for a streaming platform with $M = 10,000$ users and $N = 2,000$ movies. The user-rating matrix $R \in \mathbb{R}^{M \times N}$ is stored in 32-bit floating point.</p>
-        <ol>
-          <li>Calculate the exact uncompressed memory size of matrix $R$.</li>
-          <li>You perform Truncated SVD to factorize $R$ into rank $k = 30$ latent factors: $R \approx U_k \Sigma_k V_k^T$. Calculate the total memory required to store $U_k$, $\Sigma_k$, and $V_k$.</li>
-          <li>Calculate the exact compression ratio achieved.</li>
-          <li>If the sum of all singular values squared is $\sum_{i=1}^{2000} \sigma_i^2 = 500,000$, and the sum of the top 30 singular values squared is $\sum_{i=1}^{30} \sigma_i^2 = 425,000$, calculate the percentage of total matrix variance captured by the rank-30 approximation.</li>
-        </ol>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.1.2</span>
+          <span class="difficulty difficulty-easy">Level 1: Formula Drill</span>
+          <span class="company-tag company-amazon">Amazon</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> A dense neural network layer has weight matrix $W = \begin{bmatrix} 1 & 2 \\ 3 & 4 \\ 5 & 6 \end{bmatrix} \in \mathbb{R}^{3 \times 2}$ and input $\mathbf{x} = \begin{bmatrix} 2 \\ -1 \end{bmatrix} \in \mathbb{R}^{2 \times 1}$.
+          Compute the forward pass $\mathbf{y} = W \mathbf{x}$ using both the Element Perspective (row dot products) and the Column Perspective (linear combination of columns). Verify that both methods produce identical vectors.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Solution</div>
+          <p class="step"><strong>Method 1: Element Perspective (Dot Products):</strong>
+          $$y_1 = \mathbf{w}_{1,:} \cdot \mathbf{x} = (1 \times 2) + (2 \times -1) = 2 - 2 = 0$$
+          $$y_2 = \mathbf{w}_{2,:} \cdot \mathbf{x} = (3 \times 2) + (4 \times -1) = 6 - 4 = 2$$
+          $$y_3 = \mathbf{w}_{3,:} \cdot \mathbf{x} = (5 \times 2) + (6 \times -1) = 10 - 6 = 4$$
+          $$\mathbf{y} = \begin{bmatrix} 0 \\ 2 \\ 4 \end{bmatrix}$$</p>
+
+          <p class="step"><strong>Method 2: Column Perspective (Linear Combination of Features):</strong>
+          $$\mathbf{y} = x_1 \mathbf{w}_{:,1} + x_2 \mathbf{w}_{:,2} = 2 \begin{bmatrix} 1 \\ 3 \\ 5 \end{bmatrix} + (-1) \begin{bmatrix} 2 \\ 4 \\ 6 \end{bmatrix} = \begin{bmatrix} 2 \\ 6 \\ 10 \end{bmatrix} - \begin{bmatrix} 2 \\ 4 \\ 6 \end{bmatrix} = \begin{bmatrix} 0 \\ 2 \\ 4 \end{bmatrix}$$
+          <strong>Verification:</strong> Both perspectives produce $[0, 2, 4]^T$. The column perspective reveals that a linear layer produces a point in the column space of $W$!</p>
+        </div>
       </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
 
-        <p class="step"><strong>Step 1: Calculate Uncompressed Memory Size:</strong><br>
-        $R$ has $10,000 \times 2,000 = 20,000,000$ elements.<br>
-        At 4 bytes per FP32 element:
-        $$\text{Raw Memory} = 20,000,000 \times 4 \text{ bytes} = 80,000,000 \text{ bytes} = 80 \text{ Megabytes (MB)}$$</p>
+      <!-- ==================== TIER 2: APPLIED TRACES ==================== -->
+      <h4>Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
 
-        <p class="step"><strong>Step 2: Calculate Low-Rank Factorized Memory Size:</strong><br>
-        In truncated SVD with rank $k = 30$:
-        <ul>
-          <li>$U_k \in \mathbb{R}^{10,000 \times 30}$: $300,000$ elements.</li>
-          <li>$\Sigma_k \in \mathbb{R}^{30}$ (stored as a 1D vector of diagonal values): $30$ elements.</li>
-          <li>$V_k^T \in \mathbb{R}^{30 \times 2,000}$: $60,000$ elements.</li>
-        </ul>
-        $$\text{Total Elements} = 300,000 + 30 + 60,000 = 360,030 \text{ elements}$$
-        $$\text{Compressed Memory} = 360,030 \times 4 \text{ bytes} = 1,440,120 \text{ bytes} \approx 1.44 \text{ MB}$$</p>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.1.3</span>
+          <span class="difficulty difficulty-medium">Level 2: Execution Trace</span>
+          <span class="company-tag company-microsoft">Microsoft</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Given a $2 \times 2$ feature covariance matrix $C = \begin{bmatrix} 4 & 2 \\ 2 & 1 \end{bmatrix}$:
+          <ol>
+            <li>Find the characteristic polynomial and calculate the eigenvalues $\lambda_1, \lambda_2$.</li>
+            <li>Find the normalized unit eigenvectors $\mathbf{v}_1, \mathbf{v}_2$.</li>
+            <li>Explain the geometric meaning of $\lambda_2 = 0$ regarding dimensionality reduction (PCA).</li>
+          </ol></p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Solution</div>
+          <p class="step"><strong>Step 1: Characteristic Equation:</strong>
+          $$\det(C - \lambda I) = \det \begin{bmatrix} 4 - \lambda & 2 \\ 2 & 1 - \lambda \end{bmatrix} = (4 - \lambda)(1 - \lambda) - 4 = \lambda^2 - 5\lambda + 4 - 4 = \lambda(\lambda - 5) = 0$$
+          $$\lambda_1 = 5, \quad \lambda_2 = 0$$</p>
 
-        <p class="step"><strong>Step 3: Calculate Compression Ratio:</strong>
-        $$\text{Compression Ratio} = \frac{\text{Raw Size}}{\text{Compressed Size}} = \frac{80 \text{ MB}}{1.44 \text{ MB}} \approx 55.55\times \text{ compression!}$$
-        <em>Production Value:</em> Storing user and movie vectors takes only 1.8% of the original memory footprint, allowing the entire model to fit inside the CPU L3 cache of an inference server!</p>
+          <p class="step"><strong>Step 2: Compute Unit Eigenvectors:</strong><br>
+          For $\lambda_1 = 5$:
+          $$(C - 5I)\mathbf{v}_1 = \begin{bmatrix} -1 & 2 \\ 2 & -4 \end{bmatrix} \begin{bmatrix} v_{11} \\ v_{12} \end{bmatrix} = \mathbf{0} \implies -v_{11} + 2v_{12} = 0 \implies v_{11} = 2v_{12}$$
+          Normalizing: $\|\mathbf{v}_1\|_2 = \sqrt{2^2 + 1^2} = \sqrt{5} \implies \mathbf{v}_1 = \frac{1}{\sqrt{5}} \begin{bmatrix} 2 \\ 1 \end{bmatrix}$.<br>
+          For $\lambda_2 = 0$:
+          $$(C - 0I)\mathbf{v}_2 = \begin{bmatrix} 4 & 2 \\ 2 & 1 \end{bmatrix} \begin{bmatrix} v_{21} \\ v_{22} \end{bmatrix} = \mathbf{0} \implies 2v_{21} + v_{22} = 0 \implies v_{22} = -2v_{21}$$
+          Normalizing: $\mathbf{v}_2 = \frac{1}{\sqrt{5}} \begin{bmatrix} 1 \\ -2 \end{bmatrix}$.</p>
 
-        <p class="step"><strong>Step 4: Calculate Captured Variance:</strong><br>
-        By the Eckart-Young theorem, the total Frobenius energy of matrix $R$ is $\|R\|_F^2 = \sum_{i=1}^{\min(M,N)} \sigma_i^2$. The explained variance ratio captured by rank $k$ is:
-        $$\text{Explained Variance} = \frac{\sum_{i=1}^k \sigma_i^2}{\sum_{i=1}^r \sigma_i^2} = \frac{425,000}{500,000} = 0.85 = 85.0\%$$
-        <strong>Result: Rank 30 captures 85.0% of all user preference variance while slashing memory by 98.2%!</strong></p>
+          <p class="step"><strong>Step 3: PCA Geometric Insight:</strong><br>
+          Because $\lambda_2 = 0$, the total variance along $\mathbf{v}_2$ is exactly zero! All data points lie perfectly on the 1D line defined by $\mathbf{v}_1$. We can project this 2D dataset onto 1D with <strong>100% variance preserved and zero information loss</strong>!</p>
+        </div>
       </div>
-    </div>
 
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 1.1.2</span>
-        <span class="difficulty difficulty-medium">Medium</span>
-        <span class="company-tag company-meta">Meta</span>
-        <span class="company-tag company-openai">OpenAI</span>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.1.4</span>
+          <span class="difficulty difficulty-medium">Level 2: Execution Trace</span>
+          <span class="company-tag company-tesla">Tesla</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> You are fitting a linear regression line without intercept to 3 data points $(x, y) \in \{(1, 2), (2, 5), (3, 7)\}$.
+          The feature matrix is $X = \begin{bmatrix} 1 \\ 2 \\ 3 \end{bmatrix} \in \mathbb{R}^{3 \times 1}$ and label vector $\mathbf{y} = \begin{bmatrix} 2 \\ 5 \\ 7 \end{bmatrix} \in \mathbb{R}^{3 \times 1}$.
+          <ol>
+            <li>Compute the Moore-Penrose Pseudoinverse $X^+ = (X^T X)^{-1} X^T$ by hand.</li>
+            <li>Compute the optimal OLS weight $w = X^+ \mathbf{y}$.</li>
+            <li>Compute the orthogonal projection matrix $P = X (X^T X)^{-1} X^T$ and verify that $P^2 = P$ (idempotence).</li>
+          </ol></p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Solution</div>
+          <p class="step"><strong>Step 1: Compute Pseudoinverse $X^+$:</strong><br>
+          $$X^T X = \begin{bmatrix} 1 & 2 & 3 \end{bmatrix} \begin{bmatrix} 1 \\ 2 \\ 3 \end{bmatrix} = 1^2 + 2^2 + 3^2 = 1 + 4 + 9 = 14$$
+          $$(X^T X)^{-1} = \frac{1}{14}$$
+          $$X^+ = (X^T X)^{-1} X^T = \frac{1}{14} \begin{bmatrix} 1 & 2 & 3 \end{bmatrix} = \begin{bmatrix} \frac{1}{14} & \frac{2}{14} & \frac{3}{14} \end{bmatrix}$$</p>
+
+          <p class="step"><strong>Step 2: Compute Optimal Weight $w$:</strong><br>
+          $$w = X^+ \mathbf{y} = \frac{1}{14} \begin{bmatrix} 1 & 2 & 3 \end{bmatrix} \begin{bmatrix} 2 \\ 5 \\ 7 \end{bmatrix} = \frac{(1 \times 2) + (2 \times 5) + (3 \times 7)}{14} = \frac{2 + 10 + 21}{14} = \frac{33}{14} \approx \mathbf{2.357}$$</p>
+
+          <p class="step"><strong>Step 3: Compute Projection Matrix $P$:</strong>
+          $$P = X (X^T X)^{-1} X^T = \frac{1}{14} \begin{bmatrix} 1 \\ 2 \\ 3 \end{bmatrix} \begin{bmatrix} 1 & 2 & 3 \end{bmatrix} = \frac{1}{14} \begin{bmatrix} 1 & 2 & 3 \\ 2 & 4 & 6 \\ 3 & 6 & 9 \end{bmatrix}$$
+          Verify idempotence $P^2 = P$:
+          $$P^2 = \left(X(X^TX)^{-1}X^T\right) \left(X(X^TX)^{-1}X^T\right) = X (X^TX)^{-1} (X^T X) (X^TX)^{-1} X^T = X (X^TX)^{-1} X^T = P \quad \checkmark$$</p>
+        </div>
       </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> Let $\mathbf{u}, \mathbf{v} \in \mathbb{R}^d$ be two non-zero embedding vectors. Derive the analytical gradient of the Cosine Similarity $S(\mathbf{u}, \mathbf{v}) = \frac{\mathbf{u}^T \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2}$ with respect to vector $\mathbf{u}$.</p>
+
+      <!-- ==================== TIER 3: FAANG INTERVIEWS ==================== -->
+      <h4>Tier 3: FAANG &amp; Research Lab Interview Challenges</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.1.5</span>
+          <span class="difficulty difficulty-hard">Level 3: FAANG Challenge</span>
+          <span class="company-tag company-netflix">Netflix</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> You are building a movie recommendation engine for a streaming platform with $M = 10,000$ users and $N = 2,000$ movies. The user-rating matrix $R \in \mathbb{R}^{M \times N}$ is stored in 32-bit floating point.
+          <ol>
+            <li>Calculate the exact uncompressed memory size of matrix $R$.</li>
+            <li>You perform Truncated SVD to factorize $R$ into rank $k = 30$ latent factors: $R \approx U_k \Sigma_k V_k^T$. Calculate the total memory required to store $U_k$, $\Sigma_k$, and $V_k$.</li>
+            <li>Calculate the exact compression ratio achieved.</li>
+            <li>If the sum of all singular values squared is $\sum_{i=1}^{2000} \sigma_i^2 = 500,000$, and the sum of the top 30 singular values squared is $\sum_{i=1}^{30} \sigma_i^2 = 425,000$, calculate the percentage of total matrix variance captured by the rank-30 approximation.</li>
+          </ol></p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+          <p class="step"><strong>Step 1: Calculate Uncompressed Memory Size:</strong><br>
+          $R$ has $10,000 \times 2,000 = 20,000,000$ elements.<br>
+          At 4 bytes per FP32 element:
+          $$\text{Raw Memory} = 20,000,000 \times 4 \text{ bytes} = 80,000,000 \text{ bytes} = \mathbf{80 \text{ MB}}$$</p>
+
+          <p class="step"><strong>Step 2: Calculate Low-Rank Factorized Memory Size:</strong><br>
+          In truncated SVD with rank $k = 30$:<br>
+          - $U_k \in \mathbb{R}^{10,000 \times 30}$: $300,000$ elements.<br>
+          - $\Sigma_k \in \mathbb{R}^{30}$ (diagonal vector): $30$ elements.<br>
+          - $V_k^T \in \mathbb{R}^{30 \times 2,000}$: $60,000$ elements.<br>
+          $$\text{Total Elements} = 300,000 + 30 + 60,000 = 360,030 \text{ elements}$$
+          $$\text{Compressed Memory} = 360,030 \times 4 \text{ bytes} = 1,440,120 \text{ bytes} \approx \mathbf{1.44 \text{ MB}}$$</p>
+
+          <p class="step"><strong>Step 3: Calculate Compression Ratio:</strong>
+          $$\text{Compression Ratio} = \frac{80 \text{ MB}}{1.44 \text{ MB}} \approx \mathbf{55.55\times \text{ compression!}}$$</p>
+
+          <p class="step"><strong>Step 4: Calculate Captured Variance:</strong><br>
+          By the Eckart-Young theorem, the total Frobenius energy of matrix $R$ is $\|R\|_F^2 = \sum_{i=1}^{\min(M,N)} \sigma_i^2$. The explained variance ratio captured by rank $k$ is:
+          $$\text{Explained Variance} = \frac{\sum_{i=1}^k \sigma_i^2}{\sum_{i=1}^r \sigma_i^2} = \frac{425,000}{500,000} = 0.85 = \mathbf{85.0\%}$$</p>
+        </div>
       </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
 
-        <p class="step"><strong>Step 1: Express Cosine Similarity as a Quotient:</strong><br>
-        Let $f(\mathbf{u}) = \mathbf{u}^T \mathbf{v}$ (scalar numerator).<br>
-        Let $g(\mathbf{u}) = \|\mathbf{u}\|_2 \|\mathbf{v}\|_2 = (\mathbf{u}^T \mathbf{u})^{1/2} \|\mathbf{v}\|_2$ (scalar denominator).<br>
-        We seek $\nabla_{\mathbf{u}} \left[ \frac{f(\mathbf{u})}{g(\mathbf{u})} \right]$. Applying the quotient rule of vector calculus:
-        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{g(\mathbf{u}) \nabla_{\mathbf{u}} f(\mathbf{u}) - f(\mathbf{u}) \nabla_{\mathbf{u}} g(\mathbf{u})}{g(\mathbf{u})^2}$$</p>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.1.6</span>
+          <span class="difficulty difficulty-hard">Level 3: FAANG Challenge</span>
+          <span class="company-tag company-meta">Meta</span>
+          <span class="company-tag company-openai">OpenAI</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Let $\mathbf{u}, \mathbf{v} \in \mathbb{R}^d$ be two non-zero embedding vectors. Derive the analytical gradient of the Cosine Similarity $S(\mathbf{u}, \mathbf{v}) = \frac{\mathbf{u}^T \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2}$ with respect to vector $\mathbf{u}$. Show that the gradient is strictly orthogonal to $\mathbf{u}$.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
+          <p class="step"><strong>Step 1: Express Cosine Similarity as a Quotient:</strong><br>
+          Let $f(\mathbf{u}) = \mathbf{u}^T \mathbf{v}$ and $g(\mathbf{u}) = \|\mathbf{u}\|_2 \|\mathbf{v}\|_2 = (\mathbf{u}^T \mathbf{u})^{1/2} \|\mathbf{v}\|_2$.<br>
+          Applying the vector quotient rule:
+          $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{g(\mathbf{u}) \nabla_{\mathbf{u}} f(\mathbf{u}) - f(\mathbf{u}) \nabla_{\mathbf{u}} g(\mathbf{u})}{g(\mathbf{u})^2}$$</p>
 
-        <p class="step"><strong>Step 2: Compute Gradients of Numerator and Denominator:</strong><br>
-        For the numerator: $\nabla_{\mathbf{u}} (\mathbf{u}^T \mathbf{v}) = \mathbf{v}$.<br>
-        For the denominator, use the chain rule on $\|\mathbf{u}\|_2$:
-        $$\nabla_{\mathbf{u}} \|\mathbf{u}\|_2 = \nabla_{\mathbf{u}} (\mathbf{u}^T \mathbf{u})^{1/2} = \frac{1}{2 (\mathbf{u}^T \mathbf{u})^{1/2}} \cdot 2 \mathbf{u} = \frac{\mathbf{u}}{\|\mathbf{u}\|_2}$$
-        Therefore:
-        $$\nabla_{\mathbf{u}} g(\mathbf{u}) = \|\mathbf{v}\|_2 \frac{\mathbf{u}}{\|\mathbf{u}\|_2}$$</p>
+          <p class="step"><strong>Step 2: Compute Gradients:</strong><br>
+          $\nabla_{\mathbf{u}} (\mathbf{u}^T \mathbf{v}) = \mathbf{v}$.<br>
+          $\nabla_{\mathbf{u}} \|\mathbf{u}\|_2 = \frac{\mathbf{u}}{\|\mathbf{u}\|_2} \implies \nabla_{\mathbf{u}} g(\mathbf{u}) = \|\mathbf{v}\|_2 \frac{\mathbf{u}}{\|\mathbf{u}\|_2}$.</p>
 
-        <p class="step"><strong>Step 3: Substitute and Simplify:</strong>
-        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2 \mathbf{v} - (\mathbf{u}^T \mathbf{v}) \|\mathbf{v}\|_2 \frac{\mathbf{u}}{\|\mathbf{u}\|_2}}{\|\mathbf{u}\|_2^2 \|\mathbf{v}\|_2^2}$$
-        Cancel $\|\mathbf{v}\|_2$ from numerator and denominator:
-        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{\|\mathbf{u}\|_2 \mathbf{v} - (\mathbf{u}^T \mathbf{v}) \frac{\mathbf{u}}{\|\mathbf{u}\|_2}}{\|\mathbf{u}\|_2^2 \|\mathbf{v}\|_2}$$
-        Factor out $\frac{1}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2}$:
-        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{1}{\|\mathbf{u}\|_2} \left[ \frac{\mathbf{v}}{\|\mathbf{v}\|_2} - \frac{\mathbf{u}^T \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2} \frac{\mathbf{u}}{\|\mathbf{u}\|_2} \right]$$
-        Let $\hat{\mathbf{u}} = \frac{\mathbf{u}}{\|\mathbf{u}\|_2}$ and $\hat{\mathbf{v}} = \frac{\mathbf{v}}{\|\mathbf{v}\|_2}$ be the unit vectors. Then:
-        $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{1}{\|\mathbf{u}\|_2} \left[ \hat{\mathbf{v}} - (\hat{\mathbf{u}}^T \hat{\mathbf{v}}) \hat{\mathbf{u}} \right]$$
-        <em>Geometric Beauty:</em> Notice that $(\hat{\mathbf{u}}^T \hat{\mathbf{v}}) \hat{\mathbf{u}}$ is the orthogonal projection of $\hat{\mathbf{v}}$ onto $\hat{\mathbf{u}}$! The gradient vector $\nabla_{\mathbf{u}} S$ is strictly <strong>orthogonal to $\mathbf{u}$</strong>, rotating $\mathbf{u}$ toward $\mathbf{v}$ without changing its norm!</p>
+          <p class="step"><strong>Step 3: Substitute and Simplify:</strong>
+          $$\nabla_{\mathbf{u}} S = \frac{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2 \mathbf{v} - (\mathbf{u}^T \mathbf{v}) \|\mathbf{v}\|_2 \frac{\mathbf{u}}{\|\mathbf{u}\|_2}}{\|\mathbf{u}\|_2^2 \|\mathbf{v}\|_2^2} = \frac{1}{\|\mathbf{u}\|_2} \left[ \frac{\mathbf{v}}{\|\mathbf{v}\|_2} - \left( \frac{\mathbf{u}^T \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2} \right) \frac{\mathbf{u}}{\|\mathbf{u}\|_2} \right]$$
+          Let unit vectors be $\hat{\mathbf{u}} = \frac{\mathbf{u}}{\|\mathbf{u}\|_2}$ and $\hat{\mathbf{v}} = \frac{\mathbf{v}}{\|\mathbf{v}\|_2}$:
+          $$\nabla_{\mathbf{u}} S(\mathbf{u}, \mathbf{v}) = \frac{1}{\|\mathbf{u}\|_2} \left[ \hat{\mathbf{v}} - (\hat{\mathbf{u}}^T \hat{\mathbf{v}}) \hat{\mathbf{u}} \right]$$</p>
+
+          <p class="step"><strong>Step 4: Prove Orthogonality to $\mathbf{u}$:</strong><br>
+          Compute inner product with $\hat{\mathbf{u}}$:
+          $$\hat{\mathbf{u}}^T \nabla_{\mathbf{u}} S = \frac{1}{\|\mathbf{u}\|_2} \left[ \hat{\mathbf{u}}^T \hat{\mathbf{v}} - (\hat{\mathbf{u}}^T \hat{\mathbf{v}})(\hat{\mathbf{u}}^T \hat{\mathbf{u}}) \right]$$
+          Since $\hat{\mathbf{u}}^T \hat{\mathbf{u}} = 1$:
+          $$\hat{\mathbf{u}}^T \nabla_{\mathbf{u}} S = \frac{1}{\|\mathbf{u}\|_2} \left[ \hat{\mathbf{u}}^T \hat{\mathbf{v}} - \hat{\mathbf{u}}^T \hat{\mathbf{v}} \right] = \mathbf{0}$$
+          <em>Geometric Beauty:</em> The gradient points strictly perpendicular to $\mathbf{u}$, rotating $\mathbf{u}$ toward $\mathbf{v}$ along the hypersphere without altering its length!</p>
+        </div>
       </div>
+
+      <!-- ==================== TIER 4: CONCEPTUAL MCQS ==================== -->
+      <h4>Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.1.7</span>
+          <span class="difficulty difficulty-medium">Level 4: Conceptual MCQ</span>
+          <span class="company-tag company-deepmind">DeepMind</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Let $\mathbf{u} \in \mathbb{R}^{d \times 1}$ and $\mathbf{v} \in \mathbb{R}^{d \times 1}$ be two non-zero vectors. What is the rank of the outer product matrix $M = \mathbf{u} \mathbf{v}^T \in \mathbb{R}^{d \times d}$?</p>
+          <ol type="A">
+            <li>$d$</li>
+            <li>$d - 1$</li>
+            <li>Exactly 1</li>
+            <li>Depends on the angle between $\mathbf{u}$ and $\mathbf{v}$</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Correct Answer: [C] &amp; Detailed Explanation</div>
+          <p class="step"><strong>Analysis:</strong> Every column of $M = \mathbf{u} \mathbf{v}^T$ is a scalar multiple of vector $\mathbf{u}$: column $j$ is $v_j \mathbf{u}$. Therefore, the column space is 1-dimensional ($\text{Span}(\{\mathbf{u}\})$), meaning the matrix has rank strictly equal to 1, regardless of the dimension $d$.</p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.1.8</span>
+          <span class="difficulty difficulty-medium">Level 4: Assertion-Reasoning</span>
+          <span class="company-tag company-apple">Apple</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Read the following Assertion and Reason carefully, then choose the correct option:</p>
+          <p><strong>Assertion (A):</strong> If an orthogonal matrix $Q \in \mathbb{R}^{d \times d}$ (satisfying $Q^T Q = I$) is applied to transform feature vectors $\mathbf{x} \mapsto Q \mathbf{x}$, the Euclidean distances between all pairs of vectors remain perfectly invariant: $\|Q \mathbf{x} - Q \mathbf{y}\|_2 = \|\mathbf{x} - \mathbf{y}\|_2$.</p>
+          <p><strong>Reason (R):</strong> Orthogonal transformations represent pure rotations and reflections in Euclidean space that preserve vector lengths and inner products.</p>
+          <ol type="A">
+            <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+            <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+            <li>(A) is true, but (R) is false.</li>
+            <li>Both (A) and (R) are false.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Correct Answer: [A] &amp; Detailed Explanation</div>
+          <p class="step"><strong>Analysis:</strong> Both (A) and (R) are true. Compute $\|Q(\mathbf{x} - \mathbf{y})\|_2^2$:
+          $$\|Q(\mathbf{x} - \mathbf{y})\|_2^2 = (\mathbf{x} - \mathbf{y})^T Q^T Q (\mathbf{x} - \mathbf{y}) = (\mathbf{x} - \mathbf{y})^T I (\mathbf{x} - \mathbf{y}) = \|\mathbf{x} - \mathbf{y}\|_2^2$$
+          Taking the square root proves distance invariance. This property is fundamental to Rotary Position Embeddings (RoPE) in Transformers and PCA projections!</p>
+        </div>
+      </div>
+
     </div>
 
     <!-- SECTION 6: CODE LAB -->
@@ -187,7 +387,7 @@
 
     <div class="code-lab">
       <div class="code-lab-header">Code Lab 1.1 — SVD Matrix Compression &amp; Frobenius Error Verification</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch11_linear_algebra_svd/svd_compression.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch11_linear_algebra_svd/svd_compression.py</a></p>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch11_linear_algebra/solutions.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch11_linear_algebra/solutions.py</a></p>
 <pre><code>import numpy as np
 
 def truncated_svd_compress(A: np.ndarray, k: int):
@@ -236,7 +436,7 @@ if __name__ == "__main__":
         <span class="project-tag">Chapter 1.1 Dedicated Project &amp; Case Study</span>
         <h3 class="project-title">Project 1.1: High-Resolution Image &amp; Weight Matrix SVD Compression Engine</h3>
         <p class="project-desc">Build a production compression tool that factorizes high-resolution image channels and deep learning linear layer weights ($W \in \mathbb{R}^{d_{out} \times d_{in}}$) into low-rank factor matrices, measuring perceptual Peak Signal-to-Noise Ratio (PSNR) and inference FLOP reduction.</p>
-        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch11_linear_algebra_svd/svd_compression.py" target="_blank">🔗 Full Project Code: part1_mathematics/ch11_linear_algebra_svd/svd_compression.py</a></p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch11_linear_algebra/solutions.py" target="_blank">🔗 Full Project Code: part1_mathematics/ch11_linear_algebra/solutions.py</a></p>
       </div>
       <div class="project-body">
         <p><strong>Case Study Architecture:</strong> In edge AI deployment (e.g. running transformer models on mobile phones or autonomous vehicle microcontrollers), standard floating-point weight matrices are too large to fit in on-chip SRAM cache. In this project, you apply SVD to compress dense linear projections $W \approx B \times A$ (identical to LoRA parameter factorization), slashing parameter storage by 70% while maintaining 95% model accuracy.</p>

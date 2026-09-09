@@ -11,6 +11,15 @@
 
   <div class="epigraph">
     <p>"If you cannot write backpropagation from scratch using only matrix algebra, you do not truly understand neural networks; you merely understand how to import libraries."</p>
+
+    <!-- FIGURE 3.3.1: backprop_matrix_flow_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="backprop_matrix_flow_diagram.png" alt="Figure 3.3.1: backprop_matrix_flow_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 3.3.1:</em> Exact tensor dimension flows and transposition rules in a 2-layer MLP. Notice how backward gradient propagation preserves matrix multiplication conformability: $\frac{\partial \mathcal{L}}{\partial \mathbf{W}_1} = \mathbf{X}^T \mathbf{\delta}_1$ yields $[d_{\text{in}} \times d_h]$.
+      </p>
+    </div>
+
     <p class="attribution">— Andrej Karpathy</p>
   </div>
 
@@ -33,18 +42,18 @@
     </div>
 
     <!-- SECTION 2: THE BACKWARD PASS DERIVATION -->
-    <h3>2. Rigorous Derivation of the Backward Pass</h3>
-    <p>Let $\mathcal{L}$ be the scalar loss. We define the incoming error tensor at layer $l$ as the partial derivative with respect to pre-activation matrix $Z^{[l]}$:</p>
+    <h3>2. Rigorous Derivation of Matrix Backpropagation</h3>
+    <p>Let $\mathcal{L} \in \mathbb{R}$ be the scalar objective loss. We define the incoming error tensor at layer $l$ as the partial derivative of the scalar loss with respect to the pre-activation matrix $Z^{[l]}$:</p>
     $$\delta^{[l]} \triangleq \frac{\partial \mathcal{L}}{\partial Z^{[l]}} \in \mathbb{R}^{N \times d_l}$$
 
     <h4>1. Deriving Weight Gradients $\frac{\partial \mathcal{L}}{\partial W^{[l]}}$</h4>
-    <p>Using the matrix differential formalism: a small perturbation in weights $dW^{[l]}$ induces a change in pre-activations:</p>
+    <p>Using the matrix differential formalism: an infinitesimal perturbation in weights $dW^{[l]}$ induces a change in pre-activations:</p>
     $$dZ^{[l]} = A^{[l-1]} dW^{[l]}$$
-    <p>The total scalar loss variation is given by the matrix Frobenius inner product $\langle A, B \rangle = \text{Tr}(A^T B)$:</p>
-    $$d\mathcal{L} = \text{Tr}\left( (\delta^{[l]})^T dZ^{[l]} \right) = \text{Tr}\left( (\delta^{[l]})^T A^{[l-1]} dW^{[l]} \right)$$
-    <p>Using the cyclic permutation property of the trace $\text{Tr}(M N) = \text{Tr}(N M)$:</p>
-    $$d\mathcal{L} = \text{Tr}\left( \left( (A^{[l-1]})^T \delta^{[l]} \right)^T dW^{[l]} \right)$$
-    <p>By the fundamental definition of matrix gradients ($d\mathcal{L} = \text{Tr}\left( (\nabla_W \mathcal{L})^T dW \right)$):</p>
+    <p>The total scalar loss variation is given by the matrix Frobenius inner product $\langle A, B \rangle = \operatorname{Tr}(A^T B)$:</p>
+    $$d\mathcal{L} = \operatorname{Tr}\left( (\delta^{[l]})^T dZ^{[l]} \right) = \operatorname{Tr}\left( (\delta^{[l]})^T A^{[l-1]} dW^{[l]} \right)$$
+    <p>Using the cyclic permutation property of the trace $\operatorname{Tr}(M N) = \operatorname{Tr}(N M)$:</p>
+    $$d\mathcal{L} = \operatorname{Tr}\left( \left( (A^{[l-1]})^T \delta^{[l]} \right)^T dW^{[l]} \right)$$
+    <p>By the fundamental definition of matrix gradients ($d\mathcal{L} = \operatorname{Tr}\left( (\nabla_W \mathcal{L})^T dW \right)$):</p>
     $$\frac{\partial \mathcal{L}}{\partial W^{[l]}} = (A^{[l-1]})^T \delta^{[l]} \in \mathbb{R}^{d_{l-1} \times d_l}$$
 
     <div class="key-insight">
@@ -63,41 +72,390 @@
     <p>Applying the chain rule through the element-wise activation function $A^{[l-1]} = g^{[l-1]}(Z^{[l-1]})$ via the Hadamard (element-wise) product $\odot$:</p>
     $$\delta^{[l-1]} = \frac{\partial \mathcal{L}}{\partial Z^{[l-1]}} = \left( \delta^{[l]} (W^{[l]})^T \right) \odot (g^{[l-1]})'(Z^{[l-1]}) \in \mathbb{R}^{N \times d_{l-1}}$$
 
-    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Matrix Backprop</h3>
+    <!-- SECTION 3: FORWARD VS REVERSE AUTOGRAD -->
+    <h3>3. Automatic Differentiation: Forward-Mode vs. Reverse-Mode</h3>
+    <p>Why is backpropagation universal in deep learning, rather than forward-mode automatic differentiation?</p>
+    <ul>
+      <li><strong>Forward-Mode (Jacobian-Vector Products - JVPs):</strong> Propagates derivatives forward alongside function evaluations. To compute the full Jacobian for a function $f: \mathbb{R}^n \to \mathbb{R}^m$, forward-mode requires $n$ separate passes (one for each input variable). If an LLM has $n = 70 \times 10^9$ parameters and $m = 1$ scalar loss, forward-mode would require <strong>70 billion forward passes</strong> to compute a single gradient update!</li>
+      <li><strong>Reverse-Mode (Vector-Jacobian Products - VJPs / Backpropagation):</strong> Propagates adjoint sensitivities backward from the scalar output to all inputs. Reverse-mode requires $m$ backward passes. Since deep learning optimizes a single scalar loss function ($m = 1$), <strong>a single backward pass computes gradients for all 70 billion parameters simultaneously</strong>! Reverse-mode is what makes modern deep learning computationally viable.</li>
+    </ul>
 
+    <!-- SECTION 4: GRADIENT CHECKING PROTOCOL -->
+    <h3>4. Numerical Gradient Checking Protocol</h3>
+    <p>When developing custom CUDA kernels, C++ extensions, or Triton primitives, bugs in index transposition ($W$ vs. $W^T$) or missing broadcasting summations cause subtle training divergences. <strong>Numerical Gradient Checking</strong> verifies analytical gradients against two-sided finite differences:</p>
+    $$\frac{\partial \mathcal{L}}{\partial \theta_i}_{\text{num}} = \frac{\mathcal{L}(\theta_i + \epsilon) - \mathcal{L}(\theta_i - \epsilon)}{2\epsilon} + O(\epsilon^2)$$
+    <p>Using a step size $\epsilon = 10^{-5}$ in 64-bit precision, the relative Frobenius difference is evaluated:</p>
+    $$\text{Relative Error} = \frac{\|G_{\text{numerical}} - G_{\text{analytical}}\|_2}{\|G_{\text{numerical}}\|_2 + \|G_{\text{analytical}}\|_2}$$
+    <table>
+      <thead>
+        <tr><th>Relative Error</th><th>Status</th><th>Engineering Action</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>$\le 10^{-7}$</td><td><strong>Flawless</strong></td><td>Mathematical implementation is provably correct. Safe to deploy.</td></tr>
+        <tr><td>$10^{-5} \text{ to } 10^{-4}$</td><td><strong>Borderline</strong></td><td>Acceptable for non-smooth activations (ReLU at $z \approx 0$). Verify with smooth activations.</td></tr>
+        <tr><td>$\ge 10^{-2}$</td><td><strong>Fatal Bug</strong></td><td>Fatal error: check for missing transpose, inverted chain rule factor, or broadcasting bug!</td></tr>
+      </tbody>
+    </table>
+
+    <!-- SECTION 5: 4-TIER PRACTICE SUITE -->
+    <h3>Backpropagation from Scratch Practice Suite &amp; Complete Worked Solutions</h3>
+
+    <!-- PROBLEM 3.3.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 3.3.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="difficulty difficulty-easy">Level 1 • Direct Numerical Warm-Up Drill</span>
         <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A single artificial neuron processes two scalar inputs $x_1 = 2.0, x_2 = -1.0$ with synaptic weights $w_1 = 0.5, w_2 = -1.5$ and bias $b = 0.0$. The neuron computes pre-activation $z = w_1 x_1 + w_2 x_2 + b$, activation $a = \sigma(z) = \frac{1}{1 + e^{-z}}$, and is evaluated using squared error loss $\mathcal{L} = \frac{1}{2}(a - y)^2$ against target label $y = 1.0$.<br>
+        Calculate the exact numerical values for:</p>
+        <ol>
+          <li>Pre-activation $z$ and activation $a$.</li>
+          <li>Scalar loss $\mathcal{L}$.</li>
+          <li>Sensitivities $\frac{\partial \mathcal{L}}{\partial a}$ and $\frac{\partial a}{\partial z}$.</li>
+          <li>Local error signal $\delta = \frac{\partial \mathcal{L}}{\partial z}$.</li>
+          <li>Parameter gradients $\frac{\partial \mathcal{L}}{\partial w_1}$, $\frac{\partial \mathcal{L}}{\partial w_2}$, and $\frac{\partial \mathcal{L}}{\partial b}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
+
+        <p class="step"><strong>Step 1: Forward Pass:</strong><br>
+        $$z = w_1 x_1 + w_2 x_2 + b = (0.5)(2.0) + (-1.5)(-1.0) + 0.0 = 1.0 + 1.5 + 0.0 = \mathbf{2.5}$$
+        Activation $a = \sigma(2.5) = \frac{1}{1 + e^{-2.5}} = \frac{1}{1 + 0.08208} = \frac{1}{1.08208} \approx \mathbf{0.9241}$</p>
+
+        <p class="step"><strong>Step 2: Scalar Loss:</strong><br>
+        $$\mathcal{L} = \frac{1}{2}(a - y)^2 = \frac{1}{2}(0.9241 - 1.0)^2 = \frac{1}{2}(-0.0759)^2 = \frac{1}{2}(0.00576) \approx \mathbf{0.00288}$$</p>
+
+        <p class="step"><strong>Step 3: Sensitivities:</strong><br>
+        $$\frac{\partial \mathcal{L}}{\partial a} = a - y = 0.9241 - 1.0 = \mathbf{-0.0759}$$
+        $$\frac{\partial a}{\partial z} = \sigma(z)(1 - \sigma(z)) = 0.9241 \times (1 - 0.9241) = 0.9241 \times 0.0759 \approx \mathbf{0.07014}$$</p>
+
+        <p class="step"><strong>Step 4: Error Signal $\delta$:</strong><br>
+        $$\delta = \frac{\partial \mathcal{L}}{\partial z} = \frac{\partial \mathcal{L}}{\partial a} \cdot \frac{\partial a}{\partial z} = (-0.0759) \times (0.07014) \approx \mathbf{-0.005324}$$</p>
+
+        <p class="step"><strong>Step 5: Parameter Gradients:</strong><br>
+        By the chain rule: $\frac{\partial \mathcal{L}}{\partial w_i} = \delta \cdot x_i$:
+        $$\frac{\partial \mathcal{L}}{\partial w_1} = \delta \cdot x_1 = (-0.005324) \times (2.0) = \mathbf{-0.010648}$$
+        $$\frac{\partial \mathcal{L}}{\partial w_2} = \delta \cdot x_2 = (-0.005324) \times (-1.0) = +\mathbf{0.005324}$$
+        $$\frac{\partial \mathcal{L}}{\partial b} = \delta \cdot 1 = \mathbf{-0.005324}$$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.3.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.3.2</span>
+        <span class="difficulty difficulty-easy">Level 1 • Direct Formula Drill</span>
         <span class="company-tag company-meta">Meta</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> You are building a custom C++ CUDA kernel for a fully connected layer with Cross-Entropy Loss and Softmax output. How do you implement <strong>Numerical Gradient Checking</strong> via finite differences to verify that your analytical backpropagation has zero off-by-one or transposition bugs?</p>
+        <p><strong>QUESTION:</strong> A 3-class neural network outputs raw pre-softmax logits $\mathbf{z} = [2.0, 1.0, 0.1]^T$ for an example whose ground-truth class is $k = 1$ (one-hot vector $\mathbf{y} = [1, 0, 0]^T$).</p>
+        <ol>
+          <li>Compute the numerator exponentials $e^{z_i}$ and the normalized softmax probability distribution $\mathbf{p}$.</li>
+          <li>Calculate the categorical cross-entropy loss $\mathcal{L} = -\sum_{i=1}^3 y_i \ln(p_i)$.</li>
+          <li>Calculate the exact analytic gradient vector with respect to logits $\frac{\partial \mathcal{L}}{\partial \mathbf{z}} = \mathbf{p} - \mathbf{y}$.</li>
+        </ol>
       </div>
       <div class="solution">
         <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
 
-        <p class="step"><strong>Step 1: Two-Sided Finite Differences Formula:</strong><br>
-        For every scalar parameter $\theta_i$ in weight vector $\boldsymbol{\theta}$:</p>
-        $$\frac{\partial \mathcal{L}}{\partial \theta_i}_{\text{num}} = \frac{\mathcal{L}(\theta_i + \epsilon) - \mathcal{L}(\theta_i - \epsilon)}{2\epsilon} + O(\epsilon^2)$$
-        <p>We use a two-sided symmetric quotient with $\epsilon = 10^{-5}$ because its Taylor truncation error is second-order $O(\epsilon^2)$, compared to one-sided differences which have large first-order error $O(\epsilon)$.</p>
-
-        <p class="step"><strong>Step 2: Relative Error Metric:</strong><br>
-        Never use absolute difference $|g_{\text{num}} - g_{\text{ana}}|$, because gradients can scale from $10^3$ to $10^{-6}$. We compute the <strong>Relative Frobenius Difference</strong>:
-        $$\text{Relative Error} = \frac{\|G_{\text{numerical}} - G_{\text{analytical}}\|_2}{\|G_{\text{numerical}}\|_2 + \|G_{\text{analytical}}\|_2}$$</p>
-        <p>Interpretation thresholds:</p>
+        <p class="step"><strong>Step 1: Compute Softmax Probabilities:</strong><br>
+        Compute exponentials:
         <ul>
-          <li>$\text{Relative Error} &lt; 10^{-7}$: <strong>Flawless mathematical implementation.</strong></li>
-          <li>$10^{-5} \le \text{Relative Error} &lt; 10^{-3}$: Warning; check for non-smooth activation points (e.g. ReLU at $z=0$).</li>
-          <li>$\text{Relative Error} &gt; 10^{-2}$: <strong>Critical failure:</strong> Transposition error ($W$ vs $W^T$), forgotten bias broadcast, or incorrect chain rule multiplication!</li>
+          <li>$e^{z_1} = e^{2.0} \approx 7.3891$</li>
+          <li>$e^{z_2} = e^{1.0} \approx 2.7183$</li>
+          <li>$e^{z_3} = e^{0.1} \approx 1.1052$</li>
         </ul>
+        Sum of exponentials: $\sum_{j=1}^3 e^{z_j} = 7.3891 + 2.7183 + 1.1052 = 11.2126$.<br>
+        Normalized probabilities $p_i = \frac{e^{z_i}}{\sum e^{z_j}}$:
+        $$p_1 = \frac{7.3891}{11.2126} \approx \mathbf{0.6590}$$
+        $$p_2 = \frac{2.7183}{11.2126} \approx \mathbf{0.2424}$$
+        $$p_3 = \frac{1.1052}{11.2126} \approx \mathbf{0.0986}$$
+        Verification: $0.6590 + 0.2424 + 0.0986 = 1.0000$.</p>
+
+        <p class="step"><strong>Step 2: Compute Cross-Entropy Loss:</strong><br>
+        Since $\mathbf{y} = [1, 0, 0]^T$, only class 1 contributes to the loss:
+        $$\mathcal{L} = -\ln(p_1) = -\ln(0.6590) \approx \mathbf{0.4170}$$</p>
+
+        <p class="step"><strong>Step 3: Analytic Gradient with Respect to Logits:</strong><br>
+        Using the identity $\frac{\partial \mathcal{L}}{\partial \mathbf{z}} = \mathbf{p} - \mathbf{y}$:
+        $$\frac{\partial \mathcal{L}}{\partial \mathbf{z}} = \begin{pmatrix} 0.6590 \\ 0.2424 \\ 0.0986 \end{pmatrix} - \begin{pmatrix} 1.0000 \\ 0.0000 \\ 0.0000 \end{pmatrix} = \begin{pmatrix} 0.6590 - 1.0000 \\ 0.2424 - 0.0000 \\ 0.0986 - 0.0000 \end{pmatrix} = \begin{pmatrix} \mathbf{-0.3410} \\ \mathbf{+0.2424} \\ \mathbf{+0.0986} \end{pmatrix}$$
+        Notice that the sum of gradients is identically zero: $-0.3410 + 0.2424 + 0.0986 = 0$. The gradient increases the logit of the true class ($z_1 \leftarrow z_1 - \eta(-0.3410)$) while decreasing the logits of incorrect classes.</p>
       </div>
     </div>
 
-    <!-- SECTION 4: CODE LAB -->
-    <h3>3. Production Code Lab 3.3: 3-Layer Neural Network with Gradient Checking from Scratch</h3>
+    <!-- PROBLEM 3.3.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.3.3</span>
+        <span class="difficulty difficulty-medium">Level 2 • Applied Engineering Trace</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are hand-tracing matrix backpropagation for a linear layer without activation across a mini-batch of $N = 2$ samples. The dimensions are $d_{\text{in}} = 2$ and $d_{\text{out}} = 2$.<br>
+        The inputs and incoming pre-activation error matrix are:</p>
+        $$X = \begin{pmatrix} 1.0 & 2.0 \\ -1.0 & 1.0 \end{pmatrix}, \quad \delta = \begin{pmatrix} 0.5 & -0.2 \\ -0.1 & 0.4 \end{pmatrix}$$
+        <p>The current weight matrix is $W = \begin{pmatrix} 2.0 & -1.0 \\ 1.0 & 3.0 \end{pmatrix}$.</p>
+        <ol>
+          <li>Compute the weight gradient matrix $\frac{\partial \mathcal{L}}{\partial W} = X^T \delta$ and verify its dimensions.</li>
+          <li>Compute the bias gradient vector $\frac{\partial \mathcal{L}}{\partial \mathbf{b}} = \delta^T \mathbf{1}_N$.</li>
+          <li>Compute the backpropagated input gradient $\frac{\partial \mathcal{L}}{\partial X} = \delta W^T$ to pass to upstream layers.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Matrix Calculus Trace</div>
+
+        <p class="step"><strong>Step 1: Compute Weight Gradient $\frac{\partial \mathcal{L}}{\partial W} = X^T \delta$:</strong><br>
+        $X \in \mathbb{R}^{2 \times 2} \implies X^T = \begin{pmatrix} 1.0 & -1.0 \\ 2.0 & 1.0 \end{pmatrix}$.<br>
+        $$\frac{\partial \mathcal{L}}{\partial W} = \begin{pmatrix} 1.0 & -1.0 \\ 2.0 & 1.0 \end{pmatrix} \begin{pmatrix} 0.5 & -0.2 \\ -0.1 & 0.4 \end{pmatrix}$$
+        Evaluating elements:
+        <ul>
+          <li>$(1, 1): (1.0)(0.5) + (-1.0)(-0.1) = 0.5 + 0.1 = \mathbf{0.6}$</li>
+          <li>$(1, 2): (1.0)(-0.2) + (-1.0)(0.4) = -0.2 - 0.4 = \mathbf{-0.6}$</li>
+          <li>$(2, 1): (2.0)(0.5) + (1.0)(-0.1) = 1.0 - 0.1 = \mathbf{0.9}$</li>
+          <li>$(2, 2): (2.0)(-0.2) + (1.0)(0.4) = -0.4 + 0.4 = \mathbf{0.0}$</li>
+        </ul>
+        $$\frac{\partial \mathcal{L}}{\partial W} = \begin{pmatrix} \mathbf{0.6} & \mathbf{-0.6} \\ \mathbf{0.9} & \mathbf{0.0} \end{pmatrix} \in \mathbb{R}^{2 \times 2}$$
+        Matches the $d_{\text{in}} \times d_{\text{out}} = 2 \times 2$ dimension of $W$ identically.</p>
+
+        <p class="step"><strong>Step 2: Compute Bias Gradient $\frac{\partial \mathcal{L}}{\partial \mathbf{b}}$:</strong><br>
+        Sum across the batch dimension (rows of $\delta$):
+        $$\frac{\partial \mathcal{L}}{\partial b_1} = \delta_{11} + \delta_{21} = 0.5 + (-0.1) = \mathbf{0.4}$$
+        $$\frac{\partial \mathcal{L}}{\partial b_2} = \delta_{12} + \delta_{22} = -0.2 + 0.4 = \mathbf{0.2}$$
+        $$\frac{\partial \mathcal{L}}{\partial \mathbf{b}} = \begin{pmatrix} \mathbf{0.4} \\ \mathbf{0.2} \end{pmatrix} \in \mathbb{R}^2$$</p>
+
+        <p class="step"><strong>Step 3: Compute Upstream Activation Gradient $\frac{\partial \mathcal{L}}{\partial X} = \delta W^T$:</strong><br>
+        $W = \begin{pmatrix} 2.0 & -1.0 \\ 1.0 & 3.0 \end{pmatrix} \implies W^T = \begin{pmatrix} 2.0 & 1.0 \\ -1.0 & 3.0 \end{pmatrix}$.<br>
+        $$\frac{\partial \mathcal{L}}{\partial X} = \begin{pmatrix} 0.5 & -0.2 \\ -0.1 & 0.4 \end{pmatrix} \begin{pmatrix} 2.0 & 1.0 \\ -1.0 & 3.0 \end{pmatrix}$$
+        Evaluating elements:
+        <ul>
+          <li>$(1, 1): (0.5)(2.0) + (-0.2)(-1.0) = 1.0 + 0.2 = \mathbf{1.2}$</li>
+          <li>$(1, 2): (0.5)(1.0) + (-0.2)(3.0) = 0.5 - 0.6 = \mathbf{-0.1}$</li>
+          <li>$(2, 1): (-0.1)(2.0) + (0.4)(-1.0) = -0.2 - 0.4 = \mathbf{-0.6}$</li>
+          <li>$(2, 2): (-0.1)(1.0) + (0.4)(3.0) = -0.1 + 1.2 = \mathbf{1.1}$</li>
+        </ul>
+        $$\frac{\partial \mathcal{L}}{\partial X} = \begin{pmatrix} \mathbf{1.2} & \mathbf{-0.1} \\ \mathbf{-0.6} & \mathbf{1.1} \end{pmatrix} \in \mathbb{R}^{2 \times 2}$$
+        Matches the $N \times d_{\text{in}} = 2 \times 2$ dimension of $X$.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.3.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.3.4</span>
+        <span class="difficulty difficulty-medium">Level 2 • Algorithmic Tracing</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An AI engineer implements a custom CUDA activation kernel. For scalar weight $\theta = 0.50$, the analytical backward pass computes gradient $g_{\text{analytical}} = 1.400000$.<br>
+        Evaluating the loss function with perturbation $\epsilon = 10^{-5}$ yields:
+        $$\mathcal{L}(\theta + \epsilon) = 2.1400140000, \quad \mathcal{L}(\theta) = 2.1400000000, \quad \mathcal{L}(\theta - \epsilon) = 2.1399859998$$</p>
+        <ol>
+          <li>Compute the two-sided numerical gradient $g_{\text{two-sided}} = \frac{\mathcal{L}(\theta + \epsilon) - \mathcal{L}(\theta - \epsilon)}{2\epsilon}$.</li>
+          <li>Compute the one-sided numerical gradient $g_{\text{one-sided}} = \frac{\mathcal{L}(\theta + \epsilon) - \mathcal{L}(\theta)}{\epsilon}$.</li>
+          <li>Compute the relative difference $\frac{|g_{\text{two-sided}} - g_{\text{analytical}}|}{|g_{\text{two-sided}}| + |g_{\text{analytical}}|}$ and evaluate whether the analytical implementation passes standard verification thresholds.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Gradient Check Trace</div>
+
+        <p class="step"><strong>Step 1: Compute Two-Sided Symmetric Difference:</strong><br>
+        $$\Delta \mathcal{L}_{\text{two-sided}} = 2.1400140000 - 2.1399859998 = 0.0000280002$$
+        $$g_{\text{two-sided}} = \frac{0.0000280002}{2 \times 10^{-5}} = \frac{0.0000280002}{0.000020} = \mathbf{1.400010}$$</p>
+
+        <p class="step"><strong>Step 2: Compute One-Sided Forward Difference:</strong><br>
+        $$\Delta \mathcal{L}_{\text{one-sided}} = 2.1400140000 - 2.1400000000 = 0.0000140000$$
+        $$g_{\text{one-sided}} = \frac{0.0000140000}{10^{-5}} = \mathbf{1.400000}$$
+        While one-sided difference looks clean here, on non-linear functions its error is $O(\epsilon)$ ($10^{-5}$), whereas two-sided difference has error $O(\epsilon^2)$ ($10^{-10}$), providing orders-of-magnitude superior precision.</p>
+
+        <p class="step"><strong>Step 3: Compute Relative Frobenius Error:</strong><br>
+        $$|g_{\text{two-sided}} - g_{\text{analytical}}| = |1.400010 - 1.400000| = 0.000010$$
+        $$|g_{\text{two-sided}}| + |g_{\text{analytical}}| = 1.400010 + 1.400000 = 2.800010$$
+        $$\text{Relative Error} = \frac{0.000010}{2.800010} \approx \mathbf{3.57 \times 10^{-6}}$$
+        Since $\text{Relative Error} = 3.57 \times 10^{-6} &lt; 10^{-5}$, the gradient check <strong>PASSES with high confidence</strong>. There are zero structural, transposition, or sign errors in the analytical kernel.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.3.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.3.5</span>
+        <span class="difficulty difficulty-hard">Level 3 • FAANG / Research Lab Proof</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove rigorously from first principles that the partial derivative of the multi-class Cross-Entropy loss $\mathcal{L} = -\sum_{k=1}^K y_k \ln(p_k)$ with respect to pre-softmax logit $z_i$ (where $p_k = \frac{e^{z_k}}{\sum_{j=1}^K e^{z_j}}$) is given by the elegant relation:
+        $$\frac{\partial \mathcal{L}}{\partial z_i} = p_i - y_i$$</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete First-Principles Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Compute the Softmax Jacobian $\frac{\partial p_k}{\partial z_i}$:</strong><br>
+        Recall $p_k = \frac{e^{z_k}}{S}$ where $S = \sum_{j=1}^K e^{z_j}$. Note that $\frac{\partial S}{\partial z_i} = e^{z_i}$.<br>
+        Using the quotient rule:
+        $$\frac{\partial p_k}{\partial z_i} = \frac{\frac{\partial (e^{z_k})}{\partial z_i} S - e^{z_k} \frac{\partial S}{\partial z_i}}{S^2}$$
+        We analyze two cases using the Kronecker delta $\delta_{ik} = \mathbb{I}(i = k)$:
+        <ul>
+          <li><strong>Case 1 ($i = k$):</strong>
+          $$\frac{\partial p_i}{\partial z_i} = \frac{e^{z_i} S - e^{z_i} e^{z_i}}{S^2} = \frac{e^{z_i}}{S} - \left(\frac{e^{z_i}}{S}\right)^2 = p_i - p_i^2 = p_i(1 - p_i)$$</li>
+          <li><strong>Case 2 ($i \neq k$):</strong>
+          $$\frac{\partial p_k}{\partial z_i} = \frac{0 \cdot S - e^{z_k} e^{z_i}}{S^2} = -\frac{e^{z_k}}{S} \frac{e^{z_i}}{S} = -p_k p_i$$</li>
+        </ul>
+        Unifying both cases into a single tensor expression:
+        $$\frac{\partial p_k}{\partial z_i} = p_k (\delta_{ik} - p_i)$$</p>
+
+        <p class="step"><strong>Step 2: Apply the Chain Rule on the Cross-Entropy Loss:</strong><br>
+        The loss is $\mathcal{L} = -\sum_{k=1}^K y_k \ln(p_k)$.<br>
+        Differentiating with respect to $z_i$:
+        $$\frac{\partial \mathcal{L}}{\partial z_i} = \sum_{k=1}^K \frac{\partial \mathcal{L}}{\partial p_k} \frac{\partial p_k}{\partial z_i} = \sum_{k=1}^K \left( -\frac{y_k}{p_k} \right) \frac{\partial p_k}{\partial z_i}$$</p>
+
+        <p class="step"><strong>Step 3: Substitute the Softmax Jacobian:</strong><br>
+        $$\frac{\partial \mathcal{L}}{\partial z_i} = \sum_{k=1}^K \left( -\frac{y_k}{p_k} \right) \left[ p_k (\delta_{ik} - p_i) \right]$$
+        Notice that $p_k$ in the numerator and denominator <strong>cancels out identically</strong>!
+        $$\frac{\partial \mathcal{L}}{\partial z_i} = -\sum_{k=1}^K y_k (\delta_{ik} - p_i) = -\sum_{k=1}^K y_k \delta_{ik} + \sum_{k=1}^K y_k p_i$$</p>
+
+        <p class="step"><strong>Step 4: Evaluate the Summations:</strong><br>
+        In the first sum, $\delta_{ik} = 1$ only when $k = i$, so $\sum_{k=1}^K y_k \delta_{ik} = y_i$.<br>
+        In the second sum, $p_i$ is constant with respect to index $k$, so $\sum_{k=1}^K y_k p_i = p_i \sum_{k=1}^K y_k$.<br>
+        Since $\mathbf{y}$ is a valid probability distribution (or one-hot vector), $\sum_{k=1}^K y_k = 1$. Therefore:
+        $$\frac{\partial \mathcal{L}}{\partial z_i} = -y_i + p_i(1) = p_i - y_i$$
+        This completes the proof. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.3.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.3.6</span>
+        <span class="difficulty difficulty-hard">Level 3 • FAANG / Research Lab Proof</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-google">Google DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Consider a parameterized computational graph mapping inputs $\mathbf{x} \in \mathbb{R}^n$ to outputs $\mathbf{y} \in \mathbb{R}^m$ through a sequence of $L$ intermediate vector operations $\mathbf{v}_{i} = f_i(\mathbf{v}_{i-1})$.</p>
+        <ol>
+          <li>Prove that computing the full Jacobian matrix $J = \frac{\partial \mathbf{y}}{\partial \mathbf{x}} \in \mathbb{R}^{m \times n}$ requires $O(n \cdot \text{ops})$ work in Forward-Mode Automatic Differentiation (Jacobian-Vector Products - JVPs).</li>
+          <li>Prove that computing the full Jacobian requires $O(m \cdot \text{ops})$ work in Reverse-Mode Automatic Differentiation (Vector-Jacobian Products - VJPs).</li>
+          <li>Explain why Reverse-Mode (Backpropagation) is mathematically mandatory for training deep learning models where $n = 10^{11}$ parameters and $m = 1$ scalar loss.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Computational Complexity Proof</div>
+
+        <p class="step"><strong>Step 1: Forward-Mode Complexity (JVPs):</strong><br>
+        In Forward-Mode autodiff, the algorithm evaluates directional derivatives $\dot{\mathbf{v}} = J_f \cdot \dot{\mathbf{x}}$ forward alongside function evaluations.<br>
+        To obtain the $j$-th column of the Jacobian $J_{:, j} = \frac{\partial \mathbf{y}}{\partial x_j}$, we seed the input tangent vector with the standard basis vector $\dot{\mathbf{x}} = \mathbf{e}_j = [0, \dots, 1, \dots, 0]^T$.<br>
+        Evaluating one forward pass with tangent propagation costs $c \cdot \operatorname{FLOPs}(f)$, where $c \approx 2$ to $3$.<br>
+        To reconstruct all $n$ columns of the $m \times n$ Jacobian, we must repeat this forward sweep $n$ times:<br>
+        $$\text{Total Time}_{\text{Forward}} = n \cdot O(\text{ops})$$</p>
+
+        <p class="step"><strong>Step 2: Reverse-Mode Complexity (VJPs):</strong><br>
+        In Reverse-Mode autodiff, the algorithm propagates adjoint sensitivities $\bar{\mathbf{v}} = \bar{\mathbf{y}}^T J_f$ backward from output to input.<br>
+        To obtain the $i$-th row of the Jacobian $J_{i, :} = \frac{\partial y_i}{\partial \mathbf{x}}$, we seed the output cotangent vector with the basis vector $\bar{\mathbf{y}} = \mathbf{e}_i$.<br>
+        Evaluating one backward sweep costs $c' \cdot \operatorname{FLOPs}(f)$, where $c' \approx 2$ to $4$ (saving the forward cache in memory).<br>
+        To reconstruct all $m$ rows of the Jacobian, we must repeat this backward sweep $m$ times:<br>
+        $$\text{Total Time}_{\text{Reverse}} = m \cdot O(\text{ops})$$</p>
+
+        <p class="step"><strong>Step 3: Application to Deep Learning Optimization:</strong><br>
+        In training deep neural networks (e.g., GPT-4 or LLaMA 3), the inputs are the network weights $\boldsymbol{\theta} \in \mathbb{R}^n$ with $n \approx 10^{11}$ parameters, and the output is the scalar loss $\mathcal{L} \in \mathbb{R}^1$, so $m = 1$.<br>
+        <ul>
+          <li>Using <strong>Forward-Mode Autodiff</strong>: requires $n = 10^{11}$ forward passes. If one forward pass takes 1 millisecond, computing one gradient step would require $10^8$ seconds $\approx \mathbf{3.17 \text{ years}}$!</li>
+          <li>Using <strong>Reverse-Mode Autodiff (Backpropagation)</strong>: requires $m = 1$ backward pass. Computing the exact gradient for all $10^{11}$ parameters simultaneously takes approximately <strong>2 milliseconds</strong>!</li>
+        </ul>
+        Reverse-Mode autodiff achieves a computational speedup of $n = 10^{11} \times$ (one hundred billion times faster). It is the mathematical cornerstone of scalable deep learning. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.3.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.3.7</span>
+        <span class="difficulty difficulty-medium">Level 4 • Conceptual Trap MCQ</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A machine learning engineer implements a custom normalization layer in PyTorch. In the forward pass, the engineer writes <code>x += 1.0</code> instead of <code>x = x + 1.0</code>. During <code>loss.backward()</code>, PyTorch throws the exception: <code>RuntimeError: one of the variables needed for gradient computation has been modified by an inplace operation</code>. What is the fundamental mathematical reason why backpropagation prohibits modifying tensor buffers in-place?</p>
+        <ol type="A">
+          <li>In-place modifications change the memory address of the tensor, breaking Python's internal dictionary hash map.</li>
+          <li>The backward pass requires specific forward activation values (e.g., $A^{[l-1]}$ in $\frac{\partial \mathcal{L}}{\partial W^{[l]}} = (A^{[l-1]})^T \delta^{[l]}$) saved in the computational tape; overwriting them in-place permanently destroys the values needed to evaluate the analytical derivative.</li>
+          <li>In-place modifications force the CUDA compiler to fall back to CPU execution, causing a thread synchronization deadlock.</li>
+          <li>PyTorch autograd relies on the Gauss-Markov theorem, which requires variance buffers to remain strictly stationary across time.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: B • Comprehensive Autograd Mechanics Analysis</div>
+
+        <p class="step"><strong>Detailed Analysis:</strong><br>
+        In deep learning, derivatives of non-linear functions almost always depend directly on the forward activation values:<br>
+        <ul>
+          <li>For linear layer weights: $\frac{\partial \mathcal{L}}{\partial W} = X^T \delta$. The gradient requires the <strong>exact input activations $X$</strong>!</li>
+          <li>For ReLU activation: $g'(z) = \mathbb{I}(z &gt; 0)$. The derivative requires the <strong>unmodified pre-activations $z$</strong>!</li>
+          <li>For Sigmoid activation: $\sigma'(z) = a(1 - a)$. The derivative requires the <strong>forward output $a$</strong>!</li>
+          <li>For Softmax Cross-Entropy: $\delta = \mathbf{p} - \mathbf{y}$. The gradient requires the <strong>forward probability vector $\mathbf{p}$</strong>!</li>
+        </ul>
+        When PyTorch executes the forward pass, the autograd engine saves these tensors in a <code>ctx.save_for_backward()</code> cache.<br>
+        If an engineer writes <code>x += 1.0</code>, the memory buffer containing $x$ is mutated in-place. When <code>loss.backward()</code> is called, the backward formula receives the mutated value $x+1$ instead of $x$. This would compute mathematically incorrect gradients without raising an arithmetic error!<br>
+        To prevent silent numerical corruption, PyTorch tracks a <code>_version</code> counter on every tensor. If a tensor's version is modified after being saved in the autograd tape, PyTorch deliberately halts execution with the in-place RuntimeError.<br>
+        <strong>Fix:</strong> Always use out-of-place operations: <code>x = x + 1.0</code>.</p>
+
+        <p class="step"><strong>Why Other Options are False:</strong><br>
+        <ul>
+          <li><strong>A is FALSE:</strong> In-place operations preserve the exact same memory address (<code>id(x)</code> is unchanged); that is precisely why the underlying data is overwritten.</li>
+          <li><strong>C is FALSE:</strong> CUDA kernels execute in-place operations easily; the error is enforced by the PyTorch autograd engine at the software graph level, not by a hardware deadlock.</li>
+          <li><strong>D is FALSE:</strong> Gauss-Markov relates to linear regression unbiasedness, not autograd tensor versioning.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.3.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.3.8</span>
+        <span class="difficulty difficulty-hard">Level 4 • Assertion-Reasoning &amp; Convolutional Backprop</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Evaluate the following Assertion and Reason regarding the backward pass of a 2D convolutional layer:</p>
+        <p><strong>Assertion (A):</strong> For a 2D convolutional layer with bias vector $\mathbf{b} \in \mathbb{R}^{C_{\text{out}}}$ and incoming 4D error tensor $\delta \in \mathbb{R}^{N \times C_{\text{out}} \times H_{\text{out}} \times W_{\text{out}}}$, the gradient with respect to bias is computed by summing $\delta$ across axes $(0, 2, 3)$:
+        $$\frac{\partial \mathcal{L}}{\partial \mathbf{b}} = \sum_{n=1}^N \sum_{h=1}^{H_{\text{out}}} \sum_{w=1}^{W_{\text{out}}} \delta_{n, :, h, w} \in \mathbb{R}^{C_{\text{out}}}$$</p>
+        <p><strong>Reason (R):</strong> By the principle of weight sharing, a single scalar bias $b_c$ is added to every spatial location $(h, w)$ across every sample $n$ in feature map $c$. By the multivariable chain rule, the derivative with respect to a shared parameter is the sum of partial derivatives across all computational paths where that parameter was deployed.</p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct mathematical explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A • Comprehensive Convolutional Calculus Proof</div>
+
+        <p class="step"><strong>Detailed Analysis:</strong><br>
+        <strong>Analysis of Reason (R):</strong><br>
+        In a 2D convolutional layer, the forward equation for channel $c \in \{1, \dots, C_{\text{out}}\}$ at batch sample $n$ and spatial position $(h, w)$ is:
+        $$Z_{n, c, h, w} = (X_n * W_c)_{h, w} + b_c$$
+        Notice that the exact same scalar parameter $b_c$ appears additively in every single pre-activation $Z_{n, c, h, w}$ across all $N$ batch elements and all $H_{\text{out}} \times W_{\text{out}}$ spatial pixels!<br>
+        By the multivariable chain rule, if a variable $b_c$ influences the scalar loss $\mathcal{L}$ through multiple intermediate nodes $\{Z_{n, c, h, w}\}$:
+        $$\frac{\partial \mathcal{L}}{\partial b_c} = \sum_{n=1}^N \sum_{h=1}^{H_{\text{out}}} \sum_{w=1}^{W_{\text{out}}} \frac{\partial \mathcal{L}}{\partial Z_{n, c, h, w}} \frac{\partial Z_{n, c, h, w}}{\partial b_c}$$
+        Since $Z_{n, c, h, w} = \text{Conv} + b_c$, the partial derivative is:
+        $$\frac{\partial Z_{n, c, h, w}}{\partial b_c} = 1.0, \quad \forall n, h, w$$
+        Therefore:
+        $$\frac{\partial \mathcal{L}}{\partial b_c} = \sum_{n=1}^N \sum_{h=1}^{H_{\text{out}}} \sum_{w=1}^{W_{\text{out}}} \delta_{n, c, h, w}$$
+        Thus, Reason (R) is mathematically true and exact.</p>
+
+        <p class="step"><strong>Analysis of Assertion (A):</strong><br>
+        In tensor notation (e.g. PyTorch <code>delta.sum(dim=(0, 2, 3))</code>), summing along axis 0 (batch size $N$), axis 2 (height $H_{\text{out}}$), and axis 3 (width $W_{\text{out}}$) leaves only axis 1 (output channels $C_{\text{out}}$).<br>
+        The resulting tensor has shape $(C_{\text{out}},)$, exactly matching the dimensions of $\mathbf{b}$.<br>
+        Therefore, (A) is true, and (R) provides the exact mathematical justification derived from weight sharing and multivariable calculus. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- SECTION 6: CODE LAB -->
+    <h3>5. Production Code Lab 3.3: 3-Layer Neural Network with Gradient Checking from Scratch</h3>
     <p>Below is an educational implementation of a 3-layer neural network written in pure NumPy with full analytical backpropagation and automated gradient checking.</p>
 
     <div class="code-lab">
@@ -106,12 +464,14 @@
 <pre><code>import numpy as np
 
 class NeuralNetworkScratch:
+    """
+    3-Layer MLP with Analytical Matrix Backpropagation and Numerical Gradient Checking.
+    """
     def __init__(self, layer_dims):
-        # layer_dims e.g. [input_dim, hidden_1, hidden_2, output_dim]
         self.params = {}
         self.L = len(layer_dims) - 1
         for l in range(1, self.L + 1):
-            # He / Kaiming Initialization
+            # He / Kaiming Normal Initialization
             self.params[f"W{l}"] = np.random.randn(layer_dims[l-1], layer_dims[l]) * np.sqrt(2.0 / layer_dims[l-1])
             self.params[f"b{l}"] = np.zeros((1, layer_dims[l]))
 
@@ -120,10 +480,10 @@ class NeuralNetworkScratch:
         A = X
         for l in range(1, self.L):
             Z = A @ self.params[f"W{l}"] + self.params[f"b{l}"]
-            A = np.maximum(0, Z) # ReLU
+            A = np.maximum(0, Z)  # ReLU
             cache[f"Z{l}"], cache[f"A{l}"] = Z, A
 
-        # Output Layer with Softmax
+        # Output Layer with Stable Softmax
         ZL = A @ self.params[f"W{self.L}"] + self.params[f"b{self.L}"]
         exp_Z = np.exp(ZL - np.max(ZL, axis=1, keepdims=True))
         AL = exp_Z / np.sum(exp_Z, axis=1, keepdims=True)
@@ -133,13 +493,13 @@ class NeuralNetworkScratch:
     def backward(self, Y_onehot, cache):
         grads = {}
         N = Y_onehot.shape[0]
-        # Softmax + Cross-Entropy gradient: delta_L = (1/N) * (P - Y)
+        # Softmax + Cross-Entropy unified gradient: delta = (AL - Y) / N
         AL = cache[f"A{self.L}"]
         delta = (AL - Y_onehot) / N
 
         for l in reversed(range(1, self.L + 1)):
             A_prev = cache[f"A{l-1}"]
-            # Analytical Gradients
+            # Analytical Gradients via Matrix Products
             grads[f"dW{l}"] = A_prev.T @ delta
             grads[f"db{l}"] = np.sum(delta, axis=0, keepdims=True)
 
@@ -164,7 +524,7 @@ if __name__ == "__main__":
     print("Analytical dW3 Shape:", grads["dW3"].shape, "(Matches W3!)")</code></pre>
     </div>
 
-    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 3.3 Dedicated Project &amp; Case Study</span>

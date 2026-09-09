@@ -893,6 +893,54 @@ blockquote p {
   border-radius: 2px;
 }
 
+/* MathJax 3 rendered output styling */
+mjx-container[jax="CHTML"][display="true"] {
+  display: block !important;
+  margin: 1.2em 0 !important;
+  padding: 0.3em 0 !important;
+  text-align: center !important;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  /* Thin, subtle modern scrollbar only if equation truly overflows */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(27, 73, 101, 0.2) transparent;
+}
+
+mjx-container[jax="CHTML"][display="true"]::-webkit-scrollbar {
+  height: 4px;
+}
+
+mjx-container[jax="CHTML"][display="true"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+mjx-container[jax="CHTML"][display="true"]::-webkit-scrollbar-thumb {
+  background: rgba(27, 73, 101, 0.2);
+  border-radius: 4px;
+}
+
+mjx-container[jax="CHTML"]:not([display="true"]) {
+  display: inline !important;
+  margin: 0 0.1em;
+}
+
+/* Ensure display equations in solutions/problems/steps have clean, centered alignment */
+.solution mjx-container[jax="CHTML"][display="true"],
+.problem mjx-container[jax="CHTML"][display="true"],
+.step mjx-container[jax="CHTML"][display="true"] {
+  margin: 0.8em 0 !important;
+  text-align: center !important;
+}
+
+/* Responsive math: scale slightly on narrow containers */
+@media (max-width: 768px) {
+  mjx-container[jax="CHTML"][display="true"] {
+    margin: 0.8em 0 !important;
+    font-size: 92%;
+  }
+}
+
 /* ==========================================================================
    TABLES
    ========================================================================== */
@@ -1203,8 +1251,19 @@ li::marker {
   .code-lab,
   .key-insight,
   .project-section,
-  .math-block {
+  .math-block,
+  .diagram-figure,
+  mjx-container[jax="CHTML"][display="true"] {
     page-break-inside: avoid;
+    break-inside: avoid;
+    overflow: visible !important;
+  }
+
+  .diagram-figure img {
+    max-width: 100% !important;
+    height: auto !important;
+    display: block !important;
+    margin: 0 auto !important;
   }
   
   pre {
@@ -1220,6 +1279,41 @@ li::marker {
   .scaffold-notice {
     display: none;
   }
+}
+
+/* ==========================================================================
+   DIAGRAM & FIGURE STYLES
+   ========================================================================== */
+
+.diagram-figure {
+  margin: 1.8em auto;
+  text-align: center;
+  max-width: 100%;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.diagram-figure img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.diagram-caption {
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--color-muted);
+  margin-top: 0.7em;
+  text-align: center;
+  padding: 0 0.5em;
+}
+
+.diagram-caption strong {
+  color: var(--color-primary);
 }
 
 /* ==========================================================================

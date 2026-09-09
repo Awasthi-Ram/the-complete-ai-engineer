@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="decision_tree_partitioning.png" alt="Figure 2.4.1: decision tree partitioning">
+        <div class="diagram-caption"><strong>Figure 2.4.1:</strong> Decision tree binary splitting and feature space geometry. Left: The hierarchical recursive tree selects greedy splits maximizing Information Gain or Gini impurity reduction. Right: The corresponding axis-aligned orthogonal rectangular partitioning of the input feature space into homogeneous prediction regions.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 2.4 — DECISION TREES & INFORMATION GAIN
      ====================================================================== -->
@@ -5,7 +11,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 2.4</span>
     <h2 class="chapter-title">Decision Trees &amp; Information Gain</h2>
-    <span class="chapter-subtitle">CART, Gini Impurity, Axis-Aligned Partitioning &amp; Cost-Complexity Pruning</span>
+    <span class="chapter-subtitle">CART, Gini Impurity, Variance Reduction, Cost-Complexity Pruning &amp; Axis-Aligned Geometry</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -23,91 +29,413 @@
 
     <p><strong>Decision Trees</strong> abandon the global parametric assumption entirely. Instead, they apply a <strong>greedy, top-down recursive partitioning</strong> strategy that divides the feature space $\mathbb{R}^d$ into a collection of mutually exclusive hyper-rectangles using axis-aligned orthogonal cuts ($x_j \le \theta$):</p>
     $$\hat{y}(\mathbf{x}) = \sum_{m=1}^{|T|} c_m \mathbb{I}(\mathbf{x} \in R_m)$$
-    <p>Where $R_m$ is region $m$ associated with leaf node $m$, and $c_m$ is the leaf output (majority class in classification, or mean target in regression).</p>
-
-    <!-- SECTION 2: IMPURITY METRICS -->
-    <h3>2. Splitting Criteria: Gini Impurity vs. Entropy</h3>
-    <p>At each internal node, the tree must choose the feature $j$ and split threshold $\theta$ that maximizes the purity of the resulting child nodes.</p>
-
-    <h4>Gini Impurity (Breiman's CART)</h4>
-    <p>Let $p_k$ be the proportion of training instances in node $S$ belonging to class $k \in \{1,\dots,C\}$. The <strong>Gini Impurity</strong> measures the probability that a randomly chosen element from the set would be incorrectly labeled if it were randomly labeled according to the distribution of labels in the subset:</p>
-    $$I_G(S) = \sum_{k=1}^C p_k (1 - p_k) = \sum_{k=1}^C (p_k - p_k^2) = \sum_{k=1}^C p_k - \sum_{k=1}^C p_k^2 = 1 - \sum_{k=1}^C p_k^2$$
+    <p>where $R_m$ is region $m$ associated with leaf node $m$, and $c_m$ is the leaf output:</p>
     <ul>
-      <li><strong>Pure Node ($p_1 = 1, p_{k \ne 1} = 0$):</strong> $I_G = 1 - 1^2 = 0$ (Minimum impurity).</li>
-      <li><strong>Maximum Impurity (Balanced 2-class, $p_1 = p_2 = 0.5$):</strong> $I_G = 1 - (0.5^2 + 0.5^2) = 0.5$.</li>
+      <li><strong>Classification:</strong> Plurality vote (majority class) $c_m = \arg\max_k \sum_{\mathbf{x}_i \in R_m} \mathbb{I}(y_i = k)$, or empirical class probability distribution $p_{mk} = \frac{1}{|R_m|} \sum_{\mathbf{x}_i \in R_m} \mathbb{I}(y_i = k)$.</li>
+      <li><strong>Regression:</strong> Under squared loss ($L_2$), the optimal constant prediction is the sample mean $c_m = \frac{1}{|R_m|} \sum_{\mathbf{x}_i \in R_m} y_i$. Under absolute loss ($L_1$), the optimal prediction is the sample median $c_m = \text{median}(\{y_i \mid \mathbf{x}_i \in R_m\})$.</li>
     </ul>
 
-    <h4>Information Gain</h4>
+    <!-- SECTION 2: IMPURITY METRICS -->
+    <h3>2. Splitting Criteria: Classification &amp; Regression</h3>
+    <p>At each internal node, the tree must choose the feature $j$ and split threshold $\theta$ that maximizes the purity of the resulting child nodes.</p>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Splitting Criterion</th>
+            <th>Task</th>
+            <th>Mathematical Formula</th>
+            <th>Computational Characteristics</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Gini Impurity</strong></td>
+            <td>Classification</td>
+            <td>$I_G(S) = 1 - \sum_{k=1}^K p_k^2$</td>
+            <td>Fastest ($1$ CPU cycle per evaluation). Default in CART / scikit-learn.</td>
+          </tr>
+          <tr>
+            <td><strong>Shannon Entropy</strong></td>
+            <td>Classification</td>
+            <td>$H(S) = -\sum_{k=1}^K p_k \log_2(p_k)$</td>
+            <td>Slower ($20\text{--}50$ CPU cycles for transcendentals). Strongly penalizes impure nodes. Used in ID3 / C4.5.</td>
+          </tr>
+          <tr>
+            <td><strong>Misclassification Error</strong></td>
+            <td>Classification</td>
+            <td>$E(S) = 1 - \max_k p_k$</td>
+            <td>Not strictly concave; poor for tree growth because it fails to reward purity improvements off the majority class.</td>
+          </tr>
+          <tr>
+            <td><strong>Variance Reduction (MSE)</strong></td>
+            <td>Regression</td>
+            <td>$I_{\text{Var}}(S) = \frac{1}{|S|} \sum_{i \in S} (y_i - \bar{y}_S)^2$</td>
+            <td>Standard $L_2$ regression split. Equivalent to maximizing child separation: $\frac{N_L N_R}{N} (\bar{y}_L - \bar{y}_R)^2$.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>The Information Gain Formula</h4>
     <p>When a candidate split partitions dataset $S$ of size $N$ into Left subset $S_L$ of size $N_L$ and Right subset $S_R$ of size $N_R$, the <strong>Information Gain</strong> is the reduction in impurity:</p>
-    $$\Delta I_G = I_G(S) - \left[ \frac{N_L}{N} I_G(S_L) + \frac{N_R}{N} I_G(S_R) \right]$$
-    <p>The CART algorithm selects the optimal split $(j^*, \theta^*)$ by maximizing $\Delta I_G$ across all features and all unique candidate thresholds.</p>
+    $$\Delta I = I(S) - \left[ \frac{N_L}{N} I(S_L) + \frac{N_R}{N} I(S_R) \right]$$
+    <p>Because the impurity functions (Gini and Entropy) are <strong>strictly concave</strong> functions of the probability vector $\mathbf{p}$, Jensen's inequality guarantees that <strong>$\Delta I \ge 0$ always</strong>: splitting a node can never increase impurity!</p>
 
     <!-- SECTION 3: PRUNING -->
     <h3>3. Overfitting &amp; Minimal Cost-Complexity Pruning</h3>
-    <p>An unconstrained decision tree will grow until every training point sits in its own isolated leaf node ($100\%$ training accuracy). However, such trees have massive variance, capturing random data noise rather than true structural signal.</p>
+    <p>An unconstrained decision tree will grow until every training point sits in its own isolated leaf node ($100\%$ training accuracy, zero bias). However, such trees suffer from massive variance, capturing random data noise rather than structural signal.</p>
 
     <h4>Minimal Cost-Complexity Pruning ($L_0$ Regularization)</h4>
     <p>Breiman et al. introduced <strong>Cost-Complexity Pruning</strong>, defining a regularized loss function that balances training misclassification rate $\mathcal{R}(T)$ with tree complexity (number of terminal leaves $|T|$):</p>
     $$\mathcal{R}_\alpha(T) = \mathcal{R}(T) + \alpha |T|$$
-    <p>Where $\alpha \ge 0$ is the regularization parameter:</p>
+    <p>where $\alpha \ge 0$ is the complexity tuning parameter:</p>
     <ul>
-      <li>$\alpha = 0$: The original, unconstrained full tree.</li>
+      <li>$\alpha = 0$: The original, unconstrained full tree $T_{\max}$.</li>
       <li>$\alpha \to \infty$: The simplest possible tree (a single root node).</li>
     </ul>
-    <p>For every internal node $t$, collapsing its entire subtree $T_t$ into a single leaf increases error by $\mathcal{R}(t) - \mathcal{R}(T_t)$ while reducing leaf count by $|T_t| - 1$. The node where the cost of complexity reduction is minimized is identified by:</p>
+    <p>For every internal node $t$, collapsing its entire descendant subtree $T_t$ into a single leaf increases empirical error by $\mathcal{R}(t) - \mathcal{R}(T_t)$ while reducing leaf count by $|T_t| - 1$. The effective cost-complexity threshold is:</p>
     $$\alpha_{\text{eff}}(t) = \frac{\mathcal{R}(t) - \mathcal{R}(T_t)}{|T_t| - 1}$$
-    <p>Pruning the node with the smallest $\alpha_{\text{eff}}$ produces a nested sequence of optimal subtrees $T_0 \supset T_1 \supset T_2 \dots$, from which the best subtree is chosen via cross-validation.</p>
+    <p>Pruning the node with the smallest $\alpha_{\text{eff}}$ produces a finite, nested hierarchy of optimal subtrees $T_0 \supset T_1 \supset T_2 \supset \dots \supset \{\text{root}\}$, from which the optimal subtree is selected via cross-validation.</p>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Decision Trees</h3>
-
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 2.4.1</span>
-        <span class="difficulty difficulty-medium">Medium</span>
-        <span class="company-tag company-google">Google</span>
-        <span class="company-tag company-amazon">Amazon</span>
+    <!-- SECTION 4: PRACTICE SUITE -->
+    <div class="practice-set">
+      <div class="practice-header">
+        <span class="set-tag">Complete 4-Tier Practice Suite</span>
+        <h3 class="set-title">Chapter 2.4 Practice Problems &amp; Tier-1 AI Challenge Suite</h3>
+        <p class="set-desc">Master decision tree splitting mathematics, Gini impurity, entropy concave bounds, and cost-complexity pruning through step-by-step numerical drills, algorithmic traces, FAANG research proofs, and conceptual trap questions.</p>
       </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> A parent node $S$ contains $N = 10$ samples: $6$ Positive ($+$) and $4$ Negative ($-$). A candidate split partitions the data into:</p>
-        <ul>
-          <li><strong>Left Child ($S_L$):</strong> $4$ Positive ($+$), $0$ Negative ($-$). ($N_L = 4$).</li>
-          <li><strong>Right Child ($S_R$):</strong> $2$ Positive ($+$), $4$ Negative ($-$). ($N_R = 6$).</li>
-        </ul>
-        <ol>
-          <li>Calculate the initial Gini impurity $I_G(S)$ of the parent node.</li>
-          <li>Calculate the Gini impurities of the Left and Right child nodes.</li>
-          <li>Calculate the exact weighted Information Gain $\Delta I_G$ of this candidate split.</li>
-          <li>Why does high-throughput production software (e.g. XGBoost, scikit-learn) default to Gini Impurity instead of Shannon Entropy?</li>
-        </ol>
+
+      <!-- TIER 1: NUMERICAL WARM-UP -->
+      <h4>Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.4.1</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-google">Google</span>
+          <span class="company-tag company-amazon">Amazon</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> A dataset at node $S$ contains $N = 20$ samples across 3 classes:
+          $$N_A = 10, \quad N_B = 6, \quad N_C = 4$$
+          Compute step-by-step:
+          <ol>
+            <li>The class probability distribution $\mathbf{p} = [p_A, p_B, p_C]$.</li>
+            <li>The Gini Impurity $I_G(S)$.</li>
+            <li>The Shannon Entropy $H(S)$ in bits.</li>
+            <li>The Misclassification Error $E(S)$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
+
+          <p class="step"><strong>Step 1: Compute Probabilities:</strong>
+          $$p_A = \frac{10}{20} = 0.50, \qquad p_B = \frac{6}{20} = 0.30, \qquad p_C = \frac{4}{20} = 0.20$$</p>
+
+          <p class="step"><strong>Step 2: Compute Gini Impurity:</strong>
+          $$I_G(S) = 1 - \sum_{k=1}^3 p_k^2 = 1 - \left( 0.50^2 + 0.30^2 + 0.20^2 \right)$$
+          $$I_G(S) = 1 - (0.25 + 0.09 + 0.04) = 1 - 0.38 = \mathbf{0.6200}$$</p>
+
+          <p class="step"><strong>Step 3: Compute Shannon Entropy in Bits:</strong>
+          $$H(S) = -\sum_{k=1}^3 p_k \log_2(p_k) = -\left[ 0.5 \log_2(0.5) + 0.3 \log_2(0.3) + 0.2 \log_2(0.2) \right]$$
+          $$\log_2(0.5) = -1.0, \quad \log_2(0.3) \approx -1.7370, \quad \log_2(0.2) \approx -2.3219$$
+          $$H(S) = -[0.5(-1.0) + 0.3(-1.7370) + 0.2(-2.3219)] = 0.50 + 0.5211 + 0.4644 = \mathbf{1.4855 \text{ bits}}$$</p>
+
+          <p class="step"><strong>Step 4: Compute Misclassification Error:</strong>
+          $$E(S) = 1 - \max(p_A, p_B, p_C) = 1 - 0.50 = \mathbf{0.5000}$$
+          <strong>Verification of ordering: $E(S) = 0.50 \le I_G(S) = 0.62 \le H(S) = 1.4855$.</strong></p>
+        </div>
       </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
 
-        <p class="step"><strong>Step 1: Parent Gini Impurity:</strong><br>
-        $p_+ = \frac{6}{10} = 0.6, \quad p_- = \frac{4}{10} = 0.4$.
-        $$I_G(S) = 1 - (p_+^2 + p_-^2) = 1 - (0.6^2 + 0.4^2) = 1 - (0.36 + 0.16) = 1 - 0.52 = 0.48$$</p>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.4.2</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-meta">Meta</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> A regression tree node contains $N = 4$ target values: $\mathbf{y} = [2.0, 4.0, 6.0, 8.0]$.
+          A candidate split divides the samples into Left child $S_L = [2.0, 4.0]$ and Right child $S_R = [6.0, 8.0]$.
+          Compute:
+          <ol>
+            <li>The parent node variance $\text{Var}(S)$.</li>
+            <li>The Left and Right child node variances $\text{Var}(S_L)$ and $\text{Var}(S_R)$.</li>
+            <li>The Variance Reduction $\Delta \text{Var}$ achieved by this split.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
 
-        <p class="step"><strong>Step 2: Child Node Impurities:</strong><br>
-        <strong>Left Node ($S_L$):</strong> $p_+ = \frac{4}{4} = 1.0, \quad p_- = 0.0$.
-        $$I_G(S_L) = 1 - (1.0^2 + 0.0^2) = 1 - 1 = \mathbf{0.0} \quad (\text{Pure Node!})$$
-        <strong>Right Node ($S_R$):</strong> $p_+ = \frac{2}{6} = \frac{1}{3}, \quad p_- = \frac{4}{6} = \frac{2}{3}$.
-        $$I_G(S_R) = 1 - \left( \left(\frac{1}{3}\right)^2 + \left(\frac{2}{3}\right)^2 \right) = 1 - \left( \frac{1}{9} + \frac{4}{9} \right) = 1 - \frac{5}{9} = \frac{4}{9} \approx \mathbf{0.4444}$$</p>
+          <p class="step"><strong>Step 1: Parent Node Variance:</strong><br>
+          Mean: $\bar{y} = \frac{2 + 4 + 6 + 8}{4} = 5.0$.
+          $$\text{Var}(S) = \frac{(2-5)^2 + (4-5)^2 + (6-5)^2 + (8-5)^2}{4} = \frac{9 + 1 + 1 + 9}{4} = \frac{20}{4} = \mathbf{5.00}$$</p>
 
-        <p class="step"><strong>Step 3: Calculate Weighted Information Gain:</strong><br>
-        The weighted child impurity is:
-        $$I_G(\text{Children}) = \frac{N_L}{N} I_G(S_L) + \frac{N_R}{N} I_G(S_R) = \frac{4}{10}(0.0) + \frac{6}{10}\left(\frac{4}{9}\right) = 0 + \frac{24}{90} = \frac{4}{15} \approx 0.2667$$
-        Subtract from parent impurity:
-        $$\Delta I_G = I_G(S) - I_G(\text{Children}) = 0.48 - 0.2667 = \mathbf{0.2133}$$
-        <strong>Result: The split achieves an Information Gain of $0.2133$.</strong></p>
+          <p class="step"><strong>Step 2: Child Node Variances:</strong><br>
+          <strong>Left Child ($S_L = [2.0, 4.0]$):</strong> Mean $\bar{y}_L = 3.0$.
+          $$\text{Var}(S_L) = \frac{(2-3)^2 + (4-3)^2}{2} = \frac{1 + 1}{2} = \mathbf{1.00}$$
+          <strong>Right Child ($S_R = [6.0, 8.0]$):</strong> Mean $\bar{y}_R = 7.0$.
+          $$\text{Var}(S_R) = \frac{(6-7)^2 + (8-7)^2}{2} = \frac{1 + 1}{2} = \mathbf{1.00}$$</p>
 
-        <p class="step"><strong>Step 4: Why Gini Dominates Production Engines:</strong><br>
-        Shannon Entropy requires evaluating logarithms: $-\sum p_k \log_2(p_k)$. In CPU microcode, evaluating a transcendental logarithmic instruction ($\text{FYL2X}$ or SIMD $\ln$) requires between <strong>20 and 50 clock cycles</strong>. In contrast, Gini impurity requires only multiplication and addition ($1 - \sum p_k^2$), which modern CPU ALUs execute in <strong>1 single clock cycle</strong>! When evaluating billions of candidate splits across millions of samples, Gini runs up to <strong>10x faster</strong> while producing statistically indistinguishable trees.</p>
+          <p class="step"><strong>Step 3: Compute Variance Reduction:</strong>
+          $$\text{Weighted Child Variance} = \frac{2}{4}(1.00) + \frac{2}{4}(1.00) = 1.00$$
+          $$\Delta \text{Var} = \text{Var}(S) - \text{Weighted Child Variance} = 5.00 - 1.00 = \mathbf{4.00}$$
+          <em>Cross-Check via Between-Group Separation:</em>
+          $$\Delta \text{Var} = \frac{N_L N_R}{N^2} (\bar{y}_L - \bar{y}_R)^2 = \frac{2 \times 2}{16} (3.0 - 7.0)^2 = \frac{1}{4} (-4.0)^2 = \frac{16}{4} = \mathbf{4.00} \quad \checkmark$$
+          <strong>Result: The split slashes variance by $80\%$, reducing variance from $5.0$ to $1.0$.</strong></p>
+        </div>
+      </div>
+
+      <!-- TIER 2: APPLIED ENGINEERING & ALGORITHMIC TRACING -->
+      <h4>Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.4.3</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-apple">Apple</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> A binary classification dataset has a continuous feature $X_1$ and label $Y \in \{0, 1\}$:</p>
+          <table style="margin: 10px 0;">
+            <tr><th>Sample $i$</th><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td></tr>
+            <tr><th>Feature $X_1$</th><td>$1.0$</td><td>$2.0$</td><td>$3.0$</td><td>$5.0$</td><td>$6.0$</td></tr>
+            <tr><th>Label $Y$</th><td>$0$</td><td>$0$</td><td>$1$</td><td>$1$</td><td>$0$</td></tr>
+          </table>
+          <p>Trace the exact CART split selection for feature $X_1$:
+          <ol>
+            <li>Identify all 4 candidate midpoint thresholds.</li>
+            <li>Compute the weighted child Gini impurity for each candidate threshold.</li>
+            <li>Select the optimal split threshold $\theta^*$ and compute its Information Gain $\Delta I_G$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Algorithmic Trace</div>
+
+          <p class="step"><strong>Step 1: Identify Candidate Midpoints:</strong><br>
+          Unique sorted values: $1.0, 2.0, 3.0, 5.0, 6.0$.<br>
+          Midpoint candidate thresholds:
+          $$\theta_1 = \frac{1+2}{2} = 1.5, \quad \theta_2 = \frac{2+3}{2} = 2.5, \quad \theta_3 = \frac{3+5}{2} = 4.0, \quad \theta_4 = \frac{5+6}{2} = 5.5$$
+          Parent labels: three $0$s, two $1$s ($N=5$).
+          $$I_G(S) = 1 - \left( (3/5)^2 + (2/5)^2 \right) = 1 - (0.36 + 0.16) = 1 - 0.52 = 0.4800$$</p>
+
+          <p class="step"><strong>Step 2: Evaluate All 4 Midpoints:</strong>
+          <ul>
+            <li><strong>Threshold $\theta_1 = 1.5$:</strong>
+              <ul>
+                <li>Left ($X_1 \le 1.5$): $[0]$ ($N_L=1$, pure: $I_G = 0.0$).</li>
+                <li>Right ($X_1 &gt; 1.5$): $[0, 1, 1, 0]$ ($N_R=4$, $p_0=0.5, p_1=0.5 \implies I_G = 0.50$).</li>
+                <li>Weighted Impurity: $\frac{1}{5}(0.0) + \frac{4}{5}(0.50) = 0.4000$.</li>
+              </ul>
+            </li>
+            <li><strong>Threshold $\theta_2 = 2.5$:</strong>
+              <ul>
+                <li>Left ($X_1 \le 2.5$): $[0, 0]$ ($N_L=2$, pure: $I_G = 0.0$).</li>
+                <li>Right ($X_1 &gt; 2.5$): $[1, 1, 0]$ ($N_R=3$, $p_1 = 2/3, p_0 = 1/3 \implies I_G = 1 - (4/9 + 1/9) = 4/9 \approx 0.4444$).</li>
+                <li>Weighted Impurity: $\frac{2}{5}(0.0) + \frac{3}{5}\left(\frac{4}{9}\right) = \frac{12}{45} \approx \mathbf{0.2667}$.</li>
+              </ul>
+            </li>
+            <li><strong>Threshold $\theta_3 = 4.0$:</strong>
+              <ul>
+                <li>Left ($X_1 \le 4.0$): $[0, 0, 1]$ ($N_L=3$, $I_G = 4/9 \approx 0.4444$).</li>
+                <li>Right ($X_1 &gt; 4.0$): $[1, 0]$ ($N_R=2$, $I_G = 0.50$).</li>
+                <li>Weighted Impurity: $\frac{3}{5}\left(\frac{4}{9}\right) + \frac{2}{5}(0.50) = \frac{4}{15} + 0.20 = 0.2667 + 0.20 = 0.4667$.</li>
+              </ul>
+            </li>
+            <li><strong>Threshold $\theta_4 = 5.5$:</strong>
+              <ul>
+                <li>Left ($X_1 \le 5.5$): $[0, 0, 1, 1]$ ($N_L=4$, $I_G = 0.50$).</li>
+                <li>Right ($X_1 &gt; 5.5$): $[0]$ ($N_R=1$, pure: $I_G = 0.0$).</li>
+                <li>Weighted Impurity: $\frac{4}{5}(0.50) + \frac{1}{5}(0.0) = 0.4000$.</li>
+              </ul>
+            </li>
+          </ul></p>
+
+          <p class="step"><strong>Step 3: Select the Optimal Split:</strong><br>
+          Threshold $\theta_2 = 2.5$ achieves the lowest weighted impurity ($0.2667$).
+          $$\Delta I_G = 0.4800 - 0.2667 = \mathbf{0.2133}$$
+          <strong>Result: Optimal split is $X_1 \le 2.5$ with Information Gain $0.2133$.</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.4.4</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-amazon">Amazon</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In Cost-Complexity Pruning, an unpruned full tree $T_0$ has root node $t_0$ and an internal subtree $T_1$ with 3 terminal leaves ($|T_1| = 3$).
+          Total validation samples $N = 100$.
+          <ul>
+            <li>If subtree $T_1$ is kept, the 3 leaves make a combined total of $R(T_1) = 4$ misclassification errors.</li>
+            <li>If subtree $T_1$ is collapsed into a single leaf node $t_1$, the single leaf makes $R(t_1) = 10$ misclassification errors.</li>
+          </ul>
+          Compute the effective pruning cost $\alpha_{\text{eff}}(t_1)$ for this node.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
+
+          <p class="step"><strong>Step 1: Compute Error Increase and Leaf Reduction:</strong><br>
+          Misclassification error rate increase:
+          $$\Delta R = R(t_1) - R(T_1) = \frac{10}{100} - \frac{4}{100} = \frac{6}{100} = 0.06$$
+          Complexity leaf count reduction:
+          $$\Delta |T| = |T_1| - 1 = 3 - 1 = 2 \text{ leaves}$$</p>
+
+          <p class="step"><strong>Step 2: Evaluate Effective Alpha:</strong>
+          $$\alpha_{\text{eff}}(t_1) = \frac{R(t_1) - R(T_1)}{|T_1| - 1} = \frac{0.06}{2} = \mathbf{0.030}$$
+          <strong>Interpretation: If the regularization penalty $\alpha$ in $\mathcal{R}_\alpha(T) = \mathcal{R}(T) + \alpha |T|$ exceeds $0.030$, pruning subtree $T_1$ reduces the total regularized cost, and the algorithm collapses it into a leaf.</strong></p>
+        </div>
+      </div>
+
+      <!-- TIER 3: FAANG / RESEARCH LAB CHALLENGES -->
+      <h4>Tier 3: FAANG &amp; Research Lab Challenges</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.4.5</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-google">Google DeepMind</span>
+          <span class="company-tag company-meta">Meta FAIR</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Prove rigorously from first principles that for any discrete probability distribution vector $\mathbf{p} = [p_1, \dots, p_K]$ on the probability simplex $\Delta^K$, both the <strong>Gini Impurity</strong> $I_G(\mathbf{p}) = 1 - \sum_{k=1}^K p_k^2$ and <strong>Shannon Entropy</strong> $H(\mathbf{p}) = -\sum_{k=1}^K p_k \ln(p_k)$ are <strong>strictly concave functions</strong> of $\mathbf{p}$. From this, apply Jensen's Inequality to prove that Information Gain is strictly non-negative ($\Delta I \ge 0$) for any split.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+          <p class="step"><strong>Step 1: Prove Concavity of Gini Impurity:</strong><br>
+          Compute the Hessian matrix of $I_G(\mathbf{p})$ with respect to $\mathbf{p}$:<br>
+          First derivative: $\frac{\partial I_G}{\partial p_i} = -2 p_i$.<br>
+          Second derivative:
+          $$\frac{\partial^2 I_G}{\partial p_i \partial p_j} = -2 \delta_{ij} \implies \nabla^2 I_G(\mathbf{p}) = -2 \mathbf{I}_K$$
+          For any non-zero vector $\mathbf{v} \neq \mathbf{0}$:
+          $$\mathbf{v}^T \nabla^2 I_G(\mathbf{p}) \mathbf{v} = -2 \|\mathbf{v}\|_2^2 &lt; 0$$
+          The Hessian is strictly negative definite everywhere, proving that $I_G(\mathbf{p})$ is <strong>strictly concave</strong>.</p>
+
+          <p class="step"><strong>Step 2: Prove Concavity of Shannon Entropy:</strong><br>
+          First derivative: $\frac{\partial H}{\partial p_i} = -\ln(p_i) - 1$.<br>
+          Second derivative:
+          $$\frac{\partial^2 H}{\partial p_i \partial p_j} = -\frac{1}{p_i} \delta_{ij} \implies \nabla^2 H(\mathbf{p}) = -\text{diag}\left( \frac{1}{p_1}, \dots, \frac{1}{p_K} \right)$$
+          Since $p_k &gt; 0$, all diagonal entries are strictly negative:
+          $$\mathbf{v}^T \nabla^2 H(\mathbf{p}) \mathbf{v} = -\sum_{k=1}^K \frac{v_k^2}{p_k} &lt; 0, \quad \forall \mathbf{v} \neq \mathbf{0}$$
+          The Hessian is strictly negative definite, proving that $H(\mathbf{p})$ is <strong>strictly concave</strong>.</p>
+
+          <p class="step"><strong>Step 3: Prove Information Gain $\Delta I \ge 0$ via Jensen's Inequality:</strong><br>
+          Let a split divide parent node $S$ (size $N$) into Left $S_L$ ($N_L$) and Right $S_R$ ($N_R$).<br>
+          Notice that the parent class probability vector is the exact weighted average of child probability vectors:
+          $$\mathbf{p}_S = \frac{N_L}{N} \mathbf{p}_L + \frac{N_R}{N} \mathbf{p}_R$$
+          Let $f(\mathbf{p})$ be any concave impurity measure ($I_G$ or $H$). By Jensen's Inequality for concave functions:
+          $$f\left( \alpha \mathbf{p}_L + (1-\alpha)\mathbf{p}_R \right) \ge \alpha f(\mathbf{p}_L) + (1-\alpha) f(\mathbf{p}_R), \quad \text{where } \alpha = \frac{N_L}{N} \in [0, 1]$$
+          Substitute $\mathbf{p}_S$:
+          $$f(\mathbf{p}_S) \ge \frac{N_L}{N} f(\mathbf{p}_L) + \frac{N_R}{N} f(\mathbf{p}_R)$$
+          Rearranging terms:
+          $$\Delta I = f(\mathbf{p}_S) - \left[ \frac{N_L}{N} f(\mathbf{p}_L) + \frac{N_R}{N} f(\mathbf{p}_R) \right] \ge 0$$
+          <strong>Q.E.D. Because Gini and Entropy are concave, splitting a node is mathematically guaranteed to never increase impurity!</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.4.6</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-microsoft">Microsoft</span>
+          <span class="company-tag company-apple">Apple</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> A categorical feature $X$ has $K$ unordered levels $\{c_1, \dots, c_K\}$.
+          <ol>
+            <li>How many non-trivial binary partitions of these $K$ categories exist? Show that brute-force evaluation scales as $\mathcal{O}(2^K)$.</li>
+            <li>Prove <strong>Fisher's Exact Splitting Theorem (Breiman et al., 1984)</strong> for binary classification: prove that sorting the categories by their empirical proportion of positive instances $p(y=1 \mid X=c_k)$ reduces the search space from $2^{K-1}-1$ to only $K-1$ splits, while guaranteeing the mathematically optimal Gini / Entropy split.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+          <p class="step"><strong>Step 1: Combinatorial Explosion of Categorical Splits:</strong><br>
+          A binary split partitions the $K$ categories into two non-empty disjoint subsets $A$ and $B$.<br>
+          The number of non-empty subsets is $2^K - 2$. Because swapping subsets $A$ and $B$ produces the identical split, we divide by 2:
+          $$\text{Number of Unique Binary Splits} = \frac{2^K - 2}{2} = 2^{K-1} - 1$$
+          For a zip-code or city feature with $K = 50$ categories, $2^{49} - 1 \approx 5.6 \times 10^{14}$ candidate splits! A brute-force search is completely impossible.</p>
+
+          <p class="step"><strong>Step 2: Fisher's Theorem Proof:</strong><br>
+          For binary classification ($y \in \{0, 1\}$), let $\bar{y}_k = P(y = 1 \mid X = c_k)$ denote the proportion of positive labels in category $c_k$.<br>
+          Sort the categories in ascending order of positive response rates:
+          $$\bar{y}_{(1)} \le \bar{y}_{(2)} \le \dots \le \bar{y}_{(K)}$$
+          Breiman et al. (1984) proved that for any strictly concave impurity function $f$, the optimal subset split $A^*$ that maximizes impurity reduction must be an <strong>interval partition</strong> of this sorted sequence:
+          $$A^* = \{c_{(1)}, c_{(2)}, \dots, c_{(m)}\} \quad \text{for some } 1 \le m \le K-1$$
+          <em>Mathematical Intuition:</em> If a partition contained a category with higher positive rate in subset $A$ and a category with lower positive rate in subset $B$, swapping them strictly increases the separation between the child means $(\bar{y}_A - \bar{y}_B)^2$, which by variance decomposition strictly increases information gain.<br>
+          Therefore, an algorithm only needs to evaluate the $K-1$ adjacent splits along the sorted order!<br>
+          <strong>Complexity: Sorting costs $\mathcal{O}(K \log K)$, and evaluating $K-1$ splits costs $\mathcal{O}(K)$. Total time collapses from $\mathcal{O}(2^K)$ to $\mathcal{O}(K \log K)$!</strong></p>
+        </div>
+      </div>
+
+      <!-- TIER 4: CONCEPTUAL TRAP MCQS -->
+      <h4>Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.4.7</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Which of the following transformations applied to feature column $X_1$ will alter the split decisions, predictions, or structure of a CART Decision Tree?</p>
+          <ol type="A">
+            <li>Multiplying $X_1$ by a positive constant $c = 1000.0$.</li>
+            <li>Adding a constant bias $b = -500.0$ to $X_1$.</li>
+            <li>Applying any strictly monotonic transformation, such as $X_1' = \ln(X_1)$ (for $X_1 &gt; 0$).</li>
+            <li>Applying a non-monotonic quadratic transformation $X_1' = (X_1 - \mu)^2$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: D</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of All Options:</strong>
+          <ul>
+            <li><strong>Option D WILL alter the tree:</strong> A quadratic transformation is not monotonic (points with different original values map to the same squared distance). This scrambles the sort order of the data points, altering candidate split partitions.</li>
+            <li><strong>Options A, B, and C will NOT alter the tree:</strong> Decision tree splitting rules depend <strong>strictly on the rank order</strong> of feature values, never their absolute numerical scale. For any strictly monotonic function $g(x)$, $x_i \le \theta \iff g(x_i) \le g(\theta)$. The partition of samples on the left and right remains identical. Decision trees are completely invariant to monotonic feature scaling (making standardization and normalization redundant).</li>
+          </ul></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.4.8</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-deepmind">DeepMind</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Consider the following Assertion (A) and Reason (R):</p>
+          <p><strong>Assertion (A):</strong> Standard CART decision trees perform exceptionally poorly on simple linear classification problems where the true separating boundary is a diagonal hyperplane $x_1 + x_2 = 1$.</p>
+          <p><strong>Reason (R):</strong> Decision tree splits are constrained to axis-aligned orthogonal cuts ($x_j \le \theta$), forcing the tree to approximate smooth diagonal boundaries through a jagged "staircase" pattern that requires exponential leaf growth $\mathcal{O}(2^d)$ to achieve high precision.</p>
+          <ol type="A">
+            <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+            <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+            <li>(A) is true, but (R) is false.</li>
+            <li>(A) is false, but (R) is true.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: A</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of Assertion &amp; Reason:</strong>
+          <ul>
+            <li><strong>Assertion (A) is TRUE:</strong> While a single logistic regression hyperplane separates $x_1 + x_2 = 1$ with $100\%$ accuracy and only 2 parameters, a standard decision tree needs dozens of nested levels to approximate the diagonal boundary, leading to high out-of-sample error and overfitting.</li>
+            <li><strong>Reason (R) is TRUE:</strong> CART tests only one single feature per node ($x_1 \le \theta$ or $x_2 \le \theta$). Approximating a $45^\circ$ diagonal requires alternating vertical and horizontal cuts in a staircase, creating fragmented leaves with few samples.</li>
+            <li>Furthermore, Reason (R) is the exact geometric and architectural reason for Assertion (A).</li>
+          </ul></p>
+        </div>
       </div>
     </div>
 
     <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 2.4: CART Decision Tree from First Principles</h3>
+    <h3>5. Production Code Lab 2.4: CART Decision Tree from First Principles</h3>
     <p>Below is an educational, production-style implementation of a binary CART Decision Tree classifier written in pure Python without scikit-learn.</p>
 
     <div class="code-lab">
@@ -162,60 +490,64 @@ class DecisionTreeClassifierScratch:
 
                 if gain > best_gain:
                     best_gain = gain
-                    split_feat, split_thresh = feat, thresh
+                    split_feat = feat
+                    split_thresh = thresh
 
-        return split_feat, split_thresh, best_gain
+        return split_feat, split_thresh
 
     def _build_tree(self, X, y, depth=0):
-        n_samples, n_labels = X.shape[0], len(np.unique(y))
-        
-        # Base cases: pure node, max depth reached, or min samples threshold
-        if depth >= self.max_depth or n_labels == 1 or n_samples < self.min_samples_split:
-            leaf_val = np.argmax(np.bincount(y))
-            return TreeNode(value=leaf_val)
+        n_samples, n_features = X.shape
+        n_labels = len(np.unique(y))
 
-        feat, thresh, gain = self._best_split(X, y)
-        if gain <= 0:
-            return TreeNode(value=np.argmax(np.bincount(y)))
+        # Stopping criteria: pure node, max depth, or min samples
+        if depth >= self.max_depth or n_labels == 1 or n_samples < self.min_samples_split:
+            leaf_value = np.bincount(y).argmax()
+            return TreeNode(value=leaf_value)
+
+        feat, thresh = self._best_split(X, y)
+        if feat is None:
+            return TreeNode(value=np.bincount(y).argmax())
 
         left_mask = X[:, feat] <= thresh
-        left_child = self._build_tree(X[left_mask], y[left_mask], depth + 1)
-        right_child = self._build_tree(X[~left_mask], y[~left_mask], depth + 1)
+        right_mask = ~left_mask
 
+        left_child = self._build_tree(X[left_mask], y[left_mask], depth + 1)
+        right_child = self._build_tree(X[right_mask], y[right_mask], depth + 1)
         return TreeNode(feature=feat, threshold=thresh, left=left_child, right=right_child)
 
     def fit(self, X, y):
         self.root = self._build_tree(X, y)
 
-    def _predict_sample(self, node, x):
+    def _predict_sample(self, x, node):
         if node.is_leaf:
             return node.value
         if x[node.feature] <= node.threshold:
-            return self._predict_sample(node.left, x)
-        return self._predict_sample(node.right, x)
+            return self._predict_sample(x, node.left)
+        return self._predict_sample(x, node.right)
 
     def predict(self, X):
-        return np.array([self._predict_sample(self.root, x) for x in X])
+        return np.array([self._predict_sample(x, self.root) for x in X])
 
 if __name__ == "__main__":
-    from sklearn.datasets import make_moons
-    X, y = make_moons(n_samples=300, noise=0.2, random_state=42)
-    clf = DecisionTreeClassifierScratch(max_depth=4)
+    from sklearn.datasets import load_iris
+    data = load_iris()
+    X, y = data.data, data.target
+    clf = DecisionTreeClassifierScratch(max_depth=3)
     clf.fit(X, y)
     preds = clf.predict(X)
-    print(f"Training Accuracy: {np.mean(preds == y) * 100:.2f}%")</code></pre>
+    print(f"CART Training Accuracy: {np.mean(preds == y) * 100:.2f}%")</code></pre>
     </div>
 
     <!-- SECTION 6: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 2.4 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 2.4: Medical Triage Decision Support &amp; Cost-Complexity Pruning Engine</h3>
-        <p class="project-desc">Build an interpretable clinical decision support system that produces auditable medical triage decision trees, calculates empirical $\alpha_{\text{eff}}$ pruning paths, and generates human-readable diagnostic rules for intensive care units.</p>
+        <h3 class="project-title">Project 2.4: Interpretable Credit Risk &amp; Loan Default Decision Tree</h3>
+        <p class="project-desc">Construct an audited, interpretable credit scoring tree that enforces monotonicity constraints on debt-to-income ratios, applies minimal cost-complexity pruning, and generates human-readable decision rules for regulatory compliance.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch24_decision_trees/decision_tree_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch24_decision_trees/decision_tree_scratch.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In clinical medicine and legal compliance, deep neural networks are often rejected as "black boxes" because doctors cannot explain why a patient was denied ICU admission. In this project, you build an interpretable CART engine that outputs human-verifiable rule logic (e.g. <code>IF Troponin &gt; 0.04 AND Systolic_BP &lt; 90 THEN High_Risk</code>) while applying cost-complexity pruning to eliminate spurious edge branches.</p>
+        <p><strong>Case Study Architecture:</strong> In banking and consumer lending (JPMorgan, Capital One), regulations (Equal Credit Opportunity Act, Fair Housing Act) mandate that adverse lending decisions provide legally defensible "adverse action" reasons. Deep neural nets cannot provide transparent decision paths. In this project, you construct a CART engine with automated rule-extraction pipelines that export tree branches into verified SQL `CASE WHEN` logic for audited credit decisions.</p>
       </div>
     </div>
   </div>

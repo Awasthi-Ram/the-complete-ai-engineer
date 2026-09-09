@@ -18,6 +18,32 @@
     .qr-container { text-align: center; margin: 2em 0; padding: 20px; background: #ffffff; border: 2px solid #0d1b2a; border-radius: 8px; }
     .qr-container img { width: 220px; height: 220px; display: block; margin: 0 auto 12px auto; }
   </style>
+
+  <!-- MathJax 3 — Renders all LaTeX mathematical notation -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath:  [['$', '$']],
+        displayMath: [['$$', '$$']],
+        processEscapes: true,
+        processEnvironments: true,
+        tags: 'ams'
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+        ignoreHtmlClass: 'no-mathjax'
+      },
+      startup: {
+        pageReady: () => {
+          console.log('MathJax: Processing ' + document.querySelectorAll('.chapter').length + ' chapters...');
+          return MathJax.startup.defaultPageReady();
+        }
+      }
+    };
+  </script>
+  <script id="MathJax-script" async
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+  </script>
 </head>
 <body>
 
@@ -62,7 +88,7 @@
   <p>This book is for anyone who wants to become an AI engineer. Not someone who merely invokes API calls or memorizes high-level library syntax — but an engineer who deeply understands how models learn, why loss landscapes curve, how computational graphs propagate gradients, and how to scale and deploy robust intelligence to millions of users. You do not need a PhD. You do not need to have studied at MIT. You need dedication, a willingness to work through the mathematics, and this book.</p>
 
   <h3>The Core Philosophy: You Don't Even Need a Computer</h3>
-  <p>A core design tenet of this textbook is complete self-containment. Modeled after the beloved R.D. Sharma mathematical textbooks, <em>every single derivation, equation step, and worked problem is solved in full directly on the page</em>. You can read this book on a train, on an airplane, or in a library without opening a laptop. Every step of algebra, every matrix dimension check, and every algorithm trace is printed before your eyes.</p>
+  <p>A core design tenet of this textbook is complete self-containment. Built from the ground up on first principles, <em>every single derivation, equation step, and worked problem is solved in full directly on the page</em>. You can read this book on a train, on an airplane, or in a library without opening a laptop. Every step of algebra, every matrix dimension check, and every algorithm trace is printed before your eyes.</p>
   <p>For those who wish to execute, benchmark, and deploy the code, every problem and lab is accompanied by a direct link to the official open-source GitHub repository: <code>https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions</code>.</p>
 
   <h3>Real-World Problem Mapping & FAANG Interview Rigor</h3>
@@ -81,96 +107,100 @@
 
   <!-- Part 0 -->
   <div class="toc-part">Part 0 — Foundations Before Foundations</div>
-  <div class="toc-entry"><span class="toc-chapter-num">0.1</span><span class="toc-chapter-title">How to Learn AI — The AI Engineer Operating System & FLOPs Arithmetic</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">0.2</span><span class="toc-chapter-title">Python Foundations for AI — CPython Internals, Memory & Concurrency</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">0.3</span><span class="toc-chapter-title">The AI Toolchain — NumPy Vectorization, Pandas & PyTorch GPU Tensors</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">0.4</span><span class="toc-chapter-title">Large-Scale Data Systems for AI — Apache Arrow, Parquet, Polars, DuckDB & Ray</span></div>
-  <div class="toc-project">Capstone Project 0: The AI Production Environment & Hardware Diagnostics Suite</div>
+  <div class="toc-entry"><span class="toc-chapter-num">0.1</span><span class="toc-chapter-title">How to Learn AI — The AI Engineer Operating System &amp; FLOPs Arithmetic</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">0.2</span><span class="toc-chapter-title">Python Foundations for AI — CPython Internals, Memory &amp; Concurrency</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">0.3</span><span class="toc-chapter-title">The AI Toolchain — NumPy Vectorization, Pandas &amp; PyTorch GPU Tensors</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">0.4</span><span class="toc-chapter-title">Large-Scale Data Systems for AI — Apache Arrow, Parquet, Polars, DuckDB &amp; Ray</span></div>
+  <div class="toc-project">Capstone Project 0: The AI Production Environment &amp; Hardware Diagnostics Suite</div>
 
   <!-- Part 1 -->
   <div class="toc-part">Part 1 — The Mathematics of AI</div>
-  <div class="toc-entry"><span class="toc-chapter-num">1.1</span><span class="toc-chapter-title">Linear Algebra & Matrix Decompositions — SVD & Low-Rank Approximations</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">1.2</span><span class="toc-chapter-title">Multivariable Calculus & Automatic Differentiation — Jacobians & VJPs</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">1.3</span><span class="toc-chapter-title">Probability & Bayesian Inference — Gaussian Likelihoods & Loss Bridges</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">1.4</span><span class="toc-chapter-title">Information Theory — Shannon Entropy, Cross-Entropy & KL Divergence</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">1.5</span><span class="toc-chapter-title">Convex Optimization & Duality — KKT Conditions & The SVM Dual Problem</span></div>
-  <div class="toc-project">Capstone Project 1: High-Dimensional Manifold Projection & SVD Compression Engine</div>
+  <div class="toc-entry"><span class="toc-chapter-num">1.1</span><span class="toc-chapter-title">Linear Algebra &amp; Matrix Decompositions — SVD &amp; Low-Rank Approximations</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">1.2</span><span class="toc-chapter-title">Multivariable Calculus &amp; Automatic Differentiation — Jacobians &amp; VJPs</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">1.3</span><span class="toc-chapter-title">Probability &amp; Bayesian Inference — Gaussian Likelihoods &amp; Loss Bridges</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">1.4</span><span class="toc-chapter-title">Information Theory — Shannon Entropy, Cross-Entropy &amp; KL Divergence</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">1.5</span><span class="toc-chapter-title">Convex Optimization &amp; Duality — KKT Conditions &amp; The SVM Dual Problem</span></div>
+  <div class="toc-project">Capstone Project 1: High-Dimensional Manifold Projection &amp; SVD Compression Engine</div>
 
   <!-- Part 2 -->
   <div class="toc-part">Part 2 — Classical Machine Learning</div>
-  <div class="toc-entry"><span class="toc-chapter-num">2.1</span><span class="toc-chapter-title">The ML Paradigm & Generalization Theory — Bias-Variance Decomposition</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">2.2</span><span class="toc-chapter-title">Linear Regression — OLS Normal Equations, Ridge Regularization & Lasso</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">2.3</span><span class="toc-chapter-title">Logistic Regression — Sigmoid Odds Ratios & Newton-Raphson Optimization</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">2.4</span><span class="toc-chapter-title">Decision Trees & Information Gain — CART, Gini Impurity & Pruning</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">2.5</span><span class="toc-chapter-title">Ensemble Methods: Random Forests & Bagging — Variance Reduction</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">2.5B</span><span class="toc-chapter-title">Gradient Boosted Decision Trees — XGBoost, LightGBM & CatBoost</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">2.6</span><span class="toc-chapter-title">Support Vector Machines & Kernel Methods — Maximum Margin & RBF</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">2.7</span><span class="toc-chapter-title">Unsupervised Learning: K-Means++ & PCA — SVD Manifold Projections</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">2.8</span><span class="toc-chapter-title">Feature Engineering & Data Leakage Prevention — Out-of-Fold Encoding</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">2.9</span><span class="toc-chapter-title">Model Evaluation, ROC-AUC & Calibration — Brier Scores & Mann-Whitney</span></div>
-  <div class="toc-project">Capstone Project 2: Production Credit Risk & Financial Fraud Scoring Engine</div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.1</span><span class="toc-chapter-title">The ML Paradigm &amp; Generalization Theory — Bias-Variance Decomposition</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.2</span><span class="toc-chapter-title">Linear Regression — OLS Normal Equations, Ridge Regularization &amp; Lasso</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.3</span><span class="toc-chapter-title">Logistic Regression — Sigmoid Odds Ratios &amp; Newton-Raphson Optimization</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.4</span><span class="toc-chapter-title">Decision Trees &amp; Information Gain — CART, Gini Impurity &amp; Pruning</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.5</span><span class="toc-chapter-title">Ensemble Methods: Random Forests &amp; Bagging — Variance Reduction</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.5B</span><span class="toc-chapter-title">Gradient Boosted Decision Trees — XGBoost, LightGBM &amp; CatBoost</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.6</span><span class="toc-chapter-title">Support Vector Machines &amp; Kernel Methods — Maximum Margin &amp; RBF</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.7</span><span class="toc-chapter-title">Unsupervised Learning: K-Means++ &amp; PCA — SVD Manifold Projections</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.8</span><span class="toc-chapter-title">Feature Engineering &amp; Data Leakage Prevention — Out-of-Fold Encoding</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.9</span><span class="toc-chapter-title">Model Evaluation, ROC-AUC &amp; Calibration — Brier Scores &amp; Mann-Whitney</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">2.10</span><span class="toc-chapter-title">Reinforcement Learning: From Bellman Equations to Deep Q-Networks — MDPs, Policy Gradients &amp; PPO</span></div>
+  <div class="toc-project">Capstone Project 2: Production Credit Risk &amp; Financial Fraud Scoring Engine</div>
 
   <!-- Part 3 -->
   <div class="toc-part">Part 3 — Neural Networks from Scratch</div>
-  <div class="toc-entry"><span class="toc-chapter-num">3.1</span><span class="toc-chapter-title">The Neuron, Perceptron & The XOR Barrier — Rosenblatt to Minsky</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">3.2</span><span class="toc-chapter-title">Multi-Layer Perceptrons & Modern Activations — Universal Approximation to SwiGLU</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">3.3</span><span class="toc-chapter-title">Analytical Backpropagation from Scratch — Computational Graphs & Grad Check</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">3.4</span><span class="toc-chapter-title">Deep Optimization — Momentum, Adam & The AdamW Revolution</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">3.5</span><span class="toc-chapter-title">Regularization & Normalization — Kaiming He, BatchNorm, LayerNorm & RMSNorm</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">3.6</span><span class="toc-chapter-title">Production PyTorch Engineering — Pinned DMA, AMP FP16 & DDP</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">3.7</span><span class="toc-chapter-title">JAX & Functional Deep Learning — Pure Functions, XLA JIT & Auto-Vectorization</span></div>
-  <div class="toc-project">Capstone Project 3: Production Multimodal Sensor & Image Recognition Engine</div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.1</span><span class="toc-chapter-title">The Neuron, Perceptron &amp; The XOR Barrier — Rosenblatt to Minsky</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.2</span><span class="toc-chapter-title">Multi-Layer Perceptrons &amp; Modern Activations — Universal Approximation to SwiGLU</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.3</span><span class="toc-chapter-title">Analytical Backpropagation from Scratch — Computational Graphs &amp; Grad Check</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.4</span><span class="toc-chapter-title">Deep Optimization — Momentum, Adam &amp; The AdamW Revolution</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.5</span><span class="toc-chapter-title">Regularization &amp; Normalization — Kaiming He, BatchNorm, LayerNorm &amp; RMSNorm</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.6</span><span class="toc-chapter-title">Production PyTorch Engineering — Pinned DMA, AMP FP16 &amp; DDP</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.7</span><span class="toc-chapter-title">JAX &amp; Functional Deep Learning — Pure Functions, XLA JIT &amp; Auto-Vectorization</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">3.8</span><span class="toc-chapter-title">Recurrent Neural Networks, LSTMs &amp; The Vanishing Gradient Crisis — BPTT, Gates, GRU &amp; Bahdanau Attention</span></div>
+  <div class="toc-project">Capstone Project 3: Production Multimodal Sensor &amp; Image Recognition Engine</div>
 
   <!-- Part 4 -->
   <div class="toc-part">Part 4 — Deep Learning Architectures</div>
-  <div class="toc-entry"><span class="toc-chapter-num">4.1</span><span class="toc-chapter-title">Convolutional Neural Networks & ResNets — Residual Gradient Highways</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">4.2</span><span class="toc-chapter-title">Medical Image Segmentation & U-Net — Skip Concatenations & Soft Dice</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">4.3</span><span class="toc-chapter-title">Generative Modeling: VAEs & GANs — ELBO Derivations & WGAN-GP</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">4.4</span><span class="toc-chapter-title">Generative Visual Synthesis & Diffusion Models — DDPM Markov Denoising</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">4.5</span><span class="toc-chapter-title">Vision Transformers & Masked Autoencoders — Asymmetric Visual Pre-Training</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">4.6</span><span class="toc-chapter-title">Audio Intelligence & Whisper Architecture — STFT Mel-Spectrograms</span></div>
-  <div class="toc-project">Capstone Project 4: Production Multimodal Vision, Audio & Generative Engine</div>
+  <div class="toc-entry"><span class="toc-chapter-num">4.1</span><span class="toc-chapter-title">Convolutional Neural Networks &amp; ResNets — Residual Gradient Highways</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">4.2</span><span class="toc-chapter-title">Medical Image Segmentation &amp; U-Net — Skip Concatenations &amp; Soft Dice</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">4.3</span><span class="toc-chapter-title">Generative Modeling: VAEs &amp; GANs — ELBO Derivations &amp; WGAN-GP</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">4.4</span><span class="toc-chapter-title">Generative Visual Synthesis &amp; Diffusion Models — DDPM Markov Denoising</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">4.5</span><span class="toc-chapter-title">Vision Transformers &amp; Masked Autoencoders — Asymmetric Visual Pre-Training</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">4.6</span><span class="toc-chapter-title">Audio Intelligence &amp; Whisper Architecture — STFT Mel-Spectrograms</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">4.7</span><span class="toc-chapter-title">NLP Foundations: Word2Vec, GloVe &amp; Semantic Embeddings — Skip-Gram Negative Sampling, GloVe &amp; Subwords</span></div>
+  <div class="toc-project">Capstone Project 4: Production Multimodal Vision, Audio &amp; Generative Engine</div>
 
   <!-- Part 5 -->
-  <div class="toc-part">Part 5 — Transformers, Large Language Models (LLMs) & Agents</div>
-  <div class="toc-entry"><span class="toc-chapter-num">5.1</span><span class="toc-chapter-title">The Transformer Architecture from First Principles — FlashAttention & RoPE</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">5.2</span><span class="toc-chapter-title">Tokenization & The Hugging Face Ecosystem — Byte-Pair Encoding & KV Cache</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">5.3</span><span class="toc-chapter-title">Enterprise Retrieval-Augmented Generation (RAG) — Hybrid Search & Re-Ranking</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">5.4</span><span class="toc-chapter-title">Advanced RAG with LlamaIndex & Knowledge Graphs (GraphRAG) — Relational Queries</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">5.5</span><span class="toc-chapter-title">Parameter-Efficient Fine-Tuning: LoRA, QLoRA & Unsloth — 4-Bit NormalFloat</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">5.6</span><span class="toc-chapter-title">Preference Alignment: RLHF, PPO & DPO — Bradley-Terry Reward Modeling</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">5.7</span><span class="toc-chapter-title">LangChain & Production LCEL Pipelines — Deterministic Structured Pydantic Outputs</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">5.8</span><span class="toc-chapter-title">LangGraph & Stateful Multi-Agent Swarms — Pregel Architecture & Human-in-the-Loop</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">5.9</span><span class="toc-chapter-title">Autonomous Coding & Software Engineering Agents — SWE-bench ReAct Architecture</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">5.10</span><span class="toc-chapter-title">High-Throughput Low-Latency LLM Serving — vLLM PagedAttention & TensorRT-LLM</span></div>
-  <div class="toc-project">Capstone Project 5: Autonomous Multi-Agent Enterprise Research & Synthesis Platform</div>
+  <div class="toc-part">Part 5 — Transformers, Large Language Models (LLMs) &amp; Agents</div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.1</span><span class="toc-chapter-title">The Transformer Architecture from First Principles — Scaled Dot-Product, SwiGLU, Pre-LN &amp; Distributed Parallelism</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.1B</span><span class="toc-chapter-title">BERT, Encoder Transformers &amp; Sentence Embeddings — Masked Language Modeling, SBERT &amp; Re-Ranking</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.2</span><span class="toc-chapter-title">Tokenization &amp; The Hugging Face Ecosystem — Byte-Pair Encoding &amp; KV Cache</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.3</span><span class="toc-chapter-title">Enterprise Retrieval-Augmented Generation (RAG) — Hybrid Search, Agentic RAG, RAPTOR &amp; RAGAS</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.4</span><span class="toc-chapter-title">Advanced RAG with LlamaIndex &amp; Knowledge Graphs (GraphRAG) — Relational Queries</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.5</span><span class="toc-chapter-title">Parameter-Efficient Fine-Tuning: LoRA, QLoRA &amp; DoRA — SFT Workflows, DoRA, NF4 &amp; GGUF Export</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.6</span><span class="toc-chapter-title">Preference Alignment: RLHF, PPO &amp; DPO — Bradley-Terry Reward Modeling</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.7</span><span class="toc-chapter-title">LangChain &amp; Production LCEL Pipelines — Memory, Tool Calling, LangSmith &amp; Async Streaming</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.8</span><span class="toc-chapter-title">LangGraph &amp; Stateful Multi-Agent Swarms — Pregel Architecture, Dynamic Send/Command &amp; Sub-Graphs</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.9</span><span class="toc-chapter-title">Autonomous Coding &amp; Software Engineering Agents — SWE-bench ReAct Architecture</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">5.10</span><span class="toc-chapter-title">High-Throughput Low-Latency LLM Serving — vLLM PagedAttention &amp; TensorRT-LLM</span></div>
+  <div class="toc-project">Capstone Project 5: Autonomous Multi-Agent Enterprise Research &amp; Synthesis Platform</div>
 
   <!-- Part 6 -->
-  <div class="toc-part">Part 6 — MLOps, Observability & Production Model Deployment</div>
-  <div class="toc-entry"><span class="toc-chapter-num">6.1</span><span class="toc-chapter-title">Experiment Tracking & Artifact Registries — Non-Blocking Telemetry & Governance</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">6.2</span><span class="toc-chapter-title">Feature Stores & Online/Offline Consistency — Feast Dual-Store & Point-in-Time Joins</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">6.3</span><span class="toc-chapter-title">Containerization & Deterministic Packaging — Multi-Stage Docker & NVIDIA Container Toolkit</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">6.4</span><span class="toc-chapter-title">High-Throughput Serving: Triton & TensorRT — Dynamic Batching & Kernel Fusion</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">6.5</span><span class="toc-chapter-title">Drift Observability & Automated Retraining — Population Stability Index (PSI)</span></div>
+  <div class="toc-part">Part 6 — MLOps, Observability &amp; Production Model Deployment</div>
+  <div class="toc-entry"><span class="toc-chapter-num">6.1</span><span class="toc-chapter-title">Experiment Tracking &amp; Artifact Registries — Non-Blocking Telemetry &amp; Governance</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">6.2</span><span class="toc-chapter-title">Feature Stores &amp; Online/Offline Consistency — Feast Dual-Store &amp; Point-in-Time Joins</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">6.3</span><span class="toc-chapter-title">Containerization &amp; Deterministic Packaging — Multi-Stage Docker &amp; NVIDIA Container Toolkit</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">6.4</span><span class="toc-chapter-title">High-Throughput Serving: Triton &amp; TensorRT — Dynamic Batching &amp; Kernel Fusion</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">6.5</span><span class="toc-chapter-title">Drift Observability &amp; Automated Retraining — Population Stability Index (PSI)</span></div>
   <div class="toc-project">Capstone Project 6: Production Enterprise MLOps Platform with Drift Detection</div>
 
   <!-- Part 7 -->
-  <div class="toc-part">Part 7 — AI System Design & Architecture at Scale</div>
-  <div class="toc-entry"><span class="toc-chapter-num">7.1</span><span class="toc-chapter-title">Billion-Scale Recommendation Systems — Two-Tower Dual Encoders & LogQ Debiasing</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">7.2</span><span class="toc-chapter-title">Distributed Vector Search at Scale — HNSW Multi-Layer Graphs, IVF-PQ & Sharding</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">7.3</span><span class="toc-chapter-title">Edge AI, Model Compression & Quantization — QAT, MobileNet & ONNX Runtime</span></div>
-  <div class="toc-project">Capstone Project 7: Billion-Scale Enterprise Recommendation & Vector Intelligence Platform</div>
+  <div class="toc-part">Part 7 — AI System Design &amp; Architecture at Scale</div>
+  <div class="toc-entry"><span class="toc-chapter-num">7.1</span><span class="toc-chapter-title">Billion-Scale Recommendation Systems — Two-Tower Dual Encoders &amp; LogQ Debiasing</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">7.2</span><span class="toc-chapter-title">Distributed Vector Search at Scale — HNSW Multi-Layer Graphs, IVF-PQ &amp; Sharding</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">7.3</span><span class="toc-chapter-title">Edge AI, Model Compression &amp; Quantization — QAT, MobileNet &amp; ONNX Runtime</span></div>
+  <div class="toc-project">Capstone Project 7: Billion-Scale Enterprise Recommendation &amp; Vector Intelligence Platform</div>
 
   <!-- Part 8 -->
-  <div class="toc-part">Part 8 — Frontier AI & Future Horizons</div>
-  <div class="toc-entry"><span class="toc-chapter-num">8.1</span><span class="toc-chapter-title">The Model Context Protocol (MCP) — JSON-RPC 2.0 Transport & Sandboxed Tools</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">8.2</span><span class="toc-chapter-title">Test-Time Compute & Reasoning Models — Hidden Chains of Thought & PRMs</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">8.3</span><span class="toc-chapter-title">The Physical Energy & Hardware Limits of AI — Landauer Bound, SMRs & Photonic Compute</span></div>
+  <div class="toc-part">Part 8 — Frontier AI &amp; Future Horizons</div>
+  <div class="toc-entry"><span class="toc-chapter-num">8.1</span><span class="toc-chapter-title">The Model Context Protocol (MCP) — JSON-RPC 2.0 Transport &amp; Sandboxed Tools</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">8.2</span><span class="toc-chapter-title">Test-Time Compute &amp; Reasoning Models — Hidden Chains of Thought &amp; PRMs</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">8.3</span><span class="toc-chapter-title">The Physical Energy &amp; Hardware Limits of AI — Landauer Bound, SMRs &amp; Photonic Compute</span></div>
   <div class="toc-project">Capstone Project 8: Frontier Autonomous Multi-Tool Reasoning Platform with MCP</div>
 
   <!-- Back matter -->
   <div class="toc-part">Appendices</div>
-  <div class="toc-entry"><span class="toc-chapter-num">A</span><span class="toc-chapter-title">Mathematical Notation & Glossary</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">A</span><span class="toc-chapter-title">Mathematical Notation &amp; Glossary</span></div>
   <div class="toc-entry"><span class="toc-chapter-num">B</span><span class="toc-chapter-title">About the Author</span></div>
-  <div class="toc-entry"><span class="toc-chapter-num">C</span><span class="toc-chapter-title">Official GitHub Solutions Repository & QR Code Access</span></div>
+  <div class="toc-entry"><span class="toc-chapter-num">C</span><span class="toc-chapter-title">Official GitHub Solutions Repository &amp; QR Code Access</span></div>
 </div>

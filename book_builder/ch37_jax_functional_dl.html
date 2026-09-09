@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="jax_primitives_pipeline.png" alt="Figure 3.7.1: jax primitives pipeline">
+        <div class="diagram-caption"><strong>Figure 3.7.1:</strong> The JAX functional transformation pipeline. Pure Python mathematical functions are transformed via reverse-mode auto-differentiation (`jax.grad`) and vectorization (`jax.vmap`), traced into high-level jaxpr IR, and just-in-time compiled (`jax.jit`) by XLA into fused hardware-optimized GPU/TPU machine kernels.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 3.7 — JAX & FUNCTIONAL DEEP LEARNING
      ====================================================================== -->
@@ -5,12 +11,12 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 3.7</span>
     <h2 class="chapter-title">JAX &amp; Functional Deep Learning</h2>
-    <span class="chapter-subtitle">Pure Functions, Autodiff (grad), XLA Kernel Fusion (jit), Auto-Batching (vmap) &amp; SPMD (pmap)</span>
+    <span class="chapter-subtitle">Pure Functions, Autodiff (grad/vjp), XLA Kernel Fusion (jit), Auto-Batching (vmap) &amp; SPMD Parallelism (pmap)</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"In mathematics, a function has no state, no side-effects, and no memory. When deep learning returns to pure mathematics, compilers can optimize computation across thousands of accelerators with mathematical elegance."</p>
+    <p>"In mathematics, a function has no hidden state, no side-effects, and no memory. When deep learning returns to pure mathematics, optimizing compilers can fuse kernels across thousands of accelerators with mathematical elegance."</p>
     <p class="attribution">— Functional Deep Learning Maxim</p>
   </div>
 
@@ -18,42 +24,87 @@
     <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
     <!-- SECTION 1: THE FUNCTIONAL PARADIGM -->
-    <h3>1. The Paradigm Shift: Imperative vs. Purely Functional</h3>
-    <p>For years, deep learning has been dominated by imperative, object-oriented frameworks like PyTorch. In PyTorch, models are stateful classes inheriting from <code>nn.Module</code> that mutate internal buffers (<code>optimizer.step()</code> modifies parameter arrays in-place). While intuitive, stateful mutation makes whole-program compiler optimizations, multi-device distributed sharding, and higher-order calculus notoriously complex.</p>
-
-    <p>Developed by Google Research and adopted by Google DeepMind (for Gemini and AlphaFold 3), <strong>JAX</strong> re-imagines machine learning as <strong>Pure Functional Programming</strong> over immutable multidimensional arrays:</p>
+    <h3>1. The Paradigm Shift: Imperative OOP vs. Pure Functional Programming</h3>
+    <p>For over a decade, deep learning frameworks (Torch, TensorFlow 1.x/2.x, PyTorch) have adhered to imperative, object-oriented paradigms. In PyTorch, models are stateful classes inheriting from <code>torch.nn.Module</code> that encapsulate mutable parameters. Calling <code>optimizer.step()</code> modifies parameter arrays <em>in-place</em> in GPU memory. While intuitive for Python programmers, in-place state mutation imposes severe constraints on compilers:</p>
     <ul>
-      <li><strong>Pure Functions:</strong> A function depends <em>strictly</em> on its explicit arguments, has zero side-effects (it cannot mutate global variables or modify input buffers), and always returns the exact same outputs given the same inputs.</li>
-      <li><strong>Immutable Arrays (<code>DeviceArray</code>):</strong> Arrays cannot be modified in-place. If you modify an index, JAX creates a new array: <code>x = x.at[0].set(5.0)</code>.</li>
-      <li><strong>Explicit PRNG Keys:</strong> JAX completely abandons global random seeds. Every stochastic operation (dropout, parameter initialization) requires explicitly passing and splitting a cryptographic Pseudo-Random Number Generator (PRNG) key:
-      $$\text{key, subkey} = \text{jax.random.split(key)}$$</li>
+      <li><strong>Aliasing and In-Place Side Effects:</strong> Compilers cannot easily prove that two pointers do not alias the same memory buffer, preventing aggressive instruction reordering and automatic parallelization.</li>
+      <li><strong>Complex Distributed Checkpointing:</strong> Tracking mutable object state across distributed workers requires complex orchestration, hooks, and pickling mechanisms.</li>
+      <li><strong>Dynamic Control Flow Barriers:</strong> Compiling imperative Python code into static accelerator kernels requires tracing engines to infer whether variable mutations affect subsequent computational branches.</li>
     </ul>
 
-    <!-- SECTION 2: THE FOUR FUNCTION TRANSFORMATIONS -->
-    <h3>2. The Four Composable Function Transformations</h3>
-    <p>JAX's power comes from four mathematical function transformations that can be composed arbitrarily:</p>
+    <p>Developed by Google Research and adopted by Google DeepMind (powering Gemini, AlphaFold 3, and PaLM), <strong>JAX</strong> re-envisions deep learning as <strong>Pure Functional Programming over Immutable Multi-Dimensional Arrays</strong>:</p>
+    <ol>
+      <li><strong>Pure Functions:</strong> A function $f(x)$ depends <em>strictly</em> on its explicit input arguments, has zero side-effects (it cannot modify global variables or mutate its input buffers), and always yields the exact same return value given identical inputs.</li>
+      <li><strong>Immutable Arrays (<code>jax.Array</code>):</strong> Arrays cannot be modified in-place. If an element is updated, JAX constructs a new array view (optimized by the compiler):
+      $$\mathbf{x}_{\text{new}} = \mathbf{x}.\text{at}[i].\text{set}(v)$$</li>
+      <li><strong>Explicit Stateless PRNG Architecture:</strong> JAX eliminates global random seeds. Every stochastic operation (dropout, weight initialization, sampling) requires explicitly passing and splitting a cryptographic Pseudo-Random Number Generator (PRNG) key.</li>
+    </ol>
 
-    <h4>1. <code>jax.grad</code>: Reverse-Mode Automatic Differentiation</h4>
-    <p>Transforms any pure scalar-valued Python function into its exact mathematical gradient function:</p>
-    $$f: \mathbb{R}^d \to \mathbb{R} \xrightarrow{\text{jax.grad}} \nabla f: \mathbb{R}^d \to \mathbb{R}^d$$
-    <p>Because transformations are composable, higher-order derivatives require zero extra code: <code>jax.grad(jax.grad(f))</code> automatically computes the exact Hessian!</p>
+    <!-- SECTION 2: JAX PRNG ARCHITECTURE -->
+    <h3>2. The JAX PRNG Architecture: Splitting Keys Deterministically</h3>
+    <p>In standard NumPy or PyTorch, calling <code>torch.randn(10)</code> advances a hidden global internal state (such as a 624-word Mersenne Twister state vector). In distributed systems or parallel threads, this global mutable state induces non-deterministic race conditions and irreproducible training runs.</p>
 
-    <h4>2. <code>jax.jit</code>: Just-In-Time Compilation via XLA</h4>
-    <p>Standard Python executes line-by-line in "eager mode", incurring Python interpreter overhead and writing intermediate tensors back to slow GPU memory. <code>@jax.jit</code> traces the Python function into an intermediate representation (<strong>Jaxpr</strong>) and compiles it into highly optimized machine code via <strong>XLA (Accelerated Linear Algebra)</strong>:</p>
+    <p>JAX abandons global state entirely in favor of <strong>Counter-Based Pseudo-Random Number Generation (Threefish / Philox)</strong>:</p>
+    $$\text{key} \in \mathbb{N}^{2} \quad (\text{a pair of unsigned 32-bit integers})$$
+    <p>To generate random numbers, a key must be explicitly <em>split</em> into new statistically independent subkeys using <code>jax.random.split</code>:</p>
+    <pre><code>import jax
+import jax.numpy as jnp
+
+# Initialize the root PRNG key
+root_key = jax.random.PRNGKey(42)
+
+# Split root key into a key for subsequent steps and a subkey for active consumption
+key, subkey1, subkey2 = jax.random.split(root_key, num=3)
+
+# Generate independent stochastic samples
+x = jax.random.normal(subkey1, shape=(4, 4))
+dropout_mask = jax.random.bernoulli(subkey2, p=0.8, shape=(4, 4))</code></pre>
     <div class="key-insight">
-      <p><strong>Kernel Fusion in XLA:</strong><br>
-      Consider the operation $Y = \text{ReLU}(A \cdot X + B)$. In eager PyTorch, the GPU performs a matrix multiplication (stores result in VRAM), reads VRAM to add $B$ (stores in VRAM), and reads VRAM to apply ReLU. <strong>XLA fuses all three operations into a single GPU CUDA kernel</strong>! Data stays inside high-speed GPU registers, speeding up execution by <strong>$2\times$ to $4\times$</strong> with zero memory bandwidth waste!</p>
+      <p><strong>🚨 The JAX Key Reuse Trap:</strong><br>
+      Reusing the exact same PRNG key across multiple stochastic calls generates <strong>identical random numbers</strong>! If the same key is passed to both Layer 1 and Layer 2 for dropout, both layers drop the exact same neuron coordinates, destroying statistical independence and damaging model generalization.</p>
     </div>
 
-    <h4>3. <code>jax.vmap</code>: Automatic Vectorization</h4>
-    <p>Writing batching logic manually (handling batch dimensions, broadcasting, tensor slicing) is error-prone. With <code>jax.vmap</code>, you write your function for a <strong>single sample</strong> ($\mathbf{x} \in \mathbb{R}^d$), and <code>jax.vmap</code> automatically pushes the batch dimension into SIMD hardware execution!</p>
+    <!-- SECTION 3: THE FOUR COMPOSABLE TRANSFORMATIONS -->
+    <h3>3. The Four Composable Function Transformations</h3>
+    <p>JAX's expressive power derives from four pure mathematical function transformations that can be arbitrarily composed in any order:</p>
 
-    <h4>4. <code>jax.pmap</code>: Parallel Mapping across Accelerators (SPMD)</h4>
-    <p>Replicates computation across multiple physical GPUs or TPU cores in a Single-Program Multiple-Data (SPMD) topology, executing inter-device collective reductions (like <code>jax.lax.pmean</code>) natively.</p>
+    <h4>3.1 <code>jax.grad</code> and <code>jax.value_and_grad</code>: Reverse-Mode Autodiff</h4>
+    <p>Transforms any pure scalar-valued function into its analytical gradient function via Reverse-Mode Automatic Differentiation (Vector-Jacobian Products):</p>
+    $$f: \mathbb{R}^d \to \mathbb{R} \xrightarrow{\text{jax.grad}} \nabla f: \mathbb{R}^d \to \mathbb{R}^d$$
+    <p>Because JAX transformations are composable, higher-order derivatives require zero special engineering: <code>jax.grad(jax.grad(f))</code> automatically computes the exact Hessian-vector product!</p>
 
-    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
+    <h4>3.2 <code>jax.jit</code>: Just-In-Time Compilation via XLA</h4>
+    <p>Python executes imperatively line-by-line, causing interpreter overhead and writing intermediate activations back to high-bandwidth memory (HBM/VRAM). <code>jax.jit</code> traces the Python function into an intermediate computational representation called a <strong>Jaxpr (JAX Expression)</strong> and compiles it into highly optimized native accelerator machine code using <strong>XLA (Accelerated Linear Algebra)</strong>.</p>
+
+    <div class="real-world-box">
+      <h4>⚡ XLA Kernel Fusion: Eliminating the Memory Bandwidth Wall</h4>
+      <p>Consider the elementary sequence: $\mathbf{y} = \operatorname{ReLU}(\mathbf{W}\mathbf{x} + \mathbf{b})$. In eager PyTorch:</p>
+      <ol>
+        <li>Kernel 1 launches: computes $\mathbf{z}_1 = \mathbf{W}\mathbf{x}$, writes $\mathbf{z}_1$ to VRAM.</li>
+        <li>Kernel 2 launches: reads $\mathbf{z}_1$ from VRAM, adds $\mathbf{b}$, writes $\mathbf{z}_2$ to VRAM.</li>
+        <li>Kernel 3 launches: reads $\mathbf{z}_2$ from VRAM, applies $\max(0, \mathbf{z}_2)$, writes $\mathbf{y}$ to VRAM.</li>
+      </ol>
+      <p><strong>XLA Kernel Fusion</strong> compiles all three operations into a <strong>single fused GPU/TPU kernel</strong>! The intermediate values $\mathbf{z}_1$ and $\mathbf{z}_2$ are held directly in high-speed registers without ever touching external VRAM, providing a <strong>$2\times$ to $4\times$ speedup</strong> while drastically slashing memory bandwidth consumption.</p>
+    </div>
+
+    <h4>3.3 <code>jax.vmap</code>: Automatic Vectorization</h4>
+    <p>Writing batching code manually (handling batch dimensions, matrix slicing, reshaping) is tedious and error-prone. With <code>jax.vmap</code>, an engineer writes the function for a <strong>single sample</strong> ($\mathbf{x} \in \mathbb{R}^D$), and <code>jax.vmap</code> automatically pushes the batch dimension into SIMD hardware vector instructions without any explicit loops:</p>
+    $$\text{batched\_fn} = \text{jax.vmap}(f_{\text{single}}, \text{in\_axes}=(0, \text{None}))$$
+
+    <h4>3.4 <code>jax.pmap</code>: Multi-Device SPMD Parallelism</h4>
+    <p>Replicates computation across multiple physical accelerator chips (GPUs or TPU cores) in a Single-Program Multiple-Data (SPMD) paradigm. Devices execute in lockstep and exchange data via collective communication primitives (such as <code>jax.lax.psum</code> and <code>jax.lax.pmean</code>) mapped directly to hardware interconnects (NVLink or TPU Inter-Chip Networks).</p>
+
+    <!-- SECTION 4: PYTREES -->
+    <h3>4. PyTrees: The Universal Functional Data Structure</h3>
+    <p>In JAX, model weights, optimizer states, activations, and dataset batches are represented as <strong>PyTrees</strong>: recursive trees of Python container types (dicts, lists, tuples, namedtuples) whose terminal leaf nodes are multi-dimensional arrays (<code>jax.Array</code>).</p>
+    <p>Operating on an entire neural network requires no loops over parameter lists. JAX provides tree mapping primitives:</p>
+    $$\text{new\_params} = \text{jax.tree\_util.tree\_map}(\lambda p, g: p - \eta \cdot g, \text{params}, \text{grads})$$
+    <p>This single line updates every weight and bias tensor across arbitrary nested model architectures!</p>
+
+    <!-- SECTION 5: 4-TIER PRACTICE SUITE -->
     <h3>FAANG &amp; Tier-1 AI Interview Problems — JAX &amp; Compilers</h3>
 
+    <!-- PROBLEM 3.7.1: TIER 1 NUMERICAL WARMUP -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 3.7.1</span>
@@ -62,24 +113,408 @@
         <span class="company-tag company-deepmind">DeepMind</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Explain what happens when a Python function decorated with <code>@jax.jit</code> contains an impure side-effect (e.g. <code>print("Tracing...")</code>) and a dynamic Python <code>if/else</code> condition on an array value. Why does JAX fail to compile dynamic shapes, and how does static argument tracing resolve this?</p>
+        <p><strong>QUESTION (The Jaxpr Tracing Mechanism &amp; Static Arguments):</strong> Consider the following Python function compiled with <code>@jax.jit</code>:</p>
+        <pre><code>import jax
+import jax.numpy as jnp
+
+@jax.jit
+def dynamic_power(x, n):
+    print(f"Tracing invoked for x shape={x.shape}, n={n}!")
+    if n == 0:
+        return 1.0
+    result = x
+    for _ in range(n - 1):
+        result = result * x
+    return result
+
+x1 = jnp.array([2.0, 3.0])
+print("Call 1:", dynamic_power(x1, 3))
+print("Call 2:", dynamic_power(x1, 3))
+print("Call 3:", dynamic_power(x1, 4))</code></pre>
+        <ol>
+          <li>Explain why the code raises a <code>ConcretizationTypeError</code> or fails to trace when <code>n</code> is a standard JAX array tracer.</li>
+          <li>If <code>n</code> is marked static using <code>@jax.jit(static_argnums=(1,))</code>, trace the exact terminal output of the script across all three calls, including all printed trace notifications.</li>
+          <li>Explain the memory and compilation latency cost of using <code>static_argnums</code> when <code>n</code> takes on many different values.</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+        <div class="solution-label">✓ Complete Architectural &amp; Numerical Solution</div>
 
-        <p class="step"><strong>Step 1: The Tracing Mechanism in <code>jax.jit</code>:</strong><br>
-        When a JIT-compiled function is invoked for the first time, JAX does <strong>not</strong> execute machine instructions. Instead, it runs the Python function with abstract <strong>Tracer Objects</strong> (which have shape and dtype, but no concrete numerical values) to record the computational DAG (Jaxpr).<br>
-        Because Python code runs only during the tracing phase, any <code>print()</code> statement executes <strong>exactly once during initial trace</strong>! In all subsequent invocations, XLA executes the compiled binary directly, completely bypassing Python, so the <code>print()</code> statement never executes again!</p>
+        <p class="step"><strong>Step 1: Why Dynamic Array Tracers Fail:</strong>
+        When <code>dynamic_power</code> is compiled with standard <code>@jax.jit</code>, both arguments <code>x</code> and <code>n</code> are passed as abstract <strong>Tracer Objects</strong> (specifically <code>ShapedArray(float32[2])</code> and <code>ShapedArray(int32[])</code>). Tracers know their data type and shape, but hold <strong>no concrete numerical values</strong> during tracing!
+        When Python reaches <code>if n == 0:</code> or <code>range(n - 1)</code>, it attempts to cast the tracer to a boolean via <code>bool(n == 0)</code>. Because the numerical value is unknown at compile time, JAX raises:
+        <code>jax.errors.ConcretizationTypeError: Abstract tracer value encountered where concrete value is expected: The problem arose with the `bool` function on an abstract tracer.</code></p>
 
-        <p class="step"><strong>Step 2: Dynamic Python Conditionals on Traced Arrays:</strong><br>
-        If the function contains <code>if x &gt; 0:</code> where <code>x</code> is a tracer, Python cannot evaluate whether an abstract tracer is true or false! JAX raises a fatal <code>ConcretizationTypeError</code>.<br>
-        To perform dynamic branching on array values, the engineer must use <strong>JAX control flow primitives</strong> (e.g. <code>jax.lax.cond</code>), which encode the branch directly into the compiled XLA graph.</p>
+        <p class="step"><strong>Step 2: Execution Trace with <code>static_argnums=(1,)</code>:</strong>
+        Marking <code>n</code> static instructs JAX to treat argument index 1 as a compile-time Python constant. JAX compiles a <em>specialized XLA binary</em> for each unique value of <code>n</code>:
+        <ul>
+          <li><strong>Call 1 (x1, n=3):</strong> First time <code>n=3</code> is encountered. JAX runs the Python function to trace it.
+          The Python <code>print()</code> statement executes:
+          <code>Tracing invoked for x shape=(2,), n=3!</code>
+          XLA compiles the unrolled graph: $x \times x \times x$.
+          Result returned: $[2^3, 3^3] = \mathbf{[8.0, 27.0]}$.
+          Console output:
+          <code>Tracing invoked for x shape=(2,), n=3!
+Call 1: [ 8. 27.]</code></li>
+          <li><strong>Call 2 (x1, n=3):</strong> JAX checks its compilation cache. An XLA binary for shape <code>(2,)</code> and static argument <code>n=3</code> already exists!
+          Python code is completely skipped; the compiled machine code executes directly. <strong>No trace statement is printed!</strong>
+          Console output:
+          <code>Call 2: [ 8. 27.]</code></li>
+          <li><strong>Call 3 (x1, n=4):</strong> <code>n=4</code> is a new static value. JAX must re-trace and compile a new XLA binary specialized for 4 multiplications.
+          The Python <code>print()</code> statement executes again:
+          <code>Tracing invoked for x shape=(2,), n=4!</code>
+          Result returned: $[2^4, 3^4] = \mathbf{[16.0, 81.0]}$.
+          Console output:
+          <code>Tracing invoked for x shape=(2,), n=4!
+Call 3: [16. 81.]</code></li>
+        </ul></p>
+
+        <p class="step"><strong>Step 3: The Cost of Static Arguments:</strong>
+        Every distinct value passed to a static argument triggers full XLA tracing and binary compilation. If an engineer passes a dynamic loop index or step number as a static argument across 10,000 steps, JAX will re-compile 10,000 separate XLA binaries, exhausting host memory and halting training in compile-time deadlock!</p>
       </div>
     </div>
 
-    <!-- SECTION 4: CODE LAB -->
-    <h3>3. Production Code Lab 3.7: Neural Network Training in Pure JAX</h3>
-    <p>Below is a production implementation of a complete multi-layer neural network trained from scratch in pure JAX using <code>grad</code>, <code>jit</code>, and <code>vmap</code>.</p>
+    <!-- PROBLEM 3.7.2: TIER 1 NUMERICAL WARMUP -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.7.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google Research</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (PRNG Splitting Tree &amp; Dropout Mask Numerical Drill):</strong> An engineer implements a 2-layer MLP with dropout rate $p = 0.5$ (keep probability $q = 0.5$, scaling factor $1/q = 2.0$).</p>
+        <ol>
+          <li>Starting with root key $K_0$, write the exact functional key-splitting sequence to generate independent subkeys for: (a) Layer 1 parameter initialization, (b) Layer 2 parameter initialization, (c) Layer 1 forward dropout, and (d) Layer 2 forward dropout.</li>
+          <li>Suppose the keep mask values for 4 neurons in Layer 1 under subkey $k_{\text{drop1}}$ evaluate to $[1, 0, 1, 0]$, and the activation vector prior to dropout is $\mathbf{z}_1 = [4.0, -2.0, 6.0, 8.0]$. Compute the inverted dropout output $\tilde{\mathbf{z}}_1$.</li>
+          <li>Prove what happens to model capacity if the engineer accidentally passes $k_{\text{drop1}}$ to Layer 2 as well, assuming Layer 2 has the same hidden dimension.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Functional Derivation</div>
+
+        <p class="step"><strong>Step 1: Functional Key-Splitting Sequence:</strong>
+        To maintain statistical independence across all stochastic operations, we construct a deterministic key tree:
+        <pre><code># Split root key into parameter init branch and training step branch
+k_params, k_train = jax.random.split(K_0, 2)
+
+# Split parameter init key for Layer 1 and Layer 2
+k_w1, k_w2 = jax.random.split(k_params, 2)
+
+# Split training key for dropout across layers
+k_drop1, k_drop2 = jax.random.split(k_train, 2)</code></pre>
+        This guarantees zero mutual information between parameter weights and dropout realizations.</p>
+
+        <p class="step"><strong>Step 2: Inverted Dropout Calculation:</strong>
+        Inverted dropout scales surviving activations by $\frac{1}{q} = \frac{1}{0.5} = 2.0$ during training so that test-time evaluation requires no scaling:
+        $$\tilde{z}_{1, i} = \frac{m_i \cdot z_{1, i}}{q} = 2.0 \cdot (m_i \cdot z_{1, i})$$
+        Given $\mathbf{m} = [1, 0, 1, 0]$ and $\mathbf{z}_1 = [4.0, -2.0, 6.0, 8.0]$:
+        <ul>
+          <li>Neuron 1: $2.0 \times (1 \times 4.0) = \mathbf{8.0}$</li>
+          <li>Neuron 2: $2.0 \times (0 \times -2.0) = \mathbf{0.0}$</li>
+          <li>Neuron 3: $2.0 \times (1 \times 6.0) = \mathbf{12.0}$</li>
+          <li>Neuron 4: $2.0 \times (0 \times 8.0) = \mathbf{0.0}$</li>
+        </ul>
+        $$\tilde{\mathbf{z}}_1 = \mathbf{[8.0, 0.0, 12.0, 0.0]}$$</p>
+
+        <p class="step"><strong>Step 3: Pathology of Reusing Dropout Keys Across Layers:</strong>
+        If $k_{\text{drop2}} = k_{\text{drop1}}$, the pseudo-random generator generates the <em>exact same bit sequence</em>. Consequently, Layer 2 receives the exact same mask $\mathbf{m}_2 = [1, 0, 1, 0]$.
+        Any neuron at index 2 or 4 that was silenced in Layer 1 will <em>also</em> have its incoming and outgoing pathways silenced in Layer 2. The co-adaptation that dropout is designed to prevent is reintroduced along correlated channels, reducing effective parameter diversity and degrading regularization strength.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.7.3: TIER 2 APPLIED ENGINEERING -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.7.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-deepmind">DeepMind</span>
+        <span class="company-tag company-anthropic">Anthropic</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Vectorizing Pairwise Cosine Similarity with <code>jax.vmap</code>):</strong> You are given an unbatched function that computes the scalar cosine similarity between two single vectors $\mathbf{u}, \mathbf{v} \in \mathbb{R}^D$:</p>
+        <pre><code>def cosine_sim_single(u, v):
+    return jnp.dot(u, v) / (jnp.linalg.norm(u) * jnp.linalg.norm(v) + 1e-8)</code></pre>
+        <ol>
+          <li>Use <code>jax.vmap</code> to construct a function <code>batch_all_pairs_sim(U, V)</code> that takes a batch $U \in \mathbb{R}^{M \times D}$ and a batch $V \in \mathbb{R}^{N \times D}$ and computes the full pairwise similarity matrix $S \in \mathbb{R}^{M \times N}$ without writing any matrix multiplication or for-loops. Specify the exact nested <code>in_axes</code>.</li>
+          <li>Hand-trace the computation for $M=2, N=2, D=2$ with:
+          $$U = \begin{bmatrix} 1 & 0 \\ 0 & 2 \end{bmatrix}, \quad V = \begin{bmatrix} 3 & 0 \\ 1 & 1 \end{bmatrix}$$
+          and write the resulting matrix $S$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Vectorization Formulation &amp; Numerical Trace</div>
+
+        <p class="step"><strong>Step 1: Nested <code>jax.vmap</code> Construction:</strong>
+        To compute all pairs $S_{ij} = \operatorname{sim}(U_i, V_j)$ across $M$ rows of $U$ and $N$ rows of $V$:
+        <ol>
+          <li>First, map <code>cosine_sim_single</code> over all $V_j \in V$ for a <em>single fixed vector</em> $\mathbf{u}$:
+          <pre><code># Vectorize over V (axis 0 of V), holding u unbatched (None)
+# Input: u in R^D, V in R^(N x D) -> Output: R^N
+sim_u_against_all_v = jax.vmap(cosine_sim_single, in_axes=(None, 0))</code></pre></li>
+          <li>Next, map <code>sim_u_against_all_v</code> over all $U_i \in U$:
+          <pre><code># Vectorize over U (axis 0 of U), passing V as a whole (None)
+# Input: U in R^(M x D), V in R^(N x D) -> Output: R^(M x N)
+batch_all_pairs_sim = jax.vmap(sim_u_against_all_v, in_axes=(0, None))</code></pre></li>
+        </ol>
+        Composed in a single functional line:
+        <pre><code>batch_all_pairs_sim = jax.vmap(jax.vmap(cosine_sim_single, in_axes=(None, 0)), in_axes=(0, None))</code></pre></p>
+
+        <p class="step"><strong>Step 2: Numerical Hand Trace:</strong>
+        Vectors:
+        $$\mathbf{u}_1 = [1, 0], \quad \|\mathbf{u}_1\| = 1$$
+        $$\mathbf{u}_2 = [0, 2], \quad \|\mathbf{u}_2\| = 2$$
+        $$\mathbf{v}_1 = [3, 0], \quad \|\mathbf{v}_1\| = 3$$
+        $$\mathbf{v}_2 = [1, 1], \quad \|\mathbf{v}_2\| = \sqrt{1^2 + 1^2} = \sqrt{2} \approx 1.414214$$
+
+        Evaluating all 4 pairwise combinations:
+        <ul>
+          <li>$S_{11} = \operatorname{sim}(\mathbf{u}_1, \mathbf{v}_1) = \frac{[1, 0] \cdot [3, 0]}{1 \times 3} = \frac{3}{3} = \mathbf{1.0}$</li>
+          <li>$S_{12} = \operatorname{sim}(\mathbf{u}_1, \mathbf{v}_2) = \frac{[1, 0] \cdot [1, 1]}{1 \times \sqrt{2}} = \frac{1}{\sqrt{2}} \approx \mathbf{0.707107}$</li>
+          <li>$S_{21} = \operatorname{sim}(\mathbf{u}_2, \mathbf{v}_1) = \frac{[0, 2] \cdot [3, 0]}{2 \times 3} = \frac{0}{6} = \mathbf{0.0}$</li>
+          <li>$S_{22} = \operatorname{sim}(\mathbf{u}_2, \mathbf{v}_2) = \frac{[0, 2] \cdot [1, 1]}{2 \times \sqrt{2}} = \frac{2}{2\sqrt{2}} = \frac{1}{\sqrt{2}} \approx \mathbf{0.707107}$</li>
+        </ul>
+        The resulting similarity matrix is:
+        $$S = \begin{bmatrix} 1.0 & 0.7071 \\ 0.0 & 0.7071 \end{bmatrix}$$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.7.4: TIER 2 APPLIED ENGINEERING -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.7.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (In-Place Mutation vs. Pure Updates and Buffer Donation):</strong> In reinforcement learning and physics simulations, state buffers are updated iteratively. Consider this state update step:</p>
+        <pre><code>def bad_step(state, action, idx):
+    state[idx] = state[idx] + 2.0 * action
+    return state</code></pre>
+        <ol>
+          <li>Explain why passing a JAX array to <code>bad_step</code> raises a fatal <code>TypeError</code>.</li>
+          <li>Write the idiomatic functional JAX implementation using <code>.at[...].add(...)</code>.</li>
+          <li>If an array has 100 million elements (400 MB) and is updated 1,000 times, a naive implementation creates 1,000 copies, allocating 400 GB of memory! Explain how XLA's <strong>Buffer Donation (<code>donate_argnums</code>)</strong> allows in-place VRAM buffer reuse without breaking functional purity.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Systems &amp; Compiler Solution</div>
+
+        <p class="step"><strong>Step 1: Why <code>state[idx] = ...</code> Fails:</strong>
+        JAX arrays (<code>jax.Array</code>) are strictly <strong>immutable</strong>. In Python, the syntax <code>obj[idx] = val</code> invokes the object's <code>__setitem__</code> dunder method, which mutates the underlying memory buffer in-place.
+        JAX explicitly disables <code>__setitem__</code>, throwing:
+        <code>TypeError: '<class 'jaxlib.xla_extension.ArrayImpl'>' object does not support item assignment. JAX arrays are immutable. Use the `.at[...]` syntax instead.</code></p>
+
+        <p class="step"><strong>Step 2: Idiomatic Functional Replacement:</strong>
+        JAX provides functional indexed update operators that return a new updated array reference:
+        <pre><code>def pure_step(state, action, idx):
+    return state.at[idx].add(2.0 * action)</code></pre>
+        Other operators include <code>.at[idx].set(val)</code>, <code>.at[idx].multiply(val)</code>, and <code>.at[idx].min(val)</code>.</p>
+
+        <p class="step"><strong>Step 3: Compiler Buffer Donation via <code>donate_argnums</code>:</strong>
+        Under naive functional execution, every <code>state.at[idx].add(...)</code> allocates a fresh 400 MB buffer and copies over the unchanged 99.99% of elements.
+        However, when compiling with <code>jax.jit(pure_step, donate_argnums=(0,))</code>:
+        <ul>
+          <li>The programmer explicitly promises that the caller will <em>never use the original input array reference again</em> after the function call.</li>
+          <li>The XLA compiler marks the input VRAM memory buffer as "donated".</li>
+          <li>During code generation, XLA performs the element addition <strong>directly in-place inside the existing memory buffer</strong>!</li>
+          <li>Memory allocation overhead drops to <strong>zero</strong> ($0 \text{ bytes}$ allocated across 1,000 steps), achieving the memory efficiency of C++ pointers while retaining mathematical purity!</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.7.5: TIER 3 MATHEMATICAL PROOF -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.7.5</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google Brain</span>
+        <span class="company-tag company-meta">Meta FAIR</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Mathematical Proof of Auto-Vectorization Equivalence under <code>jax.vmap</code>):</strong> Consider a single-sample linear model $f: \mathbb{R}^D \to \mathbb{R}^K$ defined as:</p>
+        $$f(\mathbf{x}; \mathbf{W}, \mathbf{b}) = \mathbf{W}\mathbf{x} + \mathbf{b}, \quad \mathbf{W} \in \mathbb{R}^{K \times D}, \mathbf{b} \in \mathbb{R}^K, \mathbf{x} \in \mathbb{R}^D$$
+        <ol>
+          <li>Prove that applying <code>jax.vmap(f, in_axes=(0, None, None))</code> over a batch matrix $\mathbf{X} \in \mathbb{R}^{B \times D}$ (where row $i$ is $\mathbf{x}_i^T$) produces an output $\mathbf{Y} \in \mathbb{R}^{B \times K}$ that is mathematically identical to the batched matrix expression $\mathbf{X}\mathbf{W}^T + \mathbf{1}_B \mathbf{b}^T$.</li>
+          <li>For a scalar loss $\mathcal{L} = \sum_{i=1}^B \ell(f(\mathbf{x}_i))$, prove that the functional gradient $\nabla_\mathbf{W} \mathcal{L}$ computed via <code>jax.grad(lambda W: jnp.sum(vmap(f, ...)(X, W, b)))</code> exactly satisfies:
+          $$\nabla_\mathbf{W} \mathcal{L} = \sum_{i=1}^B \nabla_{\mathbf{W}} \ell(f(\mathbf{x}_i)) = \mathbf{G}^T \mathbf{X}, \quad \text{where } \mathbf{G}_{i, :} = \nabla_{\hat{\mathbf{y}}_i} \ell$$</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete First-Principles Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Vectorization Equivalence:</strong>
+        Let $\mathbf{X} \in \mathbb{R}^{B \times D}$ be the batch matrix whose rows are $\mathbf{x}_1^T, \dots, \mathbf{x}_B^T$.
+        By definition, <code>jax.vmap(f, in_axes=(0, None, None))</code> evaluates $f$ on each row slice independently:
+        $$\operatorname{vmap}(f)(\mathbf{X}, \mathbf{W}, \mathbf{b}) = \begin{bmatrix} f(\mathbf{x}_1; \mathbf{W}, \mathbf{b})^T \\ f(\mathbf{x}_2; \mathbf{W}, \mathbf{b})^T \\ \vdots \\ f(\mathbf{x}_B; \mathbf{W}, \mathbf{b})^T \end{bmatrix} \in \mathbb{R}^{B \times K}$$
+        For any row $i \in \{1, \dots, B\}$:
+        $$f(\mathbf{x}_i; \mathbf{W}, \mathbf{b}) = \mathbf{W}\mathbf{x}_i + \mathbf{b} \implies f(\mathbf{x}_i; \mathbf{W}, \mathbf{b})^T = (\mathbf{W}\mathbf{x}_i + \mathbf{b})^T = \mathbf{x}_i^T \mathbf{W}^T + \mathbf{b}^T$$
+        Stacking these rows across all $B$ samples:
+        $$\begin{bmatrix} \mathbf{x}_1^T \mathbf{W}^T + \mathbf{b}^T \\ \mathbf{x}_2^T \mathbf{W}^T + \mathbf{b}^T \\ \vdots \\ \mathbf{x}_B^T \mathbf{W}^T + \mathbf{b}^T \end{bmatrix} = \begin{bmatrix} \mathbf{x}_1^T \\ \mathbf{x}_2^T \\ \vdots \\ \mathbf{x}_B^T \end{bmatrix} \mathbf{W}^T + \begin{bmatrix} \mathbf{b}^T \\ \mathbf{b}^T \\ \vdots \\ \mathbf{b}^T \end{bmatrix} = \mathbf{X}\mathbf{W}^T + \mathbf{1}_B \mathbf{b}^T$$
+        Thus, <code>vmap</code> transforms the scalar-vector loop into the canonical BLAS-3 batched GEMM $\mathbf{X}\mathbf{W}^T + \mathbf{1}\mathbf{b}^T$. $\quad \blacksquare$</p>
+
+        <p class="step"><strong>Step 2: Gradient Commutation Proof:</strong>
+        Let $\hat{\mathbf{y}}_i = \mathbf{W}\mathbf{x}_i + \mathbf{b}$. The total loss is:
+        $$\mathcal{L}(\mathbf{W}) = \sum_{i=1}^B \ell(\hat{\mathbf{y}}_i)$$
+        Applying the matrix calculus chain rule to each term:
+        $$d\ell(\hat{\mathbf{y}}_i) = \operatorname{tr}\left(\left(\nabla_{\hat{\mathbf{y}}_i} \ell\right)^T d\hat{\mathbf{y}}_i\right)$$
+        Since $d\hat{\mathbf{y}}_i = (d\mathbf{W})\mathbf{x}_i$:
+        $$d\ell(\hat{\mathbf{y}}_i) = \operatorname{tr}\left(\left(\nabla_{\hat{\mathbf{y}}_i} \ell\right)^T (d\mathbf{W})\mathbf{x}_i\right) = \operatorname{tr}\left(\mathbf{x}_i \left(\nabla_{\hat{\mathbf{y}}_i} \ell\right)^T d\mathbf{W}\right) = \operatorname{tr}\left(\left(\left(\nabla_{\hat{\mathbf{y}}_i} \ell\right) \mathbf{x}_i^T\right)^T d\mathbf{W}\right)$$
+        Therefore, the gradient with respect to $\mathbf{W}$ for sample $i$ is the outer product:
+        $$\nabla_\mathbf{W} \ell(\hat{\mathbf{y}}_i) = \left(\nabla_{\hat{\mathbf{y}}_i} \ell\right) \mathbf{x}_i^T \in \mathbb{R}^{K \times D}$$
+        Summing over all $B$ samples:
+        $$\nabla_\mathbf{W} \mathcal{L} = \sum_{i=1}^B \left(\nabla_{\hat{\mathbf{y}}_i} \ell\right) \mathbf{x}_i^T$$
+        Define the upstream gradient matrix $\mathbf{G} \in \mathbb{R}^{B \times K}$ where row $i$ is $\left(\nabla_{\hat{\mathbf{y}}_i} \ell\right)^T$. Then:
+        $$\mathbf{G}^T \mathbf{X} = \sum_{i=1}^B \mathbf{g}_i \mathbf{x}_i^T$$
+        which matches $\nabla_\mathbf{W} \mathcal{L}$ identically! In JAX, autodiff pushes through the <code>vmap</code> transformation by transforming the tangent/cotangent evaluation into batched outer products, proving exact numerical and structural equivalence. $\quad \blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.7.6: TIER 3 MATHEMATICAL PROOF -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.7.6</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-deepmind">DeepMind</span>
+        <span class="company-tag company-cmu">CMU</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Forward-Mode vs. Reverse-Mode Autodiff: JVPs vs. VJPs):</strong> JAX provides two complementary primitives for differentiation: <strong>Jacobian-Vector Products (JVPs via <code>jax.jvp</code>)</strong> and <strong>Vector-Jacobian Products (VJPs via <code>jax.vjp</code>)</strong>.</p>
+        <ol>
+          <li>For a general differentiable function $f: \mathbb{R}^N \to \mathbb{R}^M$, define the Jacobian matrix $\mathbf{J} \in \mathbb{R}^{M \times N}$. Formulate the mathematical definitions of a JVP with tangent vector $\mathbf{v} \in \mathbb{R}^N$ and a VJP with cotangent vector $\mathbf{u} \in \mathbb{R}^M$.</li>
+          <li>Prove that computing the full Jacobian $\mathbf{J}$ for a <strong>Deep Classifier</strong> ($N = 10^7$ parameters, $M = 1$ scalar loss) requires $\mathcal{O}(N)$ evaluations using forward-mode autodiff (JVP), but only $\mathcal{O}(1)$ evaluation using reverse-mode autodiff (VJP).</li>
+          <li>Prove that for a <strong>Coordinate-Based Neural Radiance Field (NeRF)</strong> tracing rays ($N = 3$ spatial coordinates $(x,y,z)$, $M = 10^5$ sampling points), forward-mode autodiff (JVP) evaluates directional derivatives $\nabla_\mathbf{v} f$ in $\mathcal{O}(1)$ evaluations while reverse-mode requires $\mathcal{O}(M)$ passes.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Autodiff Complexity Proof</div>
+
+        <p class="step"><strong>Step 1: Mathematical Formulations of JVP and VJP:</strong>
+        Let $f: \mathbb{R}^N \to \mathbb{R}^M$ have Jacobian matrix $\mathbf{J}_{ij} = \frac{\partial f_i}{\partial x_j} \in \mathbb{R}^{M \times N}$.
+        <ul>
+          <li><strong>Jacobian-Vector Product (JVP / Forward-Mode):</strong> Given a tangent vector $\mathbf{v} \in \mathbb{R}^N$, the JVP computes the directional derivative:
+          $$\operatorname{JVP}(f, \mathbf{x}, \mathbf{v}) = \mathbf{J} \mathbf{v} = \lim_{\epsilon \to 0} \frac{f(\mathbf{x} + \epsilon \mathbf{v}) - f(\mathbf{x})}{\epsilon} \in \mathbb{R}^M$$
+          Evaluated forward along the computational graph alongside the primal values.</li>
+          <li><strong>Vector-Jacobian Product (VJP / Reverse-Mode):</strong> Given a cotangent (upstream gradient) vector $\mathbf{u} \in \mathbb{R}^M$, the VJP computes the backpropagated adjoint:
+          $$\operatorname{VJP}(f, \mathbf{x}, \mathbf{u}) = \mathbf{u}^T \mathbf{J} = \mathbf{J}^T \mathbf{u} \in \mathbb{R}^N$$
+          Evaluated in reverse along the transposed computational graph from outputs to inputs.</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2: Deep Classifier Complexity ($N = 10^7, M = 1$):</strong>
+        We wish to compute $\nabla_\mathbf{x} f \in \mathbb{R}^N$ (which is the Jacobian $\mathbf{J}^T$).
+        <ul>
+          <li><strong>Using Forward-Mode (JVP):</strong> Each forward JVP call computes $\mathbf{J} \mathbf{v}$ for a single direction $\mathbf{v}$. To reconstruct the $N$ partial derivatives $\frac{\partial f}{\partial x_1}, \dots, \frac{\partial f}{\partial x_N}$, we must evaluate JVPs along each canonical basis vector $\mathbf{e}_1, \dots, \mathbf{e}_N$:
+          $$\text{Evaluations Required} = N = 10,000,000 \text{ forward passes!}$$
+          This would require weeks of compute.</li>
+          <li><strong>Using Reverse-Mode (VJP):</strong> The output dimension is $M = 1$. Choosing cotangent $\mathbf{u} = [1.0] \in \mathbb{R}^1$:
+          $$\mathbf{u}^T \mathbf{J} = 1.0 \times \mathbf{J} = \nabla_\mathbf{x} f$$
+          The <strong>entire gradient vector of all $10^7$ parameters is recovered in exactly $1$ single reverse pass</strong>! Complexity is $\mathcal{O}(1)$ function evaluations. $\quad \blacksquare$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 3: NeRF Coordinate Traversal ($N = 3, M = 10^5$):</strong>
+        Consider finding the rate of change of $10^5$ output points with respect to camera ray direction $\mathbf{v} \in \mathbb{R}^3$:
+        <ul>
+          <li><strong>Using Forward-Mode (JVP):</strong> Passing the ray velocity vector $\mathbf{v} \in \mathbb{R}^3$ directly into <code>jax.jvp(f, (x,), (v,))</code> computes the exact derivative across all $M = 10^5$ output points simultaneously in <strong>$1$ forward pass</strong>! Complexity is $\mathcal{O}(1)$.</li>
+          <li><strong>Using Reverse-Mode (VJP):</strong> To obtain the directional derivative across all $M$ outputs via backpropagation without JVP, one would need to seed cotangents for each of the $M = 10^5$ outputs, requiring $10^5$ backward passes! Forward-mode is $\mathbf{100,000\times}$ more efficient. $\quad \blacksquare$</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.7.7: TIER 4 CONCEPTUAL TRAP MCQ -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.7.7</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (The JIT Python Control Flow Concretization Trap):</strong> An engineer writes the following function and tests it under <code>@jax.jit</code>:</p>
+        <pre><code>import jax
+import jax.numpy as jnp
+
+@jax.jit
+def process_data(x, threshold=0.0):
+    if jnp.sum(x) &gt; threshold:
+        return x * 2.0
+    else:
+        return x * 0.0
+
+print(process_data(jnp.array([1.0, 2.0])))</code></pre>
+        <p>What happens when this code is executed, and what is the proper functional remedy?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> It prints <code>[2.0, 4.0]</code> because <code>1.0 + 2.0 = 3.0 &gt; 0.0</code> is evaluated during compilation.</li>
+          <li><strong>(B)</strong> It crashes with <code>ConcretizationTypeError</code> because Python's <code>if</code> statement attempts to evaluate the concrete truth value of an abstract tracer <code>jnp.sum(x) &gt; threshold</code> at compile time. The remedy is replacing the Python branch with <code>jax.lax.cond</code>.</li>
+          <li><strong>(C)</strong> It crashes with <code>FloatingPointError</code> because threshold defaults to 0.0, causing a division by zero in the branch predictor.</li>
+          <li><strong>(D)</strong> JAX automatically falls back to eager Python mode without compilation whenever a branch condition is encountered.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: (B)</div>
+
+        <p class="step"><strong>Exhaustive Distractor Analysis:</strong>
+        <ul>
+          <li><strong>(B) is CORRECT:</strong> During <code>@jax.jit</code> tracing, <code>x</code> is replaced by an abstract tracer <code>ShapedArray(float32[2])</code>. The expression <code>jnp.sum(x) &gt; threshold</code> evaluates to a boolean tracer <code>ShapedArray(bool[])</code>. When Python's native <code>if</code> keyword executes, it internally calls <code>__bool__()</code> on the condition to decide which branch of Python bytecode to execute. Because the tracer contains no concrete values, JAX raises <code>jax.errors.ConcretizationTypeError</code>. To compile data-dependent branches into XLA, one must use <strong><code>jax.lax.cond(pred, true_fun, false_fun, *operands)</code></strong>, which compiles both branches into an XLA conditional operator (<code>kSelect</code>) evaluated natively on the accelerator.</li>
+          <li><strong>(A) is INCORRECT:</strong> Assumes JAX evaluates array values during tracing. Tracing only inspects types and shapes, never numerical values.</li>
+          <li><strong>(C) is INCORRECT:</strong> There is no division operation anywhere in the function.</li>
+          <li><strong>(D) is INCORRECT:</strong> JAX never silently falls back to eager Python mode inside <code>@jax.jit</code>; it strictly enforces compilation or throws a hard exception.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.7.8: TIER 4 CONCEPTUAL TRAP MCQ -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.7.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google TPU Systems</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (SPMD Sharding and Collective Reduction with <code>jax.pmap</code>):</strong> An engineer is scaling training across an 8-device TPU pod slice using <code>jax.pmap</code>:</p>
+        <pre><code>import jax
+import jax.numpy as jnp
+
+@jax.pmap
+def parallel_loss_step(x, w):
+    # x has shape (8, 32, 128) - 8 devices, batch 32 per device
+    # w has shape (128, 64)
+    pred = jnp.dot(x, w)
+    loss = jnp.mean(pred ** 2)
+    # Goal: synchronize mean loss across all 8 devices
+    return loss
+
+devices = jax.local_devices() # 8 TPU cores
+x = jnp.ones((8, 32, 128))
+w = jnp.ones((128, 64))
+# Call parallel_loss_step(x, w)</code></pre>
+        <p>Why will calling <code>parallel_loss_step(x, w)</code> fail or produce incorrect multi-device behavior, and how must the code be corrected?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> <code>w</code> has leading dimension 128 instead of 8; <code>jax.pmap</code> maps the leading dimension of <em>every</em> passed argument across devices by default. Therefore, <code>w</code> must be replicated across devices or marked with <code>in_axes=(0, None)</code>, and cross-device synchronization requires <code>jax.lax.pmean(loss, axis_name=...)</code>.</li>
+          <li><strong>(B)</strong> TPU pods do not support dot products of dimension 128; dimensions must be powers of two greater than 256.</li>
+          <li><strong>(C)</strong> <code>jax.pmap</code> requires models to be written as PyTorch modules.</li>
+          <li><strong>(D)</strong> The code runs correctly and automatically executes a Ring All-Reduce across all 8 TPUs without any collective primitives.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: (A)</div>
+
+        <p class="step"><strong>Exhaustive Systems Architecture Analysis:</strong>
+        <ul>
+          <li><strong>(A) is CORRECT:</strong> By default, <code>jax.pmap</code> assumes that the leading dimension (axis 0) of <strong>all</strong> positional input arguments corresponds to the device mesh dimension ($N = 8$). While <code>x</code> has shape <code>(8, 32, 128)</code> and splits evenly (32 samples per device), <code>w</code> has shape <code>(128, 64)</code>. JAX attempts to slice <code>w</code> along axis 0 into 8 chunks of size $16 \times 64$, meaning each TPU receives an incomplete fragment of the weight matrix instead of the full model! To fix this, the engineer must either:
+          <ol>
+            <li>Pass <code>in_axes=(0, None)</code> to <code>jax.pmap</code> so that <code>w</code> is broadcast to all devices without sharding.</li>
+            <li>Explicitly replicate <code>w</code> across devices using <code>jax.device_put_replicated(w, devices)</code>.</li>
+          </ol>
+          Furthermore, without <code>jax.lax.pmean(loss, axis_name='dev')</code>, each device simply returns its own independent local scalar loss without any cross-accelerator reduction!</li>
+          <li><strong>(B) is INCORRECT:</strong> TPUs handle arbitrary matrix dimensions (padding internally to $128 \times 128$ systolic array tiles).</li>
+          <li><strong>(C) is INCORRECT:</strong> JAX is completely independent of PyTorch.</li>
+          <li><strong>(D) is INCORRECT:</strong> <code>jax.pmap</code> does not automatically insert collective communication reductions unless explicitly invoked via <code>jax.lax.psum</code> or <code>jax.lax.pmean</code> with a bound <code>axis_name</code>.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- SECTION 6: PRODUCTION CODE LAB -->
+    <h3>5. Production Code Lab 3.7: Neural Network Training in Pure JAX</h3>
+    <p>Below is a production implementation of a complete multi-layer neural network trained from scratch in pure JAX using <code>grad</code>, <code>jit</code>, <code>vmap</code>, and PyTree parameter management.</p>
 
     <div class="code-lab">
       <div class="code-lab-header">Code Lab 3.7 — Deep Neural Network Training in Pure JAX</div>
@@ -87,52 +522,58 @@
 <pre><code>import jax
 import jax.numpy as jnp
 
-# 1. Initialize parameters as a pure PyTree (nested dict of arrays)
+# 1. Initialize parameters as a pure PyTree (nested dict of immutable arrays)
 def init_mlp_params(layer_sizes, key):
     keys = jax.random.split(key, len(layer_sizes) - 1)
     params = []
     for k, (din, dout) in zip(keys, zip(layer_sizes[:-1], layer_sizes[1:])):
+        # He / Kaiming normal initialization: std = sqrt(2 / din)
         w = jax.random.normal(k, (din, dout)) * jnp.sqrt(2.0 / din)
         b = jnp.zeros((dout,))
         params.append({"w": w, "b": b})
     return params
 
-# 2. Forward pass on a SINGLE sample (No batch dimension needed!)
+# 2. Forward pass on a SINGLE sample (Pure mathematics: no batch dimension!)
 def forward_single(params, x):
     for layer in params[:-1]:
         x = jax.nn.relu(jnp.dot(x, layer["w"]) + layer["b"])
-    # Output layer
+    # Linear output projection
     return jnp.dot(x, params[-1]["w"]) + params[-1]["b"]
 
 # 3. Vectorize across batch dimension automatically using vmap!
 forward_batch = jax.vmap(forward_single, in_axes=(None, 0))
 
-# 4. Pure Loss Function
+# 4. Pure Loss Function (Mean Squared Error)
 def loss_fn(params, x_batch, y_batch):
-    logits = forward_batch(params, x_batch)
-    return jnp.mean((logits - y_batch) ** 2)
+    preds = forward_batch(params, x_batch)
+    return jnp.mean((preds - y_batch) ** 2)
 
-# 5. JIT-compiled update step with analytical automatic differentiation
+# 5. JIT-compiled update step with reverse-mode autodiff & PyTree gradient descent
 @jax.jit
 def update_step(params, x_batch, y_batch, lr=0.01):
     loss, grads = jax.value_and_grad(loss_fn)(params, x_batch, y_batch)
-    # Functional parameter update (immutability preserved)
+    # Pure functional parameter update via tree_map (zero in-place mutation)
     new_params = jax.tree_util.tree_map(lambda p, g: p - lr * g, params, grads)
     return new_params, loss
 
 if __name__ == "__main__":
     key = jax.random.PRNGKey(42)
-    params = init_mlp_params([4, 16, 16, 1], key)
-    x = jax.random.normal(key, (64, 4))
-    y = jax.random.normal(key, (64, 1))
+    k_init, k_data_x, k_data_y = jax.random.split(key, 3)
 
-    print("Initial JAX Forward Pass Output Shape:", forward_batch(params, x).shape)
+    # 4-layer MLP: 4 -> 32 -> 16 -> 1
+    params = init_mlp_params([4, 32, 16, 1], k_init)
+    x = jax.random.normal(k_data_x, (128, 4))
+    y = jax.random.normal(k_data_y, (128, 1))
+
+    print(f"JAX Device: {jax.devices()[0]}")
+    print("Initial Batched Output Shape:", forward_batch(params, x).shape)
+
     for epoch in range(5):
         params, loss = update_step(params, x, y, lr=0.05)
-        print(f"Epoch {epoch+1}: JIT-Compiled MSE Loss = {loss:.4f}")</code></pre>
+        print(f"Epoch {epoch+1:02d}: JIT-Compiled Loss = {loss:.6f}")</code></pre>
     </div>
 
-    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 3.7 Dedicated Project &amp; Case Study</span>

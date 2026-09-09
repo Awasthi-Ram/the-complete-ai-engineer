@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="whisper_audio_pipeline.png" alt="Figure 4.6.1: whisper audio pipeline">
+        <div class="diagram-caption"><strong>Figure 4.6.1:</strong> The Whisper multilingual speech recognition architecture. Continuous 16 kHz audio waveforms are converted into 80-channel log-mel filterbank spectrograms, downsampled via 1D convolutions with stride 2, and processed by an encoder-decoder transformer emitting language identification, timestamps, and transcribed text tokens.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 4.6 — AUDIO INTELLIGENCE & WHISPER ARCHITECTURE
      ====================================================================== -->
@@ -5,12 +11,12 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 4.6</span>
     <h2 class="chapter-title">Audio Intelligence &amp; Whisper Architecture</h2>
-    <span class="chapter-subtitle">The Fourier Transform, Log-Mel Spectrograms, Acoustic Attention &amp; Multitask Sequence Decoding</span>
+    <span class="chapter-subtitle">The Fourier Transform, Log-Mel Filterbanks, Acoustic Attention &amp; Multitask Sequence Decoding</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"Speech is the most natural interface of human intelligence. Behind every spoken word lies a physical pressure wave vibrating across time and frequency."</p>
+    <p>"Speech is the primary protocol of human intelligence. Behind every spoken word lies a physical mechanical pressure wave vibrating across time and frequency, governed by the physics of acoustics."</p>
     <p class="attribution">— Speech Processing Maxim</p>
   </div>
 
@@ -19,52 +25,79 @@
 
     <!-- SECTION 1: THE PHYSICS OF SOUND -->
     <h3>1. From Physical Pressure Waves to Digital Waveforms</h3>
-    <p>Sound is a continuous mechanical longitudinal pressure wave traveling through air. A microphone diaphragm converts pressure oscillations into continuous electrical voltages, which an Analog-to-Digital Converter (ADC) digitizes at discrete intervals governed by the <strong>Sampling Rate ($f_s$)</strong>.</p>
+    <p>Sound is a continuous mechanical longitudinal compression wave propagating through physical media. A microphone diaphragm translates air pressure oscillations into continuous electrical voltage. An Analog-to-Digital Converter (ADC) samples this continuous voltage at discrete intervals dictated by the <strong>Sampling Rate ($f_s$)</strong>.</p>
 
     <div class="real-world-box">
       <h4>📐 The Nyquist-Shannon Sampling Theorem</h4>
-      <p>To record an audio signal containing frequencies up to $f_{\max}$ without destructive aliasing distortion, the sampling rate must be strictly greater than twice the highest frequency:</p>
-      $$f_s \ge 2 f_{\max}$$
-      <p>Human speech frequencies relevant to intelligibility span from $50 \text{ Hz}$ to $8 \text{ kHz}$. Thus, speech models standardize on <strong>$16 \text{ kHz}$ sampling</strong> ($16,000$ amplitude values per second). A 30-second audio clip corresponds to a 1D raw vector of:</p>
-      $$\text{Total Samples} = 30 \times 16,000 = \mathbf{480,000 \text{ float values}}!$$
+      <p>To digitize a bandlimited continuous signal containing frequencies up to $f_{\max}$ without destructive <strong>aliasing distortion</strong>, the discrete sampling frequency $f_s$ must strictly exceed twice the highest frequency component:</p>
+      $$f_s > 2 f_{\max}$$
+      <p>Human speech frequencies vital to phonetic intelligibility span from $50 \text{ Hz}$ to $8 \text{ kHz}$ (formants $F_1, F_2, F_3$). Modern speech architectures (Whisper, Wav2Vec 2.0) standardize on a <strong>$16 \text{ kHz}$ sampling rate</strong> ($16,000$ discrete scalar amplitudes per second). A standard 30-second audio clip corresponds to a 1D raw vector containing:</p>
+      $$\text{Total 1D Samples} = 30 \times 16,000 = \mathbf{480,000 \text{ floating-point values}}!$$
     </div>
 
     <!-- SECTION 2: FROM WAVEFORM TO SPECTROGRAM -->
-    <h3>2. The Short-Time Fourier Transform (STFT) &amp; Mel Spectrograms</h3>
-    <p>Raw 1D time-domain waveforms are notoriously difficult for neural networks to interpret because human phonemes are characterized by frequency harmonics (formants), not instantaneous amplitudes.</p>
+    <h3>2. The Short-Time Fourier Transform (STFT) &amp; Log-Mel Filterbanks</h3>
+    <p>Raw 1D time-domain waveforms $\mathbf{x}[n]$ are notoriously difficult for neural networks to interpret directly because human phonemic comprehension depends on <strong>frequency harmonics (formants)</strong> rather than instantaneous sound pressure values.</p>
 
-    <h4>1. The Short-Time Fourier Transform (STFT)</h4>
-    <p>We segment the 1D audio into small overlapping frames using a <strong>Hann Window</strong> of length $N = 400$ samples ($25 \text{ ms}$) sliding with a hop size of $160$ samples ($10 \text{ ms}$). Applying the Fast Fourier Transform (FFT) over each window reveals frequency intensities across time, producing a 2D complex matrix $X(t, f)$.</p>
+    <h4>2.1 The Short-Time Fourier Transform (STFT)</h4>
+    <p>To reveal frequency content across time, we segment the 1D signal into overlapping frames using a <strong>Hann Window</strong> $w[n]$ of length $N = 400$ samples ($25 \text{ ms}$) sliding with a hop size of $H = 160$ samples ($10 \text{ ms}$). The discrete STFT is defined as:</p>
+    $$X[m, k] = \sum_{n=0}^{N-1} x[m H + n] \cdot w[n] \cdot e^{-j 2\pi k n / N}$$
+    <p>where $m$ denotes the time frame index and $k \in \{0, 1, \dots, N/2\}$ represents the discrete frequency bin up to the Nyquist frequency ($8 \text{ kHz}$). The squared magnitude yields the <strong>Linear Power Spectrogram</strong>: $|X[m, k]|^2$.</p>
 
-    <h4>2. The Mel Filterbank &amp; Log Compression</h4>
-    <p>Human hearing does not perceive pitch linearly: the human ear distinguishes $100 \text{ Hz}$ vs. $200 \text{ Hz}$ effortlessly, but cannot distinguish $8,000 \text{ Hz}$ vs. $8,100 \text{ Hz}$.</p>
-    <p>The <strong>Mel Scale</strong> mimics human psychoacoustics by warping physical Hertz frequencies into a logarithmic pitch scale:</p>
+    <h4>2.2 The Mel Scale &amp; Perceptual Filterbanks</h4>
+    <p>Human hearing does not perceive frequency linearly: the human cochlea distinguishes $100 \text{ Hz}$ vs. $200 \text{ Hz}$ effortlessly, but cannot distinguish $8,000 \text{ Hz}$ vs. $8,100 \text{ Hz}$.</p>
+    <p>The <strong>Mel Scale</strong> mimics human basilar membrane psychoacoustics by warping physical Hertz frequencies into a logarithmic pitch scale:</p>
     $$m = 2595 \log_{10}\left( 1 + \frac{f}{700} \right)$$
-    <p>Multiplying the power spectrogram by a triangular bank of <strong>80 Mel Filters</strong> and applying dynamic range compression produces the <strong>80-channel Log-Mel Spectrogram</strong>: a 2D "image" of audio where the vertical axis represents human perceived pitch and the horizontal axis represents time!</p>
+    <p>Multiplying the linear power spectrogram by a bank of <strong>80 triangular Mel filters</strong> and applying logarithmic dynamic range compression produces the <strong>80-channel Log-Mel Spectrogram</strong>:</p>
+    $$\mathbf{S}_{\text{Mel}}[m, b] = \ln\left( \sum_{k=0}^{N/2} |X[m, k]|^2 \cdot H_b[k] + \epsilon \right), \quad b \in \{1, \dots, 80\}$$
+    <p>The 80-channel Log-Mel Spectrogram converts a 1D audio waveform into a 2D "image" of sound where the vertical axis represents human perceived pitch and the horizontal axis represents time!</p>
 
     <!-- SECTION 3: THE WHISPER ARCHITECTURE -->
     <h3>3. The Whisper Architecture (Radford et al., OpenAI 2022)</h3>
-    <p>OpenAI's <strong>Whisper</strong> is a Sequence-to-Sequence Encoder-Decoder Transformer trained on $680,000$ hours of diverse multilingual audio scraped from the internet.</p>
+    <p>OpenAI's <strong>Whisper</strong> is an industrial Sequence-to-Sequence Encoder-Decoder Transformer trained on $680,000$ hours of multilingual, weakly supervised audio collected from the web.</p>
 
-    <h4>1. The Audio Encoder</h4>
+    <h4>3.1 The Audio Encoder</h4>
     <ul>
-      <li>Input: An $80 \times 3,000$ Log-Mel Spectrogram representing a 30-second audio segment.</li>
-      <li>Two 1D convolutional layers with stride 2 downsample the temporal frames by $2\times$ into <strong>$1,500$ acoustic tokens</strong>.</li>
-      <li>Sinusoidal positional embeddings are added, and the tokens pass through standard Transformer encoder blocks.</li>
+      <li><strong>Input:</strong> An $80 \times 3,000$ Log-Mel Spectrogram representing a standardized 30-second audio segment.</li>
+      <li><strong>1D Convolutional Downsampling:</strong> Two consecutive Conv1D layers with kernel size 3 and stride $S=2$ downsample the temporal frames by $2\times$ into <strong>$1,500$ acoustic tokens</strong> of dimension $D$ (e.g. $D = 1280$ for Whisper-Large).</li>
+      <li><strong>Sinusoidal Position Embeddings:</strong> Sinusoidal position embeddings are added, and tokens pass through standard Transformer encoder blocks with self-attention.</li>
     </ul>
 
-    <h4>2. The Multitask Autoregressive Decoder</h4>
-    <p>Whisper abandoned task-specific heads. Instead, the autoregressive text decoder is steered entirely by <strong>Prefix Prompt Tokens</strong>:</p>
+    <h4>3.2 The Multitask Autoregressive Decoder</h4>
+    <p>Rather than using separate, specialized neural heads for speech recognition, language identification, translation, and alignment, Whisper uses a <strong>single autoregressive text decoder steered entirely by Special Prefix Prompt Tokens</strong>:</p>
     $$\text{Prefix Sequence: } [\text{<|startoftranscript|>}, \text{<|language|>}, \text{<|task|>}, \text{<|timestamps|>}]$$
-    <ul>
-      <li><strong>Transcription:</strong> <code>[&lt;|startoftranscript|&gt;, &lt;|en|&gt;, &lt;|transcribe|&gt;, &lt;|notimestamps|&gt;]</code></li>
-      <li><strong>Translation:</strong> <code>[&lt;|startoftranscript|&gt;, &lt;|es|&gt;, &lt;|translate|&gt;, &lt;|notimestamps|&gt;]</code> (translates spoken Spanish directly into English text!)</li>
-      <li><strong>Timestamp Alignment:</strong> Intersperses sub-second boundary tokens (e.g. <code>&lt;|0.00|&gt; Hello &lt;|0.62|&gt;</code>) enabling word-level subtitle synchronization.</li>
-    </ul>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Audio AI</h3>
+    <table class="table table-bordered">
+      <thead>
+        <tr>
+          <th>Multimodal Task</th>
+          <th>Prefix Token Prompt Sequence</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>English Transcription</strong></td>
+          <td><code>[&lt;|startoftranscript|&gt;, &lt;|en|&gt;, &lt;|transcribe|&gt;, &lt;|notimestamps|&gt;]</code></td>
+        </tr>
+        <tr>
+          <td><strong>Multilingual Translation (Spanish $\to$ English)</strong></td>
+          <td><code>[&lt;|startoftranscript|&gt;, &lt;|es|&gt;, &lt;|translate|&gt;, &lt;|notimestamps|&gt;]</code></td>
+        </tr>
+        <tr>
+          <td><strong>Timestamped Subtitle Generation</strong></td>
+          <td><code>[&lt;|startoftranscript|&gt;, &lt;|en|&gt;, &lt;|transcribe|&gt;] &lt;|0.00|&gt; Hello &lt;|0.62|&gt; world &lt;|1.14|&gt;</code></td>
+        </tr>
+        <tr>
+          <td><strong>Voice Activity Detection (VAD)</strong></td>
+          <td>Emits <code>&lt;|nospeech|&gt;</code> immediately if no human speech is detected in the 30s window.</td>
+        </tr>
+      </tbody>
+    </table>
 
+    <!-- SECTION 4: 4-TIER PRACTICE SUITE -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Audio Intelligence</h3>
+
+    <!-- PROBLEM 4.6.1: TIER 1 NUMERICAL WARMUP -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 4.6.1</span>
@@ -73,22 +106,325 @@
         <span class="company-tag company-apple">Apple Siri</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Why does Whisper pad or truncate every audio input to an exact <strong>30-second window</strong> ($3,000$ frames) during training? What computational advantage does this provide over variable-length sequence batching on GPU clusters?</p>
+        <p><strong>QUESTION (Static 30-Second Windowing &amp; Hardware Memory Audit):</strong> Why does Whisper pad or truncate every audio input to an exact <strong>30-second window</strong> ($3,000$ Log-Mel frames) during training? What computational and systems-level advantages does this provide over variable-length batching on modern GPU clusters?</p>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+        <div class="solution-label">✓ Complete Systems &amp; Hardware Architecture Solution</div>
 
-        <p class="step"><strong>Step 1: Tensor Shape Uniformity &amp; CUDA Memory Allocations:</strong><br>
-        In variable-length batching, every batch has a different temporal dimension $T$, forcing the PyTorch caching allocator to constantly allocate and deallocate GPU memory buffers on every step, leading to severe <strong>GPU memory fragmentation</strong> and CUDA synchronization stalls.<br>
-        By fixing every audio clip to exactly 30 seconds ($3,000$ mel frames), input tensors have an <strong>identical static shape $(B, 80, 3000)$</strong> across the entire training run! CUDA allocations remain completely static, maximizing Tensor Core compute saturation!</p>
+        <p class="step"><strong>Step 1: Elimination of GPU Memory Fragmentation:</strong>
+        In variable-length audio batching, every mini-batch has a dynamic temporal dimension $T_{\text{batch}}$. PyTorch's Caching Allocator must allocate and deallocate intermediate VRAM buffers on every step. Over thousands of gradient updates, this causes severe <strong>virtual memory fragmentation</strong>, triggering costly OS driver synchronization and eventual <code>CUDA Out of Memory</code> crashes even when sufficient unfragmented VRAM is nominally available.<br>
+        Fixing all inputs to an exact 30-second window ($3,000$ mel frames) guarantees that every input tensor has an <strong>identical static shape $(B, 80, 3000)$</strong>. GPU VRAM allocations remain completely static throughout training, eliminating all allocator overhead.</p>
 
-        <p class="step"><strong>Step 2: Elimination of Kernel Re-Compilation:</strong><br>
-        Deep learning compilers (such as TensorRT, XLA, and <code>torch.compile</code>) optimize execution graphs for specific tensor shapes. Variable-length tensors trigger continuous recompilations (dynamic shape thrashing). Static 30-second windows allow the compiler to generate a single, maximally fused, static CUDA binary that runs at theoretical peak FLOPs.</p>
+        <p class="step"><strong>Step 2: Elimination of Kernel Re-compilation:</strong>
+        Deep learning compiler backends (such as <code>torch.compile</code>, TensorRT, and XLA) optimize execution graphs by generating specialized CUDA kernels tailored to exact tensor dimensions. Variable-length shapes trigger continuous kernel re-compilations (dynamic shape thrashing). Static shapes allow the compiler to build a single, maximally fused, static CUDA binary running at theoretical peak Tensor Core FLOPs.</p>
+
+        <p class="step"><strong>Step 3: Unified Multitask Context Window:</strong>
+        A fixed 30-second window provides sufficient acoustic context for long-range sentence boundary disambiguation, coreference resolution, and speaker style conditioning while keeping the acoustic sequence length ($1,500$ tokens) well within the quadratic memory limits of standard multi-head self-attention.</p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 4.6: Audio Spectrogram &amp; Acoustic Encoder in PyTorch</h3>
+    <!-- PROBLEM 4.6.2: TIER 1 NUMERICAL WARMUP -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.6.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google Speech</span>
+        <span class="company-tag company-spotify">Spotify</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (STFT Frame Count, Frequency Resolution &amp; Nyquist Sizing):</strong> A 10-second spoken audio recording is digitized at sampling rate $f_s = 16,000 \text{ Hz}$. An audio engineer configures a Short-Time Fourier Transform (STFT) with window length $N = 400$ samples ($25 \text{ ms}$) and hop size $H = 160$ samples ($10 \text{ ms}$), with centered padding.</p>
+        <ol>
+          <li>Calculate the total number of raw 1D discrete samples in the 10-second clip.</li>
+          <li>Calculate the exact number of STFT temporal frames $M$ generated across the 10 seconds.</li>
+          <li>Calculate the number of unique frequency bins $K$ up to the Nyquist frequency, and determine the exact frequency resolution $\Delta f$ per bin in Hertz.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Acoustic Signal Processing Sizing</div>
+
+        <p class="step"><strong>Step 1: Total Raw Samples:</strong>
+        $$\text{Total Samples } L = \text{Duration} \times f_s = 10.0 \text{ s} \times 16,000 \text{ samples/s} = \mathbf{160,000 \text{ samples}}$$</p>
+
+        <p class="step"><strong>Step 2: Number of Temporal Frames $M$:</strong>
+        With centered padding (padding $\lfloor N/2 \rfloor = 200$ samples on each boundary), the total padded length is $L_{\text{pad}} = 160,000 + 400 = 160,400$.
+        The number of temporal frames with hop size $H = 160$ is:
+        $$M = \left\lfloor \frac{L}{H} \right\rfloor = \frac{160,000}{160} = \mathbf{1,000 \text{ temporal frames}}$$
+        Notice that a hop size of $160$ samples at $16 \text{ kHz}$ equals $\frac{160}{16,000} = 0.010 \text{ seconds} = 10 \text{ ms}$. Thus, exactly 100 frames are generated per second of audio ($10 \text{ s} \times 100 = 1,000 \text{ frames}$).</p>
+
+        <p class="step"><strong>Step 3: Frequency Bins &amp; Resolution:</strong>
+        For a real-valued FFT of length $N = 400$, the output spectrum is Hermitian symmetric ($X[k] = X^*[N - k]$). The number of unique non-negative frequency bins up to the Nyquist frequency $f_{\text{Nyquist}} = \frac{f_s}{2} = 8,000 \text{ Hz}$ is:
+        $$K = \frac{N}{2} + 1 = \frac{400}{2} + 1 = \mathbf{201 \text{ frequency bins}}$$
+        Frequency resolution per bin:
+        $$\Delta f = \frac{f_s}{N} = \frac{16,000 \text{ Hz}}{400} = \mathbf{40.0 \text{ Hz per bin}}$$
+        Bin $k$ corresponds to physical frequency $f_k = k \times 40.0 \text{ Hz}$ (e.g. Bin 0 is $0 \text{ Hz}$ DC offset, Bin 200 is $8,000 \text{ Hz}$ Nyquist limit).</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.6.3: TIER 2 APPLIED ENGINEERING -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.6.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-amazon">Amazon Alexa</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Hertz to Mel Conversion &amp; Triangular Filterbank Weight Trace):</strong> Human auditory perception compresses physical frequencies according to the Mel scale:</p>
+        $$m = 2595 \log_{10}\left( 1 + \frac{f}{700} \right)$$
+        <ol>
+          <li>Calculate the exact Mel values for physical frequencies $f_1 = 300 \text{ Hz}, f_2 = 1,000 \text{ Hz}$, and $f_3 = 3,000 \text{ Hz}$. Show that a $3\times$ increase in frequency does <em>not</em> produce a $3\times$ increase in perceived Mel pitch.</li>
+          <li>Consider a triangular Mel filter $H_b(f)$ with center frequency $f_c = 1,000 \text{ Hz}$, left base $f_l = 700 \text{ Hz}$, and right base $f_r = 1,400 \text{ Hz}$. Compute the exact filter weights at $f = 850 \text{ Hz}$, $f = 1,000 \text{ Hz}$, and $f = 1,200 \text{ Hz}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Psychoacoustic &amp; Filterbank Trace</div>
+
+        <p class="step"><strong>Step 1: Hertz to Mel Calculations:</strong>
+        <ul>
+          <li><strong>For $f_1 = 300 \text{ Hz}$ (Low Vowel Formant):</strong>
+          $$m_1 = 2595 \log_{10}\left( 1 + \frac{300}{700} \right) = 2595 \log_{10}(1 + 0.42857) = 2595 \log_{10}(1.42857) = 2595 \times 0.15490 \approx \mathbf{401.97 \text{ Mels}}$$</li>
+          <li><strong>For $f_2 = 1,000 \text{ Hz}$ (Mid Speech Frequency):</strong>
+          $$m_2 = 2595 \log_{10}\left( 1 + \frac{1000}{700} \right) = 2595 \log_{10}(1 + 1.42857) = 2595 \log_{10}(2.42857) = 2595 \times 0.38535 \approx \mathbf{999.98 \approx 1000 \text{ Mels}}$$
+          <em>(Notice that $1,000 \text{ Hz}$ was historically calibrated to equal approximately $1,000 \text{ Mels}$!)</em></li>
+          <li><strong>For $f_3 = 3,000 \text{ Hz}$ (High Fricative Consonant):</strong>
+          $$m_3 = 2595 \log_{10}\left( 1 + \frac{3000}{700} \right) = 2595 \log_{10}(1 + 4.28571) = 2595 \log_{10}(5.28571) = 2595 \times 0.72310 \approx \mathbf{1876.45 \text{ Mels}}$$</li>
+        </ul>
+        Comparing $f_2 = 1,000 \text{ Hz}$ to $f_3 = 3,000 \text{ Hz}$:
+        $$\frac{f_3}{f_2} = \frac{3000}{1000} = 3.0\times, \quad \text{whereas } \frac{m_3}{m_2} = \frac{1876.45}{1000} \approx 1.88\times$$
+        A $300\%$ increase in physical frequency produces only an $88\%$ increase in perceived Mel pitch, confirming logarithmic compression.</p>
+
+        <p class="step"><strong>Step 2: Triangular Filterbank Weight Evaluation:</strong>
+        A triangular filter $H_b(f)$ centered at $f_c$ with left boundary $f_l$ and right boundary $f_r$ is defined as:
+        $$H_b(f) = \begin{cases} 0 & f < f_l \\ \frac{f - f_l}{f_c - f_l} & f_l \le f \le f_c \\ \frac{f_r - f}{f_r - f_c} & f_c \le f \le f_r \\ 0 & f > f_r \end{cases}$$
+        Given $f_l = 700 \text{ Hz}, f_c = 1,000 \text{ Hz}, f_r = 1,400 \text{ Hz}$:
+        <ul>
+          <li><strong>At $f = 850 \text{ Hz}$ (Rising Edge):</strong>
+          $$H(850) = \frac{850 - 700}{1000 - 700} = \frac{150}{300} = \mathbf{0.5000}$$</li>
+          <li><strong>At $f = 1,000 \text{ Hz}$ (Peak):</strong>
+          $$H(1000) = \frac{1000 - 700}{1000 - 700} = \mathbf{1.0000}$$</li>
+          <li><strong>At $f = 1,200 \text{ Hz}$ (Falling Edge):</strong>
+          $$H(1200) = \frac{1400 - 1200}{1400 - 1000} = \frac{200}{400} = \mathbf{0.5000}$$</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.6.4: TIER 2 APPLIED ENGINEERING -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.6.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Whisper Autoregressive Multitask Token Sequence Trace):</strong> A 30-second audio clip contains a speaker uttering: <em>"Artificial Intelligence"</em>. The utterance begins at $t = 1.20 \text{ seconds}$ and ends at $t = 3.60 \text{ seconds}$. The remainder of the 30-second window is silence.</p>
+        <p>Whisper discretizes time into 1,500 timestamp tokens spanning $0.00 \text{ s}$ to $30.00 \text{ s}$ with a step size of $\Delta t = 0.02 \text{ seconds}$ ($20 \text{ ms}$ per timestamp token):</p>
+        $$\text{Token ID for time } t: \quad \text{<|} \tau \text{|>} = \text{<|} 0.02 \times k \text{|>}$$
+        <ol>
+          <li>Identify the exact start timestamp token $\text{<|} t_{\text{start}} \text{|>}$ for $t = 1.20 \text{ s}$ and end timestamp token $\text{<|} t_{\text{end}} \text{|>}$ for $t = 3.60 \text{ s}$.</li>
+          <li>Construct the complete autoregressive target token sequence emitted by Whisper's decoder for English transcription with word-level timestamps.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Autoregressive Sequence Construction</div>
+
+        <p class="step"><strong>Step 1: Timestamp Token Discretization:</strong>
+        Since timestamp tokens are spaced at $\Delta t = 0.02 \text{ seconds}$:
+        <ul>
+          <li>For $t_{\text{start}} = 1.20 \text{ s}$:
+          $$k_{\text{start}} = \frac{1.20}{0.02} = 60 \implies \mathbf{\text{<|} 1.20 \text{|>}}$$</li>
+          <li>For $t_{\text{end}} = 3.60 \text{ s}$:
+          $$k_{\text{end}} = \frac{3.60}{0.02} = 180 \implies \mathbf{\text{<|} 3.60 \text{|>}}$$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2: Complete Prefix and Decoded Token Sequence:</strong>
+        The full autoregressive token emission sequence is:
+        <ol>
+          <li><code>&lt;|startoftranscript|&gt;</code> (Special token ID 50258: triggers decoder start)</li>
+          <li><code>&lt;|en|&gt;</code> (Language identification token: English)</li>
+          <li><code>&lt;|transcribe|&gt;</code> (Task token: speech-to-text transcription)</li>
+          <li><code>&lt;|1.20|&gt;</code> (Start timestamp token for speech onset)</li>
+          <li><code>Artificial</code> (BPE token ID for "Artificial")</li>
+          <li><code> Intelligence</code> (BPE token ID for " Intelligence")</li>
+          <li><code>&lt;|3.60|&gt;</code> (End timestamp token for speech offset)</li>
+          <li><code>&lt;|endoftranscript|&gt;</code> (Special token ID 50257: terminates generation)</li>
+        </ol>
+        Total emitted sequence:
+        <code>[&lt;|startoftranscript|&gt;, &lt;|en|&gt;, &lt;|transcribe|&gt;, &lt;|1.20|&gt;, Artificial,  Intelligence, &lt;|3.60|&gt;, &lt;|endoftranscript|&gt;]</code>
+        Whisper interleaves acoustic timestamp tokens directly into the natural language vocabulary, allowing standard cross-entropy training to solve speech recognition and temporal alignment in a single unified autoregressive pass.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.6.5: TIER 3 MATHEMATICAL PROOF -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.6.5</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google Brain</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Mathematical Proof of the Gabor-Heisenberg Time-Frequency Uncertainty Principle):</strong> In audio signal processing, the Short-Time Fourier Transform (STFT) relies on a window function $w(t) \in L^2(\mathbb{R})$ normalized such that $\|w\|_2 = 1$.</p>
+        <ol>
+          <li>Define the temporal variance $\sigma_t^2 = \int_{-\infty}^\infty (t - \mu_t)^2 |w(t)|^2 dt$ and frequency variance $\sigma_\omega^2 = \frac{1}{2\pi} \int_{-\infty}^\infty (\omega - \mu_\omega)^2 |\hat{w}(\omega)|^2 d\omega$.</li>
+          <li>Prove from first principles using the Cauchy-Schwarz inequality that the product of temporal and frequency resolutions satisfies the fundamental lower bound:
+          $$\sigma_t \cdot \sigma_\omega \ge \frac{1}{2}$$</li>
+          <li>Explain why a small STFT window ($N = 128$) provides sharp temporal resolution but poor pitch discrimination, while a large window ($N = 2048$) blurs rapid phonetic transitions.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete First-Principles Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Centering the Coordinate System:</strong>
+        Without loss of generality, shift time and frequency coordinates such that $\mu_t = 0$ and $\mu_\omega = 0$.
+        Then:
+        $$\sigma_t^2 = \int_{-\infty}^\infty t^2 |w(t)|^2 dt, \quad \sigma_\omega^2 = \frac{1}{2\pi} \int_{-\infty}^\infty \omega^2 |\hat{w}(\omega)|^2 d\omega$$
+        By Plancherel's theorem and the derivative property of Fourier transforms $\mathcal{F}\{w'(t)\} = j\omega \hat{w}(\omega)$:
+        $$\sigma_\omega^2 = \int_{-\infty}^\infty |w'(t)|^2 dt$$</p>
+
+        <p class="step"><strong>Step 2: Apply the Cauchy-Schwarz Inequality:</strong>
+        Consider the integral product $\sigma_t^2 \cdot \sigma_\omega^2$:
+        $$\sigma_t^2 \sigma_\omega^2 = \left( \int_{-\infty}^\infty |t w(t)|^2 dt \right) \left( \int_{-\infty}^\infty |w'(t)|^2 dt \right)$$
+        Applying the Cauchy-Schwarz inequality $\left(\int |f|^2\right) \left(\int |g|^2\right) \ge \left| \int f^* g \right|^2$ with $f(t) = t w(t)$ and $g(t) = w'(t)$:
+        $$\sigma_t^2 \sigma_\omega^2 \ge \left| \int_{-\infty}^\infty t w(t) w'(t) dt \right|^2$$
+        Note that $w(t) w'(t) = \frac{1}{2} \frac{d}{dt} (w(t)^2)$.
+        Integrating by parts with $u = t$ and $dv = \frac{1}{2} \frac{d}{dt} (w(t)^2) dt$:
+        $$\int_{-\infty}^\infty t \cdot \frac{1}{2} \frac{d}{dt}(w(t)^2) dt = \left[ \frac{1}{2} t w(t)^2 \right]_{-\infty}^\infty - \frac{1}{2} \int_{-\infty}^\infty w(t)^2 dt$$
+        Assuming $w(t)$ decays faster than $1/\sqrt{|t|}$ at infinity, the boundary term vanishes.
+        Since $\|w\|_2^2 = \int_{-\infty}^\infty w(t)^2 dt = 1$:
+        $$\int_{-\infty}^\infty t w(t) w'(t) dt = 0 - \frac{1}{2}(1) = -\frac{1}{2}$$
+        Substituting back:
+        $$\sigma_t^2 \sigma_\omega^2 \ge \left| -\frac{1}{2} \right|^2 = \frac{1}{4}$$
+        Taking the square root on both sides:
+        $$\sigma_t \cdot \sigma_\omega \ge \mathbf{\frac{1}{2}} \quad \blacksquare$$</p>
+
+        <p class="step"><strong>Step 3: Physical Trade-Off in Audio Engineering:</strong>
+        The uncertainty principle proves that it is mathematically impossible to achieve simultaneously infinite time resolution and frequency resolution.
+        <ul>
+          <li><strong>Small Window ($N = 128 \implies 8 \text{ ms}$):</strong> $\sigma_t$ is very small, allowing the network to pinpoint the exact millisecond a transient consonant burst occurs (e.g. the 'p' or 't' stop sound). However, $\sigma_\omega \ge \frac{1}{2\sigma_t}$ is very large ($\Delta f = 125 \text{ Hz}$), merging closely spaced pitch harmonics into an indistinguishable blur.</li>
+          <li><strong>Large Window ($N = 2048 \implies 128 \text{ ms}$):</strong> $\Delta f \approx 7.8 \text{ Hz}$, resolving individual vocal cord fundamental pitch frequencies effortlessly. However, $\sigma_t$ is large, smearing rapid speech phonemes across time.</li>
+        </ul>
+        Whisper's choice of $N = 400$ ($25 \text{ ms}$) represents the optimal sweet spot for human vocal acoustics.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.6.6: TIER 3 MATHEMATICAL PROOF -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.6.6</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-deepmind">DeepMind</span>
+        <span class="company-tag company-cmu">CMU</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (CTC Alignment vs. Cross-Attention Autoregressive Decoding):</strong> Prior to Whisper, state-of-the-art speech recognition used <strong>Connectionist Temporal Classification (CTC; Graves et al., 2006)</strong>:</p>
+        $$\mathcal{L}_{\text{CTC}} = -\ln \sum_{\pi \in \mathcal{B}^{-1}(\mathbf{y})} \prod_{t=1}^T p(\pi_t \mid \mathbf{x})$$
+        <p>where $\mathcal{B}$ is a collapse mapping that merges repeated adjacent tokens and deletes blank tokens $\epsilon$.</p>
+        <ol>
+          <li>Prove that the CTC objective enforces a <strong>conditional independence assumption</strong> across output tokens at different timesteps given the acoustic sequence:
+          $$p(\mathbf{\pi} \mid \mathbf{x}) = \prod_{t=1}^T p(\pi_t \mid \mathbf{x})$$</li>
+          <li>Explain mathematically why this conditional independence assumption prevents CTC models from performing direct speech-to-text <strong>translation</strong> (e.g. German to English) where word order is non-monotonic.</li>
+          <li>Explain how Whisper's autoregressive cross-attention decoder eliminates the conditional independence assumption.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Comparative Speech Architecture Proof</div>
+
+        <p class="step"><strong>Step 1: CTC Conditional Independence Formulation:</strong>
+        By definition, CTC evaluates the probability of an alignment path $\boldsymbol{\pi} = (\pi_1, \dots, \pi_T)$ as the product of independent frame-level softmax outputs from the acoustic encoder:
+        $$p(\boldsymbol{\pi} \mid \mathbf{x}) = \prod_{t=1}^T p(\pi_t \mid \mathbf{x})$$
+        Notice that for any two timesteps $t_1 \ne t_2$:
+        $$p(\pi_{t_2} \mid \pi_{t_1}, \mathbf{x}) = p(\pi_{t_2} \mid \mathbf{x})$$
+        The model assumes that the label emitted at time $t_2$ is statistically independent of the label emitted at time $t_1$, conditioned only on the acoustic feature sequence $\mathbf{x}$. $\quad \blacksquare$</p>
+
+        <p class="step"><strong>Step 2: Why CTC Fails on Translation (Non-Monotonic Alignments):</strong>
+        The collapse operator $\mathcal{B}$ is strictly <strong>monotonic</strong>: it preserves the temporal ordering of emitted phonemes ($t_1 < t_2 \implies \text{order}(\pi_{t_1}) \le \text{order}(\pi_{t_2})$).
+        In translation across languages with different grammatical syntax (e.g. German verb-final clauses vs English subject-verb-object syntax):
+        <ul>
+          <li>German: <em>"Ich habe den Hund <strong>gesehen</strong>."</em> (verb at the end)</li>
+          <li>English: <em>"I have <strong>seen</strong> the dog."</em> (verb in the middle)</li>
+        </ul>
+        To emit <em>"seen"</em> at timestep 3, the model must read acoustic frames from the very end of the German audio clip! CTC cannot jump backward and forward across time because its collapse operator enforces strict left-to-right temporal monotonicity ($t_1 \le t_2$). Therefore, CTC is structurally incapable of non-monotonic translation.</p>
+
+        <p class="step"><strong>Step 3: Whisper's Autoregressive Resolution:</strong>
+        Whisper replaces CTC with a standard causal Transformer decoder. By the probability chain rule:
+        $$p(\mathbf{y} \mid \mathbf{x}) = \prod_{i=1}^U p(y_i \mid y_{<i}, \mathbf{x})$$
+        The probability of token $y_i$ depends explicitly on all previously generated text tokens $y_{<i}$. Furthermore, the cross-attention mechanism allows the decoder at step $i$ to attend to <strong>any arbitrary temporal frame</strong> in the $1,500$ encoder representations $\mathbf{H}_{\text{enc}}$ via $\operatorname{Softmax}(\mathbf{Q}_{\text{dec}} \mathbf{K}_{\text{enc}}^T / \sqrt{d_k})\mathbf{V}_{\text{enc}}$. The decoder can attend to the end of a German sentence to emit the English verb, and then attend back to the middle of the sentence to emit the noun phrase, naturally handling arbitrary non-monotonic syntactic reordering!</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.6.7: TIER 4 CONCEPTUAL TRAP MCQ -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.6.7</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-amazon">Amazon Alexa</span>
+        <span class="company-tag company-google">Google Assistant</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Spectral Leakage &amp; Window Selection Trap):</strong> Why do audio engineers universally apply a tapered window function (such as a Hann or Hamming window) to audio frames prior to computing the Fast Fourier Transform (FFT), rather than using a simple rectangular window (slicing raw samples directly)?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> A rectangular window causes the audio signal to invert its phase, producing 180-degree cancellation.</li>
+          <li><strong>(B)</strong> Truncating a continuous waveform with a sharp rectangular window creates artificial discontinuities at the frame boundaries. In the frequency domain, multiplying by a rectangular pulse in time convolves the true spectrum with a sinc function ($\operatorname{sinc}(f)$) whose high sidelobes decay slowly as $\mathcal{O}(1/f)$, causing massive <strong>Spectral Leakage</strong> where energy from strong formants bleeds into adjacent frequency bins. A Hann window smoothly attenuates boundaries to exact zero ($w[0] = w[N] = 0$), forcing sidelobes to decay rapidly as $\mathcal{O}(1/f^3)$.</li>
+          <li><strong>(C)</strong> The FFT algorithm in CUDA only accepts cosine-weighted floats and crashes on rectangular inputs.</li>
+          <li><strong>(D)</strong> Rectangular windows increase the sampling rate by $2\times$, violating the Nyquist theorem.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: (B)</div>
+
+        <p class="step"><strong>Exhaustive Signal Processing Analysis:</strong>
+        <ul>
+          <li><strong>(B) is CORRECT:</strong> In the time domain, extracting a finite frame of length $N$ is equivalent to multiplying the infinite signal $x(t)$ by a window function $w(t)$: $y(t) = x(t) \cdot w(t)$. By the Fourier Convolution Theorem:
+          $$Y(f) = X(f) * W(f)$$
+          If $w(t)$ is a rectangular window ($w(t) = 1$ for $t \in [0, T]$), its Fourier transform is $W(f) = T \operatorname{sinc}(\pi f T)$.
+          The sidelobes of the sinc function are extremely high (the first sidelobe is only $-13 \text{ dB}$ down from the main lobe) and decay very slowly at rate $\frac{1}{f}$. When convolved with a pure single-frequency sinusoid (e.g. $1,000 \text{ Hz}$), energy "leaks" across hundreds of neighboring frequency bins, masking quiet consonants. The <strong>Hann window</strong> ($w[n] = 0.5 - 0.5 \cos(\frac{2\pi n}{N})$) tapers smoothly to zero at both edges, eliminating boundary step discontinuities. Its sidelobes decay at rate $\frac{1}{f^3}$ (with a peak sidelobe level of $-31 \text{ dB}$), suppressing spectral leakage by over $50\times$ and revealing subtle acoustic harmonics.</li>
+          <li><strong>(A) is INCORRECT:</strong> Rectangular windowing does not invert phase; it causes spectral broadening.</li>
+          <li><strong>(C) is INCORRECT:</strong> FFT algorithms execute on raw arrays regardless of windowing.</li>
+          <li><strong>(D) is INCORRECT:</strong> Windowing modifies sample amplitudes; it does not change the discrete sampling rate $f_s$.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.6.8: TIER 4 CONCEPTUAL TRAP MCQ -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.6.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-whisper">Whisper Systems</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (The Whisper Silent Interval Hallucination Loop Pathology):</strong> In production deployments of Whisper, when processing audio containing extended periods of ambient background noise or silence, the autoregressive decoder frequently falls into a catastrophic <strong>Hallucination Loop</strong> (e.g., repeatedly generating <em>"Thank you for watching! Thank you for watching! Thank you for watching!..."</em> until hitting the max token limit). Which of the following mechanisms correctly identifies the architectural cause and the official production remedy?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> Audio encoders divide by zero during silence; the remedy is adding white noise to the microphone stream.</li>
+          <li><strong>(B)</strong> <strong>Acoustic Ungrounded Autoregressive Feedback:</strong> When acoustic features contain only low-energy background static, the cross-attention signals provide near-zero conditioning. The autoregressive decoder falls back entirely on its internal language model prior. Because YouTube outro phrases (like <em>"Thanks for watching"</em>) appear millions of times in the weakly supervised web training data, the language prior generates them with high probability. Once the phrase is emitted, self-attention conditions on its own generated tokens, creating an infinite repetitive loop. The official Whisper remedy is a multi-tier fallback: (1) if the <code>gzip</code> compression ratio of the text exceeds $2.4$ (detecting repetition) or the average log probability $\bar{\ell} < -1.0$, or the <code>no_speech_prob</code> exceeds $0.6$, discard the output and fallback to temperature sampling or suppress generation.</li>
+          <li><strong>(C)</strong> Whisper models have 8-bit quantization overflows on silence; the remedy is using FP64 inference.</li>
+          <li><strong>(D)</strong> The positional embeddings in the decoder wrap around every 30 seconds; the remedy is resetting the decoder hidden state every 5 seconds.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: (B)</div>
+
+        <p class="step"><strong>Exhaustive ASR Systems Analysis:</strong>
+        <ul>
+          <li><strong>(B) is CORRECT:</strong> During silence or muffled background music, the acoustic encoder outputs near-uniform representations. In the cross-attention blocks ($\mathbf{Q}_{\text{dec}} \mathbf{K}_{\text{enc}}^T$), the attention weights spread uniformly across all 1,500 frames without focusing on any acoustic peak. With no acoustic grounding, the decoder behaves like an unconditioned autoregressive language model, sampling from its training prior $p(y_t \mid y_{<t})$. Because Whisper was trained on 680,000 hours of internet video containing massive volumes of YouTube creator outros, subtitle credits, and boilerplate phrases, the decoder predicts these common sequences. Once a phrase like *"Please subscribe"* is emitted, autoregressive causal self-attention attends to its own prior tokens, driving the probability of repeating the exact same phrase to near $1.0$!
+          OpenAI's official Whisper production decoding algorithm implements a <strong>Resilient Heuristic Fallback Pipeline</strong>:
+          <ol>
+            <li><strong>Repetition Detection via Gzip:</strong> Compress the emitted text using zlib/gzip. Repetitive loops compress down to tiny sizes (compression ratio $> 2.4$).</li>
+            <li><strong>Average Log-Probability Threshold:</strong> If $\frac{1}{U} \sum \ln p(y_i) < -1.0$, confidence is low.</li>
+            <li><strong>No-Speech Probability:</strong> If $p(\text{<|nospeech|>}) > 0.6$ and log-prob is low, silence is declared and text is erased.</li>
+            <li><strong>Temperature Fallback:</strong> Re-run beam search with elevated temperatures $T \in [0.2, 0.4, 0.6, 0.8, 1.0]$ to break deterministic repetitive loops.</li>
+          </ol></li>
+          <li><strong>(A) is INCORRECT:</strong> The STFT applies a smoothing constant $\epsilon = 10^{-5}$ in $\ln(\text{Mel} + \epsilon)$, completely preventing division by zero.</li>
+          <li><strong>(C) is INCORRECT:</strong> Hallucination loops occur identically in full FP32 precision.</li>
+          <li><strong>(D) is INCORRECT:</strong> Positional embeddings support full max token sequences ($448$ text tokens); they do not reset every 30 seconds.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: PRODUCTION CODE LAB -->
+    <h3>5. Production Code Lab 4.6: Audio Spectrogram &amp; Acoustic Encoder in PyTorch</h3>
     <p>Below is a clean PyTorch module implementing 1D convolutional downsampling and cross-attention acoustic encoding matching Whisper's front-end specifications.</p>
 
     <div class="code-lab">

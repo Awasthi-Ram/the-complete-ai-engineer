@@ -1,16 +1,25 @@
 <!-- ======================================================================
-     CHAPTER 5.5 — PARAMETER-EFFICIENT FINE-TUNING: LORA & QLORA
+     CHAPTER 5.5 — PARAMETER-EFFICIENT FINE-TUNING: LORA, QLORA & DORA
      ====================================================================== -->
 <div class="chapter" id="chapter-5-5">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 5.5</span>
-    <h2 class="chapter-title">Parameter-Efficient Fine-Tuning: LoRA, QLoRA &amp; Unsloth</h2>
-    <span class="chapter-subtitle">The Intrinsic Rank Hypothesis, Low-Rank Adaptation, NF4 Quantization &amp; Triton Kernels</span>
+    <h2 class="chapter-title">Parameter-Efficient Fine-Tuning: LoRA, QLoRA &amp; DoRA</h2>
+    <span class="chapter-subtitle">The Intrinsic Rank Hypothesis, Low-Rank Adaptation, NF4 Quantization, DoRA, SFT Workflow &amp; GGUF Export</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
     <p>"Give me a lever long enough and a fulcrum on which to place it, and I shall move the world."</p>
+
+    <!-- FIGURE 5.5.1: lora_architecture_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="lora_architecture_diagram.png" alt="Figure 5.5.1: lora_architecture_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 5.5.1:</em> Parameter-Efficient Fine-Tuning with LoRA and QLoRA. The large pre-trained base weight $\mathbf{W}_0$ is frozen (quantized to 4-bit NormalFloat in QLoRA). Only low-rank matrices $\mathbf{A}$ and $\mathbf{B}$ are trained, reducing trainable parameters and optimizer memory by over 99.8%.
+      </p>
+    </div>
+
     <p class="attribution">— Archimedes</p>
   </div>
 
@@ -19,138 +28,598 @@
 
     <!-- SECTION 1: THE MEMORY WALL OF FULL FINE-TUNING -->
     <h3>1. The Physical Memory Wall of Full Fine-Tuning</h3>
-    <p>Pre-trained foundation models (LLaMA 3, Mistral) possess vast encyclopedic knowledge, but lack the specialized formatting, terminology, and reasoning protocols needed for domain-specific tasks (e.g. generating HIPAA-compliant medical notes or executable SQL queries).</p>
+    <p>Pre-trained foundation models (LLaMA 3, Mistral, Gemma) possess vast general encyclopedic knowledge, but lack the specialized formatting, deterministic syntax, and domain reasoning protocols required for enterprise deployment (e.g. generating HIPAA-compliant clinical diagnoses or formal SEC XBRL financial statements).</p>
 
     <p>However, <strong>Full Parameter Fine-Tuning</strong> updates every single weight matrix in the network. Let us calculate the actual physical GPU VRAM required to fully fine-tune a 70-Billion parameter model in standard FP16 mixed precision with AdamW:</p>
 
-    <table>
-      <thead>
-        <tr>
-          <th>Memory Component</th>
-          <th>Formula</th>
-          <th>Size for 70B Model</th>
-          <th>Physical Location</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>Model Weights (FP16)</strong></td>
-          <td>$70 \times 10^9 \times 2 \text{ bytes}$</td>
-          <td>$140 \text{ GB}$</td>
-          <td>GPU VRAM</td>
-        </tr>
-        <tr>
-          <td><strong>Gradients (FP16)</strong></td>
-          <td>$70 \times 10^9 \times 2 \text{ bytes}$</td>
-          <td>$140 \text{ GB}$</td>
-          <td>GPU VRAM</td>
-        </tr>
-        <tr>
-          <td><strong>AdamW Optimizer States (FP32)</strong></td>
-          <td>$70 \times 10^9 \times 8 \text{ bytes}$ (1st + 2nd moments)</td>
-          <td><strong>$560 \text{ GB}$</strong></td>
-          <td>GPU VRAM (Massive Bottleneck!)</td>
-        </tr>
-        <tr>
-          <td><strong>Forward Activations &amp; KV Cache</strong></td>
-          <td>Batch size $\times$ Sequence length $\times$ Layers</td>
-          <td>$\approx 100 \text{ GB}$</td>
-          <td>GPU VRAM</td>
-        </tr>
-        <tr>
-          <td><strong>TOTAL VRAM REQUIRED</strong></td>
-          <td>Sum of all components</td>
-          <td><strong>$&gt; 940 \text{ Gigabytes!}$</strong></td>
-          <td>Requires an $8\times \text{H100}$ cluster ($\$300,000+$)</td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="table-container" style="overflow-x: auto; margin: 1.5em 0;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em;">
+        <thead>
+          <tr style="background-color: #1b4965; color: #ffffff;">
+            <th style="padding: 10px; border: 1px solid #ccc;">Memory Component</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Formula</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Size for 70B Model</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Physical Location</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Model Weights (FP16)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$N \times 2 \text{ bytes}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$140 \text{ GB}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">GPU VRAM</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Gradients (FP16)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$N \times 2 \text{ bytes}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$140 \text{ GB}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">GPU VRAM</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>AdamW Optimizer States (FP32)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$N \times 8 \text{ bytes}$ ($1^{\text{st}} + 2^{\text{nd}}$ moments)</td>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>$560 \text{ GB}$</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">GPU VRAM (Massive Bottleneck!)</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Forward Activations &amp; KV Cache</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Batch $\times$ Seq $\times$ Layers $\times$ Hidden</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$\approx 100 \text{ GB}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">GPU VRAM</td>
+          </tr>
+          <tr style="background-color: #e8f4f8; font-weight: bold;">
+            <td style="padding: 10px; border: 1px solid #ccc;">TOTAL VRAM REQUIRED</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Sum of all components</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">&gt; 940 Gigabytes!</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Requires an 8× H100 GPU Cluster ($300,000+)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <!-- SECTION 2: LORA MATHEMATICS -->
     <h3>2. Low-Rank Adaptation (LoRA): Hu et al., 2021</h3>
-    <p>In 2020, Aghajanyan et al. published the <strong>Intrinsic Rank Hypothesis</strong>: although weight matrices in pre-trained models reside in massive dimensions ($d \times k = 4,096 \times 4,096$), the change in weights $\Delta W$ required to adapt the model to a specific downstream task has a <strong>very low intrinsic rank $r \ll \min(d, k)$</strong>!</p>
+    <p>In 2020, Aghajanyan et al. established the <strong>Intrinsic Rank Hypothesis</strong>: although weight matrices in large pre-trained language models reside in massive parameter spaces ($d \times k = 4,096 \times 4,096$), the weight trajectory update $\Delta W$ required to adapt the model to downstream tasks has a <strong>very low intrinsic rank $r \ll \min(d, k)$</strong>.</p>
 
-    <p>Edward Hu et al. (Microsoft) formalized this into <strong>LoRA (Low-Rank Adaptation)</strong>: freeze the pre-trained weight matrix $W_0 \in \mathbb{R}^{d \times k}$, and represent the update $\Delta W$ as the matrix product of two low-rank matrices $B$ and $A$:</p>
+    <p>Edward Hu et al. (Microsoft) formalized this insight into <strong>LoRA (Low-Rank Adaptation)</strong>: freeze the pre-trained weight matrix $W_0 \in \mathbb{R}^{d \times k}$, and parameterize the weight update $\Delta W$ as the low-rank matrix decomposition product of two compact trainable matrices $B$ and $A$:</p>
     $$W = W_0 + \Delta W = W_0 + \frac{\alpha}{r} B A$$
     <p>Where:</p>
     <ul>
-      <li>$W_0 \in \mathbb{R}^{d \times k}$ is frozen (zero gradients computed, zero optimizer states stored).</li>
-      <li>$A \in \mathbb{R}^{r \times k}$ is initialized with random Gaussian noise $\mathcal{N}(0, \sigma^2)$.</li>
+      <li>$W_0 \in \mathbb{R}^{d \times k}$ is completely frozen (no gradients calculated, zero optimizer states stored).</li>
+      <li>$A \in \mathbb{R}^{r \times k}$ is initialized with Gaussian noise $\mathcal{N}(0, \sigma^2)$ or Kaiming uniform initialization.</li>
       <li>$B \in \mathbb{R}^{d \times r}$ is initialized to <strong>exact zero</strong> ($B = 0$).</li>
-      <li>$\frac{\alpha}{r}$ is a constant scaling hyperparameter ($\alpha$ usually set to $2r$ or $r$).</li>
+      <li>$\frac{\alpha}{r}$ is a constant scaling hyperparameter, where $\alpha$ acts as an effective learning rate multiplier.</li>
     </ul>
 
     <div class="key-insight">
-      <p><strong>Why Initialize $B = 0$?</strong><br>
-      At the start of training (step 0):</p>
+      <h4>💡 The Mathematical Elegance of Zero Initialization</h4>
+      <p>At training step $0$, before any gradient step occurs:</p>
       $$\Delta W = \frac{\alpha}{r} B A = \frac{\alpha}{r} (0) A = 0 \implies W = W_0 + 0 = W_0$$
-      <p><em>The model begins training with its exact pre-trained capabilities intact! There is zero disruption to the model's representations at step 0.</em></p>
-      <p><strong>Zero Inference Latency Overhead:</strong> When training completes, the low-rank delta is permanently merged into the base weights: $W_{\text{final}} = W_0 + \frac{\alpha}{r} B A$. During deployment, the model has the exact same architecture, weight shape, and inference latency as the original base model!</p>
+      <p>The model begins training with its exact pre-trained capabilities intact! There is zero perturbation to the model's representations at step 0.</p>
+      <p><strong>Zero Inference Latency Overhead:</strong> Once training completes, the adapter weights are permanently merged into the base matrix: $W_{\text{merged}} = W_0 + \frac{\alpha}{r} B A$. During deployment, the model has the exact same architecture, tensor layout, and inference latency as the base model!</p>
     </div>
 
     <!-- SECTION 3: QLORA -->
     <h3>3. QLoRA: Quantized Low-Rank Adaptation (Dettmers et al., 2023)</h3>
-    <p>While LoRA eliminates gradient and optimizer memory for base weights, the base weights themselves still consume 140 GB in FP16. Tim Dettmers et al. introduced <strong>QLoRA</strong>, enabling a 70B parameter model to be fine-tuned on a <strong>single 48GB GPU</strong> (or a 7B model on a single 16GB GPU):</p>
+    <p>While LoRA eliminates optimizer states for the base model, storing the frozen base weights $W_0$ in FP16 still consumes $140 \text{ GB}$ for a 70B model. Tim Dettmers et al. introduced <strong>QLoRA</strong>, enabling a 70B parameter model to be fine-tuned on a <strong>single 48GB GPU</strong> (or an 8B model on a single 16GB consumer GPU):</p>
 
-    <h4>The Three Pillars of QLoRA</h4>
+    <h4>The Three Core Innovations of QLoRA:</h4>
     <ol>
-      <li><strong>4-bit NormalFloat (NF4):</strong> Pre-trained neural network weights follow a zero-mean Gaussian distribution $\mathcal{N}(0, \sigma^2)$. Standard uniform INT4 quantization spaces bins evenly, wasting precision in the tails. NF4 constructs non-uniform quantile bins such that each bin has an equal number of expected parameters, maximizing information-theoretic entropy and preserving model accuracy.</li>
-      <li><strong>Double Quantization (DQ):</strong> Quantization requires storing scale factors $c_1$. DQ quantizes these scale factors into 8-bit integers with second-stage constants $c_2$, saving 0.37 bits per parameter ($~3 \text{ GB}$ saved on a 65B model).</li>
-      <li><strong>Paged Optimizers:</strong> Uses CUDA Unified Memory to automatically page memory blocks to CPU host RAM during transient activation spikes, preventing fatal CUDA Out-Of-Memory crashes.</li>
+      <li><strong>4-bit NormalFloat (NF4):</strong> Pre-trained neural network weights follow a zero-mean normal distribution $\mathcal{N}(0, \sigma^2)$. Standard uniform INT4 quantization spaces bins linearly, severely degrading precision in the tails. NF4 constructs non-uniform quantile bins such that each bin contains an equal expected number of parameters, maximizing information-theoretic entropy and minimizing mean squared quantization error.</li>
+      <li><strong>Double Quantization (DQ):</strong> Quantization requires storing scale constants $c_1$. DQ quantizes these FP32 scale constants into 8-bit integers with a second-stage scale constant $c_2$, compressing quantization overhead from $0.5$ bits/param down to $0.127$ bits/param (saving $3 \text{ GB}$ of VRAM on a 65B model).</li>
+      <li><strong>Paged Optimizers:</strong> Employs CUDA Unified Memory to automatically page optimizer states to CPU RAM during transient memory spikes, preventing fatal CUDA Out-Of-Memory (OOM) crashes during long sequence training.</li>
     </ol>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — PEFT &amp; Fine-Tuning</h3>
+    <!-- SECTION 4: DORA -->
+    <h3>4. DoRA: Weight-Decomposed Low-Rank Adaptation (Liu et al., 2024)</h3>
+    <p>While LoRA matches full fine-tuning on many tasks, a subtle capability gap persists on complex reasoning benchmarks. Meta and UT Austin researchers investigated the directional dynamics of weight updates and discovered that full fine-tuning alters both the <strong>magnitude</strong> and the <strong>direction</strong> of weight columns independently, whereas LoRA inherently couples magnitude and direction changes ($\Delta m \propto \Delta \theta$).</p>
 
+    <p><strong>DoRA (Weight-Decomposed Low-Rank Adaptation)</strong> decomposes any weight matrix into its column-wise magnitude vector $\mathbf{m} \in \mathbb{R}^{1 \times k}$ and directional matrix $V \in \mathbb{R}^{d \times k}$:</p>
+    $$W = \mathbf{m} \frac{V}{\|V\|_c} = \mathbf{m} \frac{W_0 + \Delta W}{\|W_0 + \Delta W\|_c} = \mathbf{m} \frac{W_0 + \frac{\alpha}{r} B A}{\|W_0 + \frac{\alpha}{r} B A\|_c}$$
+    <p>where $\|\cdot\|_c$ denotes the column-wise Euclidean norm. During training, the magnitude vector $\mathbf{m}$ is trained directly as a learnable vector, while directional updates are parameterized by LoRA adapters $B A$. DoRA completely closes the performance gap with full fine-tuning while maintaining zero extra inference overhead once merged!</p>
+
+    <!-- SECTION 5: SFT WORKFLOW -->
+    <h3>5. Production Supervised Fine-Tuning (SFT) Workflow</h3>
+    <p>Modern instruction tuning relies on structured chat templates. Below is the production Hugging Face PEFT + TRL implementation configuring 4-bit NF4 QLoRA on LLaMA 3:</p>
+
+    <pre><code class="language-python">from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from trl import SFTTrainer, SFTConfig
+import torch
+
+# 1. Configure 4-bit NormalFloat Quantization with Double Quantization
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_use_double_quant=True
+)
+
+# 2. Load Base Model and Tokenizer
+model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer.pad_token = tokenizer.eos_token
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    quantization_config=bnb_config,
+    device_map="auto"
+)
+model = prepare_model_for_kbit_training(model)
+
+# 3. Configure LoRA / DoRA Hyperparameters across ALL Linear Projection Layers
+peft_config = LoraConfig(
+    r=16,
+    lora_alpha=32,
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    lora_dropout=0.05,
+    bias="none",
+    task_type="CAUSAL_LM",
+    use_dora=True  # Activate DoRA for maximum reasoning accuracy!
+)
+
+# 4. SFT Training Configuration
+training_args = SFTConfig(
+    output_dir="./llama3-clinical-lora",
+    num_train_epochs=3,
+    per_device_train_batch_size=4,
+    gradient_accumulation_steps=4,
+    learning_rate=2e-4,
+    lr_scheduler_type="cosine",
+    warmup_ratio=0.03,
+    logging_steps=10,
+    fp16=False,
+    bf16=True,
+    max_seq_length=2048
+)
+
+trainer = SFTTrainer(
+    model=model,
+    train_dataset=dataset,
+    peft_config=peft_config,
+    tokenizer=tokenizer,
+    args=training_args
+)
+trainer.train()</code></pre>
+
+    <!-- SECTION 6: FAANG PRACTICE SUITE -->
+    <h3>FAANG &amp; Research Lab Practice Suite — PEFT, LoRA &amp; QLoRA</h3>
+    <p>Master the memory sizing arithmetic, matrix calculus gradient derivations, information-theoretic proofs, and quantization pitfalls tested in Tier-1 AI interviews.</p>
+
+    <!-- PROBLEM 5.5.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 5.5.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="difficulty difficulty-easy">Tier 1: Direct Formula Drill</span>
         <span class="company-tag company-google">Google</span>
         <span class="company-tag company-meta">Meta</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Consider a single attention projection matrix $W \in \mathbb{R}^{4096 \times 4096}$ in a Transformer layer.</p>
+        <p><strong>Comprehensive GPU VRAM Sizing Drill: Full Fine-Tuning vs. LoRA vs. QLoRA (70B Model):</strong></p>
+        <p>You are sizing the infrastructure to fine-tune a 70-Billion parameter foundation model ($N = 70 \times 10^9$) using the AdamW optimizer with batch size $B = 2$, sequence length $S = 4096$, number of layers $L = 80$, and hidden dimension $d = 8192$.</p>
         <ol>
-          <li>Calculate the number of trainable parameters in full fine-tuning vs. LoRA with rank $r = 16$.</li>
-          <li>Calculate the parameter reduction factor achieved by LoRA.</li>
-          <li>Derive the backpropagation gradient $\frac{\partial \mathcal{L}}{\partial A}$ in terms of incoming gradient $\frac{\partial \mathcal{L}}{\partial Y}$, base input $X$, and adapter matrix $B$.</li>
+          <li>Calculate the exact static memory required (in Gigabytes, $1 \text{ GB} = 10^9 \text{ bytes}$) for:
+            <ul>
+              <li><strong>Full Fine-Tuning (FP16 mixed precision):</strong> Weights (FP16), Gradients (FP16), and AdamW states (FP32 first and second moments).</li>
+              <li><strong>LoRA (FP16 base model):</strong> Base weights (FP16, frozen), Adapter weights with rank $r = 16$ across all attention and MLP projections ($M = 0.5\% \times N$), Adapter gradients (FP16), and Adapter AdamW states (FP32).</li>
+              <li><strong>QLoRA (4-bit NF4 base model):</strong> Base weights in 4-bit NF4 with Double Quantization ($4.125 \text{ bits/param}$), Adapter weights ($0.5\% \times N$), Adapter gradients, and Adapter AdamW states.</li>
+            </ul>
+          </li>
+          <li>Calculate the total static VRAM for each of the three regimes and state the minimum number of 80GB GPUs required to host the static state.</li>
         </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
 
-        <p class="step"><strong>Step 1: Trainable Parameter Count:</strong><br>
-        Under Full Fine-Tuning:
-        $$N_{\text{full}} = 4,096 \times 4,096 = \mathbf{16,777,216 \text{ parameters}}$$
-        Under LoRA with rank $r = 16$:
+        <p class="step"><strong>Step 1: Full Fine-Tuning Static Memory:</strong><br>
+        For $N = 70 \times 10^9$:
         <ul>
-          <li>Matrix $A \in \mathbb{R}^{16 \times 4096}$: $16 \times 4,096 = 65,536$ parameters.</li>
-          <li>Matrix $B \in \mathbb{R}^{4096 \times 16}$: $4,096 \times 16 = 65,536$ parameters.</li>
+          <li><strong>Model Weights (FP16):</strong> $70 \times 10^9 \times 2 \text{ bytes} = 140 \times 10^9 \text{ bytes} = \mathbf{140.0 \text{ GB}}$</li>
+          <li><strong>Gradients (FP16):</strong> $70 \times 10^9 \times 2 \text{ bytes} = \mathbf{140.0 \text{ GB}}$</li>
+          <li><strong>AdamW Optimizer States (FP32):</strong> Storing $1^{\text{st}}$ moment $m_t$ (4 bytes) and $2^{\text{nd}}$ moment $v_t$ (4 bytes):
+          $$\text{AdamW Memory} = 70 \times 10^9 \times 8 \text{ bytes} = \mathbf{560.0 \text{ GB}}$$</li>
         </ul>
-        $$N_{\text{LoRA}} = 65,536 + 65,536 = \mathbf{131,072 \text{ parameters}}$$</p>
+        Total Static Memory (Full Fine-Tuning):
+        $$\text{Total}_{\text{Full}} = 140 + 140 + 560 = \mathbf{840.0 \text{ GB}}$$
+        Requires at least $\lceil 840 / 80 \rceil = \mathbf{11 \times \text{A100/H100 80GB GPUs}}$ (in practice, an $8 \times \text{H100}$ cluster using ZeRO-3 or DeepSpeed offloading)!</p>
 
-        <p class="step"><strong>Step 2: Parameter Reduction Factor:</strong>
-        $$\text{Reduction Factor} = \frac{N_{\text{full}}}{N_{\text{LoRA}}} = \frac{16,777,216}{131,072} = \mathbf{128\times \text{ Reduction}}!$$
-        LoRA reduces the number of trainable parameters for this layer by <strong>$99.22\%$</strong>! Because optimizer states (AdamW) are only maintained for trainable parameters, optimizer memory collapses from $134.2 \text{ MB}$ down to just $1.05 \text{ MB}$!</p>
+        <p class="step"><strong>Step 2: LoRA Static Memory (FP16 Base Model):</strong><br>
+        Trainable adapter parameters: $N_{\text{adapter}} = 0.005 \times 70 \times 10^9 = 350 \times 10^6$ parameters ($350\text{M}$).
+        <ul>
+          <li><strong>Frozen Base Weights (FP16):</strong> $70 \times 10^9 \times 2 \text{ bytes} = \mathbf{140.0 \text{ GB}}$</li>
+          <li><strong>Base Gradients:</strong> $\mathbf{0 \text{ GB}}$ (Frozen!)</li>
+          <li><strong>Base Optimizer States:</strong> $\mathbf{0 \text{ GB}}$ (Frozen!)</li>
+          <li><strong>Adapter Weights (FP16):</strong> $350 \times 10^6 \times 2 \text{ bytes} = 0.7 \times 10^9 \text{ bytes} = \mathbf{0.70 \text{ GB}}$</li>
+          <li><strong>Adapter Gradients (FP16):</strong> $350 \times 10^6 \times 2 \text{ bytes} = \mathbf{0.70 \text{ GB}}$</li>
+          <li><strong>Adapter AdamW States (FP32):</strong> $350 \times 10^6 \times 8 \text{ bytes} = \mathbf{2.80 \text{ GB}}$</li>
+        </ul>
+        Total Static Memory (LoRA):
+        $$\text{Total}_{\text{LoRA}} = 140.0 + 0.70 + 0.70 + 2.80 = \mathbf{144.2 \text{ GB}}$$
+        Fits comfortably across $\mathbf{2 \times \text{80GB GPUs}}$ (or a single 192GB Grace Hopper / MI300X)!</p>
 
-        <p class="step"><strong>Step 3: Analytical Gradient Derivation for Matrix $A$:</strong><br>
-        The forward pass for input $X \in \mathbb{R}^{B \times d}$ is:
-        $$Y = X W^T = X \left( W_0 + \frac{\alpha}{r} B A \right)^T = X W_0^T + \frac{\alpha}{r} X A^T B^T$$
-        Let $G = \frac{\partial \mathcal{L}}{\partial Y} \in \mathbb{R}^{B \times d}$ be the incoming gradient tensor from downstream layers.<br>
-        Using the matrix calculus identity $\frac{\partial \mathcal{L}}{\partial M} = G^T (\dots)$ or applying the chain rule:
-        The contribution of $A$ to output $Y$ is $\Delta Y = \frac{\alpha}{r} X A^T B^T$.<br>
-        Taking the differential with respect to $A$:
-        $$d\mathcal{L} = \text{Tr}\left( G^T d(\Delta Y) \right) = \text{Tr}\left( G^T \left( \frac{\alpha}{r} X (dA)^T B^T \right) \right) = \frac{\alpha}{r} \text{Tr}\left( B^T G^T X (dA)^T \right) = \frac{\alpha}{r} \text{Tr}\left( (X^T G B)^T dA \right)$$
-        Therefore, the gradient with respect to matrix $A$ is:
-        $$\frac{\partial \mathcal{L}}{\partial A} = \frac{\alpha}{r} (G B)^T X = \mathbf{\frac{\alpha}{r} B^T \left( \frac{\partial \mathcal{L}}{\partial Y} \right)^T X}$$
-        Notice that computing this gradient requires only multiplying the incoming gradient by low-rank matrix $B$, requiring minimal compute and memory!</p>
+        <p class="step"><strong>Step 3: QLoRA Static Memory (4-bit NF4 Base Model):</strong><br>
+        Base weights in 4-bit NF4 with Double Quantization consume $4.125 \text{ bits/param} = \frac{4.125}{8} \text{ bytes/param} = 0.515625 \text{ bytes/param}$.
+        <ul>
+          <li><strong>Frozen Base Weights (NF4 + DQ):</strong> $70 \times 10^9 \times 0.515625 \text{ bytes} = \mathbf{36.09 \text{ GB}}$</li>
+          <li><strong>Adapter Weights + Gradients + Optimizer:</strong> $0.70 + 0.70 + 2.80 = \mathbf{4.20 \text{ GB}}$</li>
+        </ul>
+        Total Static Memory (QLoRA):
+        $$\text{Total}_{\text{QLoRA}} = 36.09 + 4.20 = \mathbf{40.29 \text{ GB}}$$
+        $$\mathbf{40.29 \text{ GB}}$$
+        Fits on a <strong>single 48GB GPU</strong> (such as an NVIDIA RTX 6000 Ada or A40)! Fine-tuning a 70B parameter model is democratized from a $300,000 multi-node supercluster down to a single workstation GPU!</p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 5.5: Custom LoRA Layer from First Principles</h3>
-    <p>Below is a production-style PyTorch implementation of a LoRA Linear layer implementing low-rank factorized adaptation, scaling factor $\alpha$, and weight merging.</p>
+    <!-- PROBLEM 5.5.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.5.2</span>
+        <span class="difficulty difficulty-medium">Tier 1: Direct Formula Drill</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Double Quantization (DQ) Bit-Rate &amp; VRAM Savings Arithmetic:</strong></p>
+        <p>In standard block-wise quantization, weights are grouped into blocks of size $B_1 = 64$. For each block, an FP32 scale constant $c_1$ is stored to dequantize the 4-bit weights:</p>
+        $$W^{\text{FP16}} = c_1 \cdot q^{\text{NF4}}$$
+        <p>In QLoRA, <strong>Double Quantization (DQ)</strong> quantizes the FP32 scale constants $c_1$ into 8-bit FP8 values, with a second-stage scale constant $c_2 \in \text{FP32}$ computed across blocks of size $B_2 = 256$.</p>
+        <ol>
+          <li>Calculate the quantization footprint overhead (in bits per parameter) of storing scale constants $c_1$ under standard single-stage FP32 quantization.</li>
+          <li>Calculate the exact footprint overhead (in bits per parameter) under Double Quantization.</li>
+          <li>Compute the exact memory saved (in Gigabytes) by Double Quantization on a 65-Billion parameter base model ($N = 65 \times 10^9$).</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
+
+        <p class="step"><strong>Step 1: Standard Single-Stage Quantization Overhead:</strong><br>
+        Under block size $B_1 = 64$, one 32-bit float scale constant is stored for every 64 parameters:
+        $$\text{Overhead}_{\text{single}} = \frac{32 \text{ bits}}{64 \text{ params}} = \mathbf{0.5000 \text{ bits/param}}$$</p>
+
+        <p class="step"><strong>Step 2: Double Quantization Overhead:</strong><br>
+        Under Double Quantization:
+        <ul>
+          <li>Each first-stage scale constant $c_1$ is quantized to an 8-bit FP8 number: $\frac{8 \text{ bits}}{64 \text{ params}} = 0.1250 \text{ bits/param}$.</li>
+          <li>A second-stage 32-bit float scale constant $c_2$ is stored for every $B_2 = 256$ first-stage scale constants. Since each first-stage constant represents 64 weights, one $c_2$ covers $64 \times 256 = 16,384$ weights:
+          $$\text{Second-Stage Overhead} = \frac{32 \text{ bits}}{64 \times 256 \text{ params}} = \frac{32}{16,384} \approx \mathbf{0.00195 \text{ bits/param}}$$</li>
+        </ul>
+        Total Double Quantization Overhead:
+        $$\text{Overhead}_{\text{DQ}} = \frac{8}{64} + \frac{32}{16,384} = 0.1250 + 0.00195 = \mathbf{0.12695 \text{ bits/param}}$$</p>
+
+        <p class="step"><strong>Step 3: VRAM Savings on 65B Model:</strong><br>
+        Reduction in bits per parameter:
+        $$\Delta \text{Bits} = 0.5000 - 0.12695 = \mathbf{0.37305 \text{ bits/param}}$$
+        Total VRAM saved for $N = 65 \times 10^9$ parameters:
+        $$\text{Saved Bytes} = \frac{65 \times 10^9 \times 0.37305 \text{ bits}}{8 \text{ bits/byte}} = \frac{2.4248 \times 10^{10}}{8} \approx \mathbf{3,031,031,250 \text{ bytes}} \approx \mathbf{3.03 \text{ GB}}$$
+        Saving 3.03 GB of VRAM is the critical difference that allows a 65B/70B model to fit within a single 48GB GPU alongside forward activations!</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.5.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.5.3</span>
+        <span class="difficulty difficulty-medium">Tier 2: Applied Engineering Trace</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>LoRA Forward &amp; Backward Tensor Dimensions &amp; FLOP Trace:</strong></p>
+        <p>Consider a single projection layer in a Transformer: input activation tensor $X \in \mathbb{R}^{B \times S \times d_{\text{in}}}$, base weight matrix $W_0 \in \mathbb{R}^{d_{\text{out}} \times d_{\text{in}}}$, and LoRA adapter matrices $A \in \mathbb{R}^{r \times d_{\text{in}}}$ and $B \in \mathbb{R}^{d_{\text{out}} \times r}$ with scaling factor $s = \frac{\alpha}{r}$.</p>
+        <p>Batch size $B = 4$, sequence length $S = 2048$, $d_{\text{in}} = d_{\text{out}} = 4096$, rank $r = 16$, and $\alpha = 32$.</p>
+        <ol>
+          <li>State the exact mathematical shape of the intermediate adapter activation $H_A = X A^T$ and the adapter output $Y_{\Delta} = s \cdot H_A B^T$.</li>
+          <li>Calculate the exact number of multiply-accumulate FLOPs ($2 \times M \times K \times N$ for $(M \times K) \times (K \times N)$) required for:
+            <ul>
+              <li>The frozen base projection $X W_0^T$.</li>
+              <li>The low-rank adapter path $s \cdot (X A^T) B^T$.</li>
+            </ul>
+          </li>
+          <li>Compute the ratio of adapter FLOPs to base projection FLOPs.</li>
+          <li>Trace the backward pass gradient shapes: $\frac{\partial \mathcal{L}}{\partial A}$ and $\frac{\partial \mathcal{L}}{\partial B}$ given incoming gradient $G = \frac{\partial \mathcal{L}}{\partial Y} \in \mathbb{R}^{B \times S \times d_{\text{out}}}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Algorithmic Trace</div>
+
+        <p class="step"><strong>Step 1: Intermediate Tensor Shapes:</strong><br>
+        Let total token count $T = B \times S = 4 \times 2048 = 8,192$ tokens.
+        Input tensor shape: $X \in \mathbb{R}^{8,192 \times 4,096}$.
+        <ul>
+          <li>Intermediate activation $H_A = X A^T$:
+          $$\mathbb{R}^{8,192 \times 4,096} \times \mathbb{R}^{4,096 \times 16} \implies H_A \in \mathbf{\mathbb{R}^{8,192 \times 16} \text{ (or } B \times S \times r)}$$</li>
+          <li>Adapter output $Y_{\Delta} = s \cdot H_A B^T$:
+          $$\mathbb{R}^{8,192 \times 16} \times \mathbb{R}^{16 \times 4,096} \implies Y_{\Delta} \in \mathbf{\mathbb{R}^{8,192 \times 4,096} \text{ (or } B \times S \times d_{\text{out}})}$$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2: FLOP Arithmetic:</strong><br>
+        Standard matrix multiplication $(M \times K) \times (K \times N)$ requires $2 M K N$ FLOPs.
+        <u>Base Projection $X W_0^T$:</u>
+        $$\text{FLOPs}_{\text{base}} = 2 \times T \times d_{\text{in}} \times d_{\text{out}} = 2 \times 8,192 \times 4,096 \times 4,096 = \mathbf{2.74878 \times 10^{11} \text{ FLOPs (274.88 GFLOPs)}}$$
+
+        <u>Low-Rank Adapter Path:</u>
+        Operation 1 ($X A^T$):
+        $$\text{FLOPs}_A = 2 \times T \times d_{\text{in}} \times r = 2 \times 8,192 \times 4,096 \times 16 = \mathbf{1.0737 \times 10^9 \text{ FLOPs (1.07 GFLOPs)}}$$
+        Operation 2 ($H_A B^T$):
+        $$\text{FLOPs}_B = 2 \times T \times r \times d_{\text{out}} = 2 \times 8,192 \times 16 \times 4,096 = \mathbf{1.0737 \times 10^9 \text{ FLOPs (1.07 GFLOPs)}}$$
+        Total Adapter FLOPs:
+        $$\text{FLOPs}_{\text{LoRA}} = 1.0737 \times 10^9 + 1.0737 \times 10^9 = \mathbf{2.1475 \times 10^9 \text{ FLOPs (2.15 GFLOPs)}}$$</p>
+
+        <p class="step"><strong>Step 3: Ratio Comparison:</strong><br>
+        $$\text{Ratio} = \frac{\text{FLOPs}_{\text{LoRA}}}{\text{FLOPs}_{\text{base}}} = \frac{2.1475 \times 10^9}{2.7488 \times 10^{11}} = \frac{2r}{d} = \frac{2(16)}{4096} = \frac{32}{4096} = \mathbf{0.0078125 \text{ (0.78\%)}}$$
+        The adapter forward pass adds <strong>less than $0.8\%$ additional compute</strong> over the base projection!</p>
+
+        <p class="step"><strong>Step 4: Backward Pass Gradient Shapes:</strong><br>
+        Given $G \in \mathbb{R}^{T \times d_{\text{out}}}$:
+        $$\frac{\partial \mathcal{L}}{\partial B} = s \cdot G^T H_A \implies \mathbb{R}^{4096 \times T} \times \mathbb{R}^{T \times 16} = \mathbf{\mathbb{R}^{4096 \times 16} = \mathbb{R}^{d_{\text{out}} \times r}}$$
+        $$\frac{\partial \mathcal{L}}{\partial A} = s \cdot (G B)^T X \implies \mathbb{R}^{16 \times T} \times \mathbb{R}^{T \times 4096} = \mathbf{\mathbb{R}^{16 \times 4096} = \mathbb{R}^{r \times d_{\text{in}}}}$$
+        Both gradients match the exact parameter shapes of $B$ and $A$.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.5.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.5.4</span>
+        <span class="difficulty difficulty-hard">Tier 2: Applied Engineering Trace</span>
+        <span class="company-tag company-meta">Meta AI</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>DoRA Weight Decomposition Magnitude &amp; Direction Trace:</strong></p>
+        <p>Consider a toy linear layer with $d_{\text{out}} = 2$ and $d_{\text{in}} = 2$. Base weights and current adapter matrices are:</p>
+        $$W_0 = \begin{bmatrix} 3 & 0 \\ 0 & 4 \end{bmatrix}, \quad B = \begin{bmatrix} 1 \\ 0 \end{bmatrix}, \quad A = \begin{bmatrix} 0 & 2 \end{bmatrix}, \quad \text{scaling } s = 1.0$$
+        <p>In DoRA, the effective weight matrix is parameterized as:</p>
+        $$W = \mathbf{m} \odot \frac{V}{\|V\|_c}$$
+        <p>where $V = W_0 + s B A$, $\mathbf{m} \in \mathbb{R}^{1 \times 2}$ is initialized to the column norms of $W_0$, and $\|V\|_c = \left[ \sqrt{V_{1,1}^2 + V_{2,1}^2}, \sqrt{V_{1,2}^2 + V_{2,2}^2} \right]$ is the row vector of column Euclidean norms.</p>
+        <ol>
+          <li>Compute the initial magnitude vector $\mathbf{m}_0 = \|W_0\|_c$.</li>
+          <li>Calculate the directional matrix $V = W_0 + B A$, its column norms $\|V\|_c$, and the normalized directional matrix $\tilde{V} = \frac{V}{\|V\|_c}$.</li>
+          <li>Compute the resulting DoRA effective weight matrix $W$ with $\mathbf{m} = \mathbf{m}_0$. Compare it to standard LoRA's effective weight matrix $W_{\text{LoRA}} = W_0 + B A$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Algorithmic Trace</div>
+
+        <p class="step"><strong>Step 1: Compute Initial Magnitude Vector $\mathbf{m}_0$:</strong><br>
+        For $W_0 = \begin{bmatrix} 3 & 0 \\ 0 & 4 \end{bmatrix}$:
+        Column 1 norm: $\|W_{0,:,1}\| = \sqrt{3^2 + 0^2} = 3$.<br>
+        Column 2 norm: $\|W_{0,:,2}\| = \sqrt{0^2 + 4^2} = 4$.<br>
+        $$\mathbf{m}_0 = \begin{bmatrix} 3 & 4 \end{bmatrix}$$</p>
+
+        <p class="step"><strong>Step 2: Directional Matrix $V$ and Normalized $\tilde{V}$:</strong><br>
+        Compute low-rank delta $B A$:
+        $$B A = \begin{bmatrix} 1 \\ 0 \end{bmatrix} \begin{bmatrix} 0 & 2 \end{bmatrix} = \begin{bmatrix} 0 & 2 \\ 0 & 0 \end{bmatrix}$$
+        Matrix $V$:
+        $$V = W_0 + B A = \begin{bmatrix} 3 & 0 \\ 0 & 4 \end{bmatrix} + \begin{bmatrix} 0 & 2 \\ 0 & 0 \end{bmatrix} = \begin{bmatrix} 3 & 2 \\ 0 & 4 \end{bmatrix}$$
+        Compute column norms $\|V\|_c$:
+        <ul>
+          <li>Column 1: $\sqrt{3^2 + 0^2} = 3$.</li>
+          <li>Column 2: $\sqrt{2^2 + 4^2} = \sqrt{4 + 16} = \sqrt{20} \approx 4.4721$.</li>
+        </ul>
+        $$\|V\|_c = \begin{bmatrix} 3 & \sqrt{20} \end{bmatrix} \approx \begin{bmatrix} 3 & 4.4721 \end{bmatrix}$$
+        Normalized directional matrix $\tilde{V}$:
+        $$\tilde{V} = \begin{bmatrix} \frac{3}{3} & \frac{2}{\sqrt{20}} \\ \frac{0}{3} & \frac{4}{\sqrt{20}} \end{bmatrix} = \begin{bmatrix} 1 & \frac{1}{\sqrt{5}} \\ 0 & \frac{2}{\sqrt{5}} \end{bmatrix} \approx \begin{bmatrix} 1.0 & 0.4472 \\ 0.0 & 0.8944 \end{bmatrix}$$</p>
+
+        <p class="step"><strong>Step 3: Effective Weight Matrix Comparison:</strong><br>
+        Under DoRA (scaling columns of $\tilde{V}$ by $\mathbf{m}_0 = [3, 4]$):
+        $$W_{\text{DoRA}} = \begin{bmatrix} 3(1.0) & 4\left(\frac{1}{\sqrt{5}}\right) \\ 3(0.0) & 4\left(\frac{2}{\sqrt{5}}\right) \end{bmatrix} = \begin{bmatrix} 3 & \frac{4}{\sqrt{5}} \\ 0 & \frac{8}{\sqrt{5}} \end{bmatrix} \approx \mathbf{\begin{bmatrix} 3.0000 & 1.7889 \\ 0.0000 & 3.5777 \end{bmatrix}}$$
+        Under Standard LoRA:
+        $$W_{\text{LoRA}} = W_0 + B A = \begin{bmatrix} 3 & 2 \\ 0 & 4 \end{bmatrix}$$
+        Notice the critical difference: in standard LoRA, adding $B A$ increased the norm of column 2 from $4.0$ to $\sqrt{2^2 + 4^2} = 4.4721$ (an unintended $11.8\%$ increase in magnitude). In DoRA, because $\mathbf{m}$ is decoupled, the column norm remains strictly fixed at $\|W_{:,2}\| = \sqrt{1.7889^2 + 3.5777^2} = \sqrt{3.200 + 12.80} = \sqrt{16.0} = \mathbf{4.0000}$! Direction has rotated without distorting the pre-trained magnitude scale!</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.5.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.5.5</span>
+        <span class="difficulty difficulty-hard">Tier 3: FAANG / Research Lab Proof</span>
+        <span class="company-tag company-google">Google Brain</span>
+        <span class="company-tag company-meta">FAIR</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Mathematical Proof: Matrix Backpropagation Gradients for LoRA:</strong></p>
+        <p>Let the forward mapping of a LoRA-adapted linear layer for an input batch $X \in \mathbb{R}^{B \times d_{\text{in}}}$ be:</p>
+        $$Y = X W^T = X \left( W_0 + \frac{\alpha}{r} B A \right)^T = X W_0^T + \frac{\alpha}{r} X A^T B^T$$
+        <p>where $W_0 \in \mathbb{R}^{d_{\text{out}} \times d_{\text{in}}}$, $B \in \mathbb{R}^{d_{\text{out}} \times r}$, and $A \in \mathbb{R}^{r \times d_{\text{in}}}$. Let $\mathcal{L}(Y)$ be a scalar loss function with incoming upstream gradient matrix $G = \frac{\partial \mathcal{L}}{\partial Y} \in \mathbb{R}^{B \times d_{\text{out}}}$.</p>
+        <ol>
+          <li>Using matrix differential calculus and the trace inner product identity $d\mathcal{L} = \text{Tr}\left( G^T dY \right)$, derive the exact closed-form gradient tensors $\frac{\partial \mathcal{L}}{\partial B}$ and $\frac{\partial \mathcal{L}}{\partial A}$.</li>
+          <li>Derive the backpropagated gradient with respect to the layer input $\frac{\partial \mathcal{L}}{\partial X}$, and show how it propagates into previous Transformer layers.</li>
+          <li>Prove that the computational cost of computing $\frac{\partial \mathcal{L}}{\partial A}$ is strictly independent of the frozen base weight dimension $d_{\text{out}}$ when using optimal associative matrix multiplication order.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Mathematical Proof</div>
+
+        <p class="step"><strong>Part 1: Derivation of $\frac{\partial \mathcal{L}}{\partial B}$ and $\frac{\partial \mathcal{L}}{\partial A}$:</strong><br>
+        The differential of the output $Y$ is:
+        $$dY = d\left( X W_0^T + \frac{\alpha}{r} X A^T B^T \right) = \frac{\alpha}{r} X (dA)^T B^T + \frac{\alpha}{r} X A^T (dB)^T$$
+        The differential of the scalar loss is given by the trace inner product:
+        $$d\mathcal{L} = \text{Tr}\left( G^T dY \right) = \frac{\alpha}{r} \text{Tr}\left( G^T X (dA)^T B^T \right) + \frac{\alpha}{r} \text{Tr}\left( G^T X A^T (dB)^T \right)$$
+
+        <u>1. Gradient with respect to $B$:</u><br>
+        Focusing on the term containing $dB$:
+        $$d\mathcal{L}_B = \frac{\alpha}{r} \text{Tr}\left( G^T X A^T (dB)^T \right)$$
+        Using the trace cyclic permutation identity $\text{Tr}(M^T) = \text{Tr}(M)$:
+        $$\text{Tr}\left( G^T X A^T (dB)^T \right) = \text{Tr}\left( dB (G^T X A^T)^T \right) = \text{Tr}\left( (A X^T G) dB^T \right) = \text{Tr}\left( (G^T X A^T)^T dB \right)$$
+        Since $\text{Tr}\left( M^T dB \right) \implies \frac{\partial \mathcal{L}}{\partial B} = M$:
+        $$d\mathcal{L}_B = \text{Tr}\left( \left( \frac{\alpha}{r} G^T X A^T \right) (dB)^T \right) \implies \mathbf{\frac{\partial \mathcal{L}}{\partial B} = \frac{\alpha}{r} G^T (X A^T)}$$
+        Dimension check: $G^T \in \mathbb{R}^{d_{\text{out}} \times B}$, $X A^T \in \mathbb{R}^{B \times r} \implies \frac{\partial \mathcal{L}}{\partial B} \in \mathbb{R}^{d_{\text{out}} \times r}$. (✓ Matches $B$).
+
+        <br><br><u>2. Gradient with respect to $A$:</u><br>
+        Focusing on the term containing $dA$:
+        $$d\mathcal{L}_A = \frac{\alpha}{r} \text{Tr}\left( G^T X (dA)^T B^T \right) = \frac{\alpha}{r} \text{Tr}\left( B^T G^T X (dA)^T \right) = \frac{\alpha}{r} \text{Tr}\left( (X^T G B)^T dA \right)$$
+        Therefore:
+        $$\mathbf{\frac{\partial \mathcal{L}}{\partial A} = \frac{\alpha}{r} (G B)^T X = \frac{\alpha}{r} B^T G^T X}$$
+        Dimension check: $B^T G^T \in \mathbb{R}^{r \times B}$, $X \in \mathbb{R}^{B \times d_{\text{in}}} \implies \frac{\partial \mathcal{L}}{\partial A} \in \mathbb{R}^{r \times d_{\text{in}}}$. (✓ Matches $A$). $\blacksquare$</p>
+
+        <p class="step"><strong>Part 2: Input Activation Gradient $\frac{\partial \mathcal{L}}{\partial X}$:</strong><br>
+        Taking the differential with respect to $X$:
+        $$dY_X = dX W_0^T + \frac{\alpha}{r} dX A^T B^T = dX \left( W_0^T + \frac{\alpha}{r} A^T B^T \right)$$
+        $$d\mathcal{L}_X = \text{Tr}\left( G^T dX \left( W_0^T + \frac{\alpha}{r} A^T B^T \right) \right) = \text{Tr}\left( \left( W_0^T + \frac{\alpha}{r} A^T B^T \right) G^T dX \right)$$
+        Transposing inside the trace:
+        $$\frac{\partial \mathcal{L}}{\partial X} = G \left( W_0 + \frac{\alpha}{r} B A \right) = \mathbf{G W_0 + \frac{\alpha}{r} (G B) A}$$
+        This gradient is passed backward to preceding Transformer layers. Notice that while $W_0$ requires no gradients $\frac{\partial \mathcal{L}}{\partial W_0}$, it is still multiplied by $G$ to backpropagate to earlier layers. $\blacksquare$</p>
+
+        <p class="step"><strong>Part 3: Optimal Multiplication Ordering:</strong><br>
+        To evaluate $\frac{\partial \mathcal{L}}{\partial A} = \frac{\alpha}{r} B^T G^T X$:
+        <ol>
+          <li>Parenthesize as $(B^T G^T) X$: First multiply $B^T (r \times d_{\text{out}})$ by $G^T (d_{\text{out}} \times B)$, requiring $O(r \cdot d_{\text{out}} \cdot B)$ FLOPs, yielding an intermediate matrix $U \in \mathbb{R}^{r \times B}$. Then multiply $U (r \times B)$ by $X (B \times d_{\text{in}})$, requiring $O(r \cdot B \cdot d_{\text{in}})$ FLOPs. Total FLOPs: $O(r B (d_{\text{out}} + d_{\text{in}}))$.</li>
+          <li>In contrast, parenthesizing as $B^T (G^T X)$ would require computing $G^T X \in \mathbb{R}^{d_{\text{out}} \times d_{\text{in}}}$, costing $O(B \cdot d_{\text{out}} \cdot d_{\text{in}})$ FLOPs and materializing a massive $4096 \times 4096$ intermediate matrix!</li>
+        </ol>
+        By factoring through the rank-$r$ bottleneck first, peak memory and compute are strictly minimal. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.5.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.5.6</span>
+        <span class="difficulty difficulty-hard">Tier 3: FAANG / Research Lab Proof</span>
+        <span class="company-tag company-stanford">Stanford</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Mathematical Proof: Information-Theoretic Optimality of NormalFloat (NF4) Quantization:</strong></p>
+        <p>Let $w \sim \mathcal{N}(0, \sigma^2)$ be a neural network weight distributed according to a continuous Gaussian distribution with cumulative distribution function (CDF) $\Phi(x) = \frac{1}{\sqrt{2\pi}\sigma} \int_{-\infty}^x e^{-\frac{t^2}{2\sigma^2}} dt$. A $k$-bit quantizer maps the real line into $2^k$ discrete quantization bins $\{q_0, q_1, \dots, q_{2^k - 1}\}$.</p>
+        <ol>
+          <li>Prove that the discrete Shannon entropy $H(Q) = -\sum_{i=0}^{2^k - 1} p_i \log_2 p_i$ of the quantized values is strictly maximized if and only if all bins have equal probability mass:
+          $$p_i = \mathbb{P}(w \in \text{Bin}_i) = \frac{1}{2^k} \quad \forall i$$</li>
+          <li>Derive the exact mathematical formula for the quantile boundary points $b_i$ of the NormalFloat data type in terms of the inverse standard normal CDF $\Phi^{-1}(p)$.</li>
+          <li>Explain why standard uniform integer quantization (INT4) yields non-uniform probabilities $p_i$ on Gaussian weights, and prove that its discrete entropy satisfies $H(Q_{\text{INT4}}) &lt; k$.</li>
+          <li>Explain why NF4 explicitly enforces an exact representation of $0.0$, and describe the asymmetric construction used by Dettmers et al. to achieve this.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Information-Theoretic Proof</div>
+
+        <p class="step"><strong>Part 1: Entropy Maximization Proof:</strong><br>
+        We seek to maximize the Shannon entropy function:
+        $$H(p_0, p_1, \dots, p_{2^k - 1}) = -\sum_{i=0}^{2^k - 1} p_i \log_2 p_i$$
+        subject to the probability simplex constraint $g(\mathbf{p}) = \sum_{i=0}^{2^k - 1} p_i - 1 = 0$, where $p_i \ge 0$.<br>
+        Setting up the Lagrangian:
+        $$\mathcal{L}(\mathbf{p}, \lambda) = -\sum_{i=0}^{2^k - 1} p_i \log_2 p_i - \lambda \left( \sum_{i=0}^{2^k - 1} p_i - 1 \right)$$
+        Taking the partial derivative with respect to $p_i$:
+        $$\frac{\partial \mathcal{L}}{\partial p_i} = -\frac{1}{\ln 2} (\ln p_i + 1) - \lambda = 0 \implies \ln p_i = -\lambda \ln 2 - 1 \implies p_i = e^{-\lambda \ln 2 - 1} = \text{constant}$$
+        Since $p_i$ is identical for all $i$ and $\sum_{i=0}^{2^k - 1} p_i = 1$:
+        $$p_i = \frac{1}{2^k} \quad \forall i \in \{0, 1, \dots, 2^k - 1\}$$
+        The maximum entropy achieved is:
+        $$H_{\max} = -\sum_{i=0}^{2^k - 1} \frac{1}{2^k} \log_2 \left(\frac{1}{2^k}\right) = -2^k \left( \frac{1}{2^k} (-k) \right) = \mathbf{k \text{ bits}}$$
+        For $k = 4$, $H_{\max} = 4.0 \text{ bits}$. Every bit of the 4-bit storage is utilized with $100\%$ theoretical efficiency! $\blacksquare$</p>
+
+        <p class="step"><strong>Part 2: NF4 Quantile Boundaries Derivation:</strong><br>
+        To guarantee equal probability mass $p_i = \frac{1}{2^k}$, the boundary points $b_i$ must partition the Gaussian CDF into equal probability intervals:
+        $$\mathbb{P}(w \le b_i) = \Phi(b_i) = \frac{i}{2^k} \implies \mathbf{b_i = \Phi^{-1}\left( \frac{i}{2^k} \right)}$$
+        for $i \in \{1, 2, \dots, 2^k - 1\}$, with $b_0 = -\infty$ and $b_{2^k} = +\infty$.
+        The representative quantization centroid $q_i$ for bin $i$ is the conditional expectation or median:
+        $$q_i = 2^k \int_{b_i}^{b_{i+1}} x \frac{1}{\sqrt{2\pi}} e^{-\frac{x^2}{2}} dx = \frac{2^k}{\sqrt{2\pi}} \left[ -e^{-\frac{x^2}{2}} \right]_{b_i}^{b_{i+1}} = \frac{2^k}{\sqrt{2\pi}} \left( e^{-\frac{b_i^2}{2}} - e^{-\frac{b_{i+1}^2}{2}} \right) \quad \blacksquare$$</p>
+
+        <p class="step"><strong>Part 3: Inefficiency of Uniform INT4:</strong><br>
+        Uniform INT4 divides the interval $[-w_{\max}, w_{\max}]$ into $2^k = 16$ equally spaced intervals of width $\Delta = \frac{2 w_{\max}}{16}$.
+        For a Gaussian distribution:
+        <ul>
+          <li>Central bins around $0$ contain high probability density: $p_{\text{center}} = \int_{-\Delta/2}^{\Delta/2} \frac{1}{\sqrt{2\pi}\sigma} e^{-\frac{x^2}{2\sigma^2}} dx \gg \frac{1}{16}$.</li>
+          <li>Tail bins near $\pm w_{\max}$ contain virtually zero probability: $p_{\text{tail}} \ll \frac{1}{16}$.</li>
+        </ul>
+        Because the probabilities $p_i$ deviate significantly from uniformity ($p_i \ne \frac{1}{16}$), by the strict concavity of the Shannon entropy function:
+        $$H(Q_{\text{INT4}}) &lt; H_{\max} = 4.0 \text{ bits}$$
+        Empirically, uniform INT4 on neural weights achieves only $H \approx 2.7 \text{ to } 3.1 \text{ bits}$ of effective entropy! Over $25\%$ of the information capacity is wasted on empty tail states. NF4 restores full $4.0$-bit utilization. $\blacksquare$</p>
+
+        <p class="step"><strong>Part 4: Exact Zero Representation in NF4:</strong><br>
+        In neural networks, zero-padding, ReLU activations, and sparsity require an exact representation of $0.0$ with zero rounding error.
+        If we create a symmetric 16-bin quantile quantizer, the quantile boundaries do not include $0$ as a discrete point (0 lies between two bins, rounding 0 to $\pm \epsilon$).
+        To solve this, Dettmers et al. constructed an <strong>asymmetric quantizer</strong>:
+        <ul>
+          <li>7 bins are allocated for the negative numbers ($2^3 - 1 = 7$ quantiles for $[-1, 0]$).</li>
+          <li>8 bins are allocated for the positive numbers ($2^3 = 8$ quantiles for $[0, 1]$).</li>
+          <li>One bin is pinned exactly to <strong>$0.0$</strong>.</li>
+        </ul>
+        This yields exactly $7 + 1 + 8 = 16$ levels, perfectly fitting in a 4-bit nibble while guaranteeing exact representation of zero. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.5.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.5.7</span>
+        <span class="difficulty difficulty-medium">Tier 4: Conceptual Trap MCQ</span>
+        <span class="company-tag company-amazon">Amazon</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap: The "Attention-Only" LoRA Fallacy vs. All-Linear Projections:</strong></p>
+        <p>In the original 2021 LoRA paper, Hu et al. applied low-rank adapters exclusively to the attention query and value projection matrices ($W_q, W_v$). However, modern LLM fine-tuning harnesses (such as QLoRA and PEFT) inject adapters into <strong>all linear layers</strong> ($W_q, W_k, W_v, W_o, W_{\text{gate}}, W_{\text{up}}, W_{\text{down}}$).</p>
+        <p>An engineer fine-tuning LLaMA 3 8B on a complex domain reasoning task observes that adapting $W_q, W_v$ only achieves an MMLU score of $61.2\%$, while adapting all linear layers achieves $68.4\%$ (matching full fine-tuning).</p>
+        <p>Which of the following statements provides the <strong>most accurate theoretical explanation</strong> for this empirical phenomenon?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> Adapting $W_q, W_v$ only changes the Softmax attention distribution, but cannot adapt the Feed-Forward Network (MLP) blocks, which store the model's factual knowledge and syntactic associative memories.</li>
+          <li><strong>(B)</strong> LoRA on $W_q, W_v$ violates the Intrinsic Rank Hypothesis because attention projection matrices have full mathematical rank.</li>
+          <li><strong>(C)</strong> The learning rate of AdamW is inversely proportional to the number of adapted parameters, so adapting fewer layers results in under-fitting.</li>
+          <li><strong>(D)</strong> Adapting MLP layers prevents FlashAttention-2 from being used during inference.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Distractor Analysis &amp; Architectural Rationale</div>
+
+        <p class="step"><strong>Correct Answer: (A)</strong></p>
+
+        <p class="step"><strong>Exhaustive Distractor Analysis:</strong><br>
+        <ul>
+          <li><strong>Why (A) is Correct:</strong> In modern Transformers (Geva et al., 2021; Dai et al., 2022), attention layers act primarily as <em>information routing circuits</em> (determining which tokens attend to which), while the Feed-Forward Network (MLP: <code>gate_proj, up_proj, down_proj</code>) acts as <strong>key-value associative memories storing factual knowledge and domain vocabulary</strong>. The MLP layers account for roughly $\frac{2}{3}$ of all model parameters ($8 d^2$ per layer in SwiGLU vs $4 d^2$ in attention). Adapting only $W_q, W_v$ restricts adaptation to token routing; injecting adapters into the MLP layers allows the model to modify its associative factual memory, which is essential for specialized domain learning.</li>
+          <li><strong>Why (B) is Incorrect:</strong> Attention matrices do not violate the Intrinsic Rank Hypothesis; in fact, Aghajanyan et al. showed that attention matrices have very low intrinsic rank. The limitation is parameter capacity and functional role, not intrinsic rank invalidity.</li>
+          <li><strong>Why (C) is Incorrect:</strong> AdamW learning rate is an explicit hyperparameter ($2 \times 10^{-4}$), not automatically scaled by the number of parameters. Adapting fewer parameters with the same learning rate does not cause under-fitting due to optimizer mechanics.</li>
+          <li><strong>Why (D) is Incorrect:</strong> FlashAttention-2 operates strictly on the $Q, K, V$ attention kernel. LoRA adapters on MLP layers have zero connection to FlashAttention. Furthermore, once merged ($W = W_0 + B A$), FlashAttention runs with standard zero-overhead execution regardless of which layers were adapted.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.5.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.5.8</span>
+        <span class="difficulty difficulty-hard">Tier 4: Conceptual Trap MCQ</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap: The 4-bit Quantized Weight Merging Fallacy:</strong></p>
+        <p>An engineer fine-tunes an 8B model using QLoRA. The base model weights $W_0$ reside in 4-bit NormalFloat (NF4), while the trained LoRA adapter weights $B \in \mathbb{R}^{d \times r}$ and $A \in \mathbb{R}^{r \times k}$ reside in 16-bit BFloat16.</p>
+        <p>The engineer attempts to deploy the model for zero-latency inference by executing:</p>
+        <pre><code># INCORRECT CODE ATTEMPT
+W_merged = W_0_nf4 + (B @ A) * (alpha / r)</code></pre>
+        <p>Which of the following describes the <strong>exact failure mode and correct production workflow</strong> for merging QLoRA adapters?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> The operation succeeds without issue because PyTorch automatically upcasts NF4 to FP32 during matrix addition.</li>
+          <li><strong>(B)</strong> NF4 is a compressed storage representation, not a linear mathematical field. Adding FP16 values directly to NF4 indices produces corrupt values; the base model MUST first be dequantized to FP16/BF16, added to the adapter delta, and then exported. Directly requantizing the merged weights back to 4-bit causes cumulative round-off quantization error.</li>
+          <li><strong>(C)</strong> LoRA adapters cannot be merged into base weights under any circumstances because $B$ and $A$ have different matrix ranks than $W_0$.</li>
+          <li><strong>(D)</strong> The adapter delta $\frac{\alpha}{r} B A$ must be quantized into NF4 first using the base model's scale factors before performing modular addition.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Distractor Analysis &amp; Architectural Rationale</div>
+
+        <p class="step"><strong>Correct Answer: (B)</strong></p>
+
+        <p class="step"><strong>Exhaustive Distractor Analysis:</strong><br>
+        <ul>
+          <li><strong>Why (B) is Correct:</strong> In QLoRA, base weights in NF4 are stored as packed 4-bit integers (nibbles) representing quantile bin indices $\{0, 1, \dots, 15\}$, multiplied by block scales $c_1$. They do not possess a standard floating-point arithmetic ALU. To merge:
+          <ol>
+            <li>Load the base model in unquantized 16-bit format (BF16/FP16).</li>
+            <li>Add the FP16 low-rank product: $W_{\text{merged}} = W_0^{\text{FP16}} + \frac{\alpha}{r} B A$.</li>
+            <li>Save the merged model in FP16 or convert to GGUF format via `llama.cpp` for calibrated edge inference.</li>
+          </ol>
+          If one attempts to directly add the adapter to dequantized weights and immediately re-quantize them back to NF4 without calibration, the cumulative double-quantization error degrades perplexity significantly.</li>
+          <li><strong>Why (A) is Incorrect:</strong> PyTorch does not natively support addition between packed 4-bit integer buffers and BFloat16 tensors. It throws a runtime `TypeError` or silently produces corrupted garbage tensors.</li>
+          <li><strong>Why (C) is Incorrect:</strong> LoRA adapters can always be merged mathematically! The product $B A$ has shape $(d \times r) \times (r \times k) = (d \times k)$, which matches the shape of $W_0$ identically. Rank does not prevent addition; only matrix dimension matters.</li>
+          <li><strong>Why (D) is Incorrect:</strong> Quantizing $\Delta W$ to NF4 before addition destroys the continuous gradient updates accumulated during fine-tuning. The delta is continuous and small; quantizing it to 16 discrete levels wipes out subtle fine-grained adaptations.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- SECTION 7: CODE LAB -->
+    <h3>6. Production Code Lab 5.5: Custom LoRA Layer &amp; Weight Merging from First Principles</h3>
+    <p>Below is an enterprise-grade PyTorch implementation of a LoRA Linear layer featuring frozen base weights, rank-$r$ parameterization, scaling factor $\alpha$, forward execution, and zero-latency weight merging.</p>
 
     <div class="code-lab">
       <div class="code-lab-header">Code Lab 5.5 — Custom LoRA Linear Layer in PyTorch</div>
@@ -160,7 +629,7 @@ import torch.nn as nn
 import math
 
 class LoRALinear(nn.Module):
-    def __init__(self, in_features, out_features, r=16, lora_alpha=32.0):
+    def __init__(self, in_features: int, out_features: int, r: int = 16, lora_alpha: float = 32.0):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -170,25 +639,23 @@ class LoRALinear(nn.Module):
         # 1. Base Pre-Trained Weights (Frozen)
         self.weight = nn.Parameter(torch.empty(out_features, in_features))
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-        self.weight.requires_grad = False # Freeze base weights!
+        self.weight.requires_grad = False  # Freeze base weights!
 
         # 2. LoRA Low-Rank Trainable Adapters
         self.lora_A = nn.Parameter(torch.zeros(r, in_features))
         self.lora_B = nn.Parameter(torch.zeros(out_features, r))
-        
-        # Initialize A with Gaussian noise, B with exact zeros
+
+        # Initialize A with Kaiming uniform noise, B with exact zeros
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B)
 
         self.merged = False
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.merged:
             return nn.functional.linear(x, self.weight)
-        
-        # Base forward pass
+
         base_out = nn.functional.linear(x, self.weight)
-        # Low-rank forward pass: (x @ A^T) @ B^T * scaling
         lora_out = (x @ self.lora_A.T @ self.lora_B.T) * self.scaling
         return base_out + lora_out
 
@@ -203,11 +670,26 @@ if __name__ == "__main__":
     layer = LoRALinear(4096, 4096, r=16, lora_alpha=32.0)
     trainable_params = sum(p.numel() for p in layer.parameters() if p.requires_grad)
     frozen_params = sum(p.numel() for p in layer.parameters() if not p.requires_grad)
-    print(f"Frozen Base Params   : {frozen_params:,}")
-    print(f"Trainable LoRA Params: {trainable_params:,} ({(trainable_params/frozen_params)*100:.2f}% of base)")</code></pre>
+    print(f"[LoRA Verification] Frozen Base Params   : {frozen_params:,}")
+    print(f"[LoRA Verification] Trainable LoRA Params: {trainable_params:,} ({(trainable_params/frozen_params)*100:.2f}% of base)")
+    assert trainable_params == 131072
+    print("[SUCCESS] LoRA Parameter Scaling Verified.")
+
+    # Test Forward Pass
+    x = torch.randn(2, 128, 4096)
+    out = layer(x)
+    assert out.shape == (2, 128, 4096)
+    print("[SUCCESS] Forward Pass Shape Verified.")
+
+    # Test Weight Merging
+    layer.merge_weights()
+    out_merged = layer(x)
+    diff = torch.max(torch.abs(out - out_merged)).item()
+    print(f"[SUCCESS] Merged Weight Output Discrepancy: {diff:.8f}")
+    assert diff < 1e-5</code></pre>
     </div>
 
-    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <!-- SECTION 8: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 5.5 Dedicated Project &amp; Case Study</span>

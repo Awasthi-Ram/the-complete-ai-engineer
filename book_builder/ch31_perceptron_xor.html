@@ -11,6 +11,15 @@
 
   <div class="epigraph">
     <p>"The perceptron may eventually be able to learn, make decisions, and translate languages."</p>
+
+    <!-- FIGURE 3.1.1: xor_linear_separability_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="xor_linear_separability_diagram.png" alt="Figure 3.1.1: xor_linear_separability_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 3.1.1:</em> The XOR linear separability barrier and hidden layer manifold folding. In the original 2D input space, no single linear decision boundary can separate XOR classes. A single hidden layer with non-linear activation warps the coordinate geometry, making the representations linearly separable.
+      </p>
+    </div>
+
     <p class="attribution">— Frank Rosenblatt, The New York Times (1958)</p>
   </div>
 
@@ -19,92 +28,443 @@
 
     <!-- SECTION 1: BIOLOGICAL TO ARTIFICIAL -->
     <h3>1. Biological Foundations to Artificial Modeling</h3>
-    <p>In 1943, neurophysiologist Warren McCulloch and logician Walter Pitts proposed the first computational model of a biological neuron. A biological neuron consists of three anatomical structures:</p>
+    <p>In 1943, neurophysiologist Warren McCulloch and logician Walter Pitts formulated the first computational model of a biological neuron. In neurobiology, information flows through three primary anatomical structures:</p>
     <ul>
-      <li><strong>Dendrites:</strong> Branching filaments that receive chemical neurotransmitter signals from adjacent neurons.</li>
-      <li><strong>Soma (Cell Body):</strong> Accumulates electric potential across the cell membrane.</li>
-      <li><strong>Axon:</strong> If accumulated voltage exceeds an electrical firing threshold (approximately $-55 \text{ mV}$), the cell depolarizes, firing an all-or-none electrical impulse (<em>Action Potential</em>) down the axon to synaptic junctions.</li>
+      <li><strong>Dendrites:</strong> Dense branching arborizations that receive incoming chemical neurotransmitters from presynaptic axon terminals across synaptic clefts.</li>
+      <li><strong>Soma (Cell Body):</strong> Accumulates post-synaptic electrical potentials across the lipid bilayer membrane.</li>
+      <li><strong>Axon &amp; Axon Hillock:</strong> If the integrated electrical membrane potential exceeds an all-or-none firing threshold (approximately $-55 \text{ mV}$ from a resting potential of $-70 \text{ mV}$), voltage-gated sodium channels open rapidly, generating an electrical pulse (<em>Action Potential</em>) that propagates down the myelin-sheathed axon.</li>
     </ul>
 
-    <p>In 1958, Frank Rosenblatt (Cornell Aeronautical Laboratory) expanded this threshold logic into the <strong>Perceptron</strong>, introducing the first algorithmic learning rule capable of automatically learning weights from empirical data:</p>
+    <p>In 1958, Frank Rosenblatt (Cornell Aeronautical Laboratory) expanded McCulloch-Pitts threshold units into the <strong>Perceptron</strong>, introducing the first mathematical learning rule capable of automatically adjusting synaptic weights from empirical sensory data:</p>
     $$z = \mathbf{w}^T \mathbf{x} + b = \sum_{i=1}^d w_i x_i + b$$
-    $$\hat{y} = f(z) = \begin{cases} +1 & \text{if } z \ge 0 \\ -1 & \text{if } z < 0 \end{cases}$$
+    $$\hat{y} = \operatorname{sgn}(z) = \begin{cases} +1, & \text{if } z \ge 0 \\ -1, & \text{if } z < 0 \end{cases}$$
+    <p>Geometrically, the equation $\mathbf{w}^T \mathbf{x} + b = 0$ defines a $(d-1)$-dimensional linear decision hyperplane dividing $\mathbb{R}^d$ into two open halfspaces. The weight vector $\mathbf{w}$ is orthogonal to the hyperplane, pointing toward the positive halfspace.</p>
 
-    <h4>The Perceptron Learning Rule</h4>
-    <p>Given a training sample $(\mathbf{x}_i, y_i)$ with label $y_i \in \{-1, +1\}$ and learning rate $\eta \in (0, 1]$:</p>
-    $$\mathbf{w}^{(t+1)} = \mathbf{w}^{(t)} + \eta (y_i - \hat{y}_i) \mathbf{x}_i$$
-    $$b^{(t+1)} = b^{(t)} + \eta (y_i - \hat{y}_i)$$
-    <ul>
-      <li>If the prediction is correct ($\hat{y}_i = y_i$), the error is zero: $(y_i - \hat{y}_i) = 0$, and no weight update occurs.</li>
-      <li>If $y_i = +1$ but $\hat{y}_i = -1$, the update adds $\mathbf{x}_i$ to the weight vector, rotating the decision hyperplane toward the positive sample.</li>
-      <li>If $y_i = -1$ but $\hat{y}_i = +1$, the update subtracts $\mathbf{x}_i$, rotating the hyperplane away from the negative sample.</li>
-    </ul>
+    <h4>The Perceptron Learning Algorithm</h4>
+    <p>Given a training set $\mathcal{D} = \{(\mathbf{x}_i, y_i)\}_{i=1}^N$ with labels $y_i \in \{-1, +1\}$ and learning rate $\eta \in (0, 1]$:</p>
+    <ol>
+      <li>Initialize weight vector $\mathbf{w}^{(0)} = \mathbf{0}$ and bias $b^{(0)} = 0$.</li>
+      <li>For each training example $(\mathbf{x}_i, y_i)$: compute prediction $\hat{y}_i = \operatorname{sgn}(\mathbf{w}^T \mathbf{x}_i + b)$.</li>
+      <li>If $\hat{y}_i \neq y_i$ (a misclassification occurs), update parameters according to Rosenblatt's rule:
+      $$\mathbf{w}^{(t+1)} = \mathbf{w}^{(t)} + \eta y_i \mathbf{x}_i$$
+      $$b^{(t+1)} = b^{(t)} + \eta y_i$$</li>
+    </ol>
+    <p><em>Geometric Mechanics:</em> If a positive sample ($y_i = +1$) was incorrectly predicted as negative ($\mathbf{w}^T \mathbf{x}_i \le 0$), adding $\mathbf{x}_i$ rotates $\mathbf{w}$ toward $\mathbf{x}_i$, increasing the inner product $\mathbf{w}^T \mathbf{x}_i$. If a negative sample was predicted as positive, subtracting $\mathbf{x}_i$ rotates $\mathbf{w}$ away from $\mathbf{x}_i$.</p>
 
     <!-- SECTION 2: NOVIKOFF'S THEOREM -->
     <h3>2. Novikoff's Perceptron Convergence Theorem (1962)</h3>
-    <p>Does the perceptron learning rule always converge? Albert Novikoff proved that if the dataset is <strong>linearly separable</strong>, the perceptron is mathematically guaranteed to find a separating hyperplane in a <strong>finite number of steps</strong>!</p>
+    <p>Does the perceptron learning rule always converge, or can it loop indefinitely? Albert Novikoff established that if a dataset is <strong>strictly linearly separable</strong>, the perceptron will terminate after a provably finite number of mistake updates.</p>
 
     <div class="real-world-box">
       <h4>🏆 Novikoff's Mistake Bound Theorem</h4>
-      <p>Let $\mathcal{D} = \{(\mathbf{x}_i, y_i)\}_{i=1}^N$ be a dataset with $\|\mathbf{x}_i\|_2 \le R$ for all $i$. Suppose there exists an optimal unit weight vector $\mathbf{w}^*$ ($\|\mathbf{w}^*\|_2 = 1$) and a positive geometric margin $\gamma &gt; 0$ such that:</p>
-      $$y_i (\mathbf{w}^* \cdot \mathbf{x}_i) \ge \gamma, \quad \forall i=1,\dots,N$$
-      <p>Starting from initial weights $\mathbf{w}^{(0)} = \mathbf{0}$, the total number of mistake updates $k$ made by the perceptron is strictly bounded by:</p>
+      <p>Let $\mathcal{D} = \{(\mathbf{x}_i, y_i)\}_{i=1}^N$ be a dataset where all inputs are bounded within a ball of radius $R$: $\|\mathbf{x}_i\|_2 \le R$ for all $i$. Suppose there exists an optimal unit weight vector $\mathbf{w}^*$ ($\|\mathbf{w}^*\|_2 = 1$) that separates the data with geometric margin $\gamma &gt; 0$:</p>
+      $$y_i (\mathbf{w}^* \cdot \mathbf{x}_i) \ge \gamma, \quad \forall i \in \{1, \dots, N\}$$
+      <p>Starting from initial weights $\mathbf{w}^{(0)} = \mathbf{0}$, the total number of mistake updates $k$ made by the perceptron learning rule is strictly bounded by:</p>
       $$k \le \left( \frac{R}{\gamma} \right)^2$$
-      <p><em>The Bound Is Independent of Dimension:</em> Notice that the bound depends <em>only</em> on the ratio of data radius $R$ to margin width $\gamma$, completely independent of the input dimensionality $d$!</p>
+      <p><strong>Fundamental Insight:</strong> The bound depends exclusively on the geometric ratio of the data radius $R$ to the separation margin $\gamma$. It is <strong>completely independent of the input dimensionality $d$</strong>! Even in a $1,000,000$-dimensional space, if data has radius $R=10$ and margin $\gamma=1$, the perceptron converges in at most $(10/1)^2 = 100$ mistakes!</p>
     </div>
 
     <!-- SECTION 3: THE MINSKY-PAPERT XOR COLLAPSE -->
-    <h3>3. The Historic AI Winter &amp; The Minsky-Papert XOR Proof (1969)</h3>
-    <p>Following Rosenblatt's invention, public hype surged: newspapers claimed perceptrons would soon walk, talk, and reproduce. In 1969, MIT AI Laboratory founders <strong>Marvin Minsky and Seymour Papert</strong> published their devastating treatise <em>Perceptrons</em>, proving that single-layer perceptrons could not compute simple non-linear logic functions like <strong>Exclusive OR (XOR)</strong>.</p>
+    <h3>3. The 1969 AI Winter &amp; The Minsky-Papert XOR Collapse</h3>
+    <p>Following Rosenblatt's invention, unchecked hype dominated mainstream media. In 1969, MIT AI Laboratory founders <strong>Marvin Minsky and Seymour Papert</strong> published their seminal monograph <em>Perceptrons</em>, delivering a rigorous mathematical critique that brought neural network research to a sudden halt for over a decade.</p>
 
+    <p>Minsky and Papert proved that single-layer perceptrons are fundamentally incapable of computing simple non-linear logic functions, most notably <strong>Exclusive OR (XOR)</strong>. The points $(0, 1)$ and $(1, 0)$ belong to class $1$, while $(0, 0)$ and $(1, 1)$ belong to class $0$. Because their convex hulls intersect, no linear hyperplane can ever separate them.</p>
+
+    <h4>Overcoming the XOR Barrier with Multilayer Architectures</h4>
+    <p>While a single linear threshold unit cannot compute XOR, a <strong>Multilayer Perceptron (MLP)</strong> with a single hidden layer solves XOR effortlessly by decomposing it into elementary logical gates:</p>
+    $$\text{XOR}(x_1, x_2) = (x_1 \lor x_2) \land \neg(x_1 \land x_2) = \text{AND}(\text{OR}(x_1, x_2), \; \text{NAND}(x_1, x_2))$$
+    <p>The hidden layer maps non-linearly separable inputs $\mathbf{x} \in \{0, 1\}^2$ into an intermediate hidden activation space $\mathbf{h} \in \{0, 1\}^2$ where the classes become <strong>linearly separable</strong>! However, because the step activation function $\operatorname{sgn}(z)$ has zero derivative everywhere and is discontinuous at zero, Rosenblatt's learning rule could not be extended to multilayer networks. Finding an algorithm to train multilayer networks had to wait until the rediscovery of <strong>Backpropagation</strong> in 1986 (Chapter 3.3).</p>
+
+    <!-- SECTION 4: 4-TIER PRACTICE SUITE -->
+    <h3>The Perceptron &amp; XOR Practice Suite &amp; Complete Worked Solutions</h3>
+
+    <!-- PROBLEM 3.1.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 3.1.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="difficulty difficulty-easy">Level 1 • Direct Numerical Warm-Up Drill</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are training a single-layer perceptron with initial weight vector $\mathbf{w}^{(0)} = [0.0, 0.0]^T$, initial bias $b^{(0)} = 0.0$, and learning rate $\eta = 1.0$. The classification rule is $\hat{y} = +1$ if $\mathbf{w}^T \mathbf{x} + b \ge 0$, else $-1$. You present the following three 2D training examples in sequence:</p>
+        <ol>
+          <li>$\mathbf{x}_1 = (2, 3)^T$ with label $y_1 = +1$</li>
+          <li>$\mathbf{x}_2 = (1, 1)^T$ with label $y_2 = -1$</li>
+          <li>$\mathbf{x}_3 = (4, 1)^T$ with label $y_3 = +1$</li>
+        </ol>
+        <p>Compute the activation $z$, prediction $\hat{y}$, and parameter updates $(\mathbf{w}, b)$ for each step.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
+
+        <p class="step"><strong>Step 1: Presentation of Sample 1 ($\mathbf{x}_1 = [2, 3]^T, y_1 = +1$):</strong><br>
+        Current parameters: $\mathbf{w}^{(0)} = [0, 0]^T, b^{(0)} = 0$.<br>
+        Compute linear activation:
+        $$z_1 = \mathbf{w}^{(0)} \cdot \mathbf{x}_1 + b^{(0)} = 0(2) + 0(3) + 0 = 0.0$$
+        Prediction rule: since $z_1 = 0 \ge 0 \implies \hat{y}_1 = +1$.<br>
+        Target label is $y_1 = +1$.<br>
+        Since $\hat{y}_1 = y_1$, this is a <strong>correct prediction</strong>. No weight update occurs!
+        $$\mathbf{w}^{(1)} = [0, 0]^T, \quad b^{(1)} = 0.0$$</p>
+
+        <p class="step"><strong>Step 2: Presentation of Sample 2 ($\mathbf{x}_2 = [1, 1]^T, y_2 = -1$):</strong><br>
+        Current parameters: $\mathbf{w}^{(1)} = [0, 0]^T, b^{(1)} = 0$.<br>
+        Compute linear activation:
+        $$z_2 = \mathbf{w}^{(1)} \cdot \mathbf{x}_2 + b^{(1)} = 0(1) + 0(1) + 0 = 0.0$$
+        Prediction rule: $z_2 = 0 \ge 0 \implies \hat{y}_2 = +1$.<br>
+        Target label is $y_2 = -1$.<br>
+        Prediction is <strong>incorrect ($\hat{y}_2 \neq y_2$)</strong>. Apply Rosenblatt update rule:
+        $$\mathbf{w}^{(2)} = \mathbf{w}^{(1)} + \eta y_2 \mathbf{x}_2 = \begin{pmatrix} 0 \\ 0 \end{pmatrix} + 1.0(-1) \begin{pmatrix} 1 \\ 1 \end{pmatrix} = \begin{pmatrix} -1.0 \\ -1.0 \end{pmatrix}$$
+        $$b^{(2)} = b^{(1)} + \eta y_2 = 0 + 1.0(-1) = -1.0$$</p>
+
+        <p class="step"><strong>Step 3: Presentation of Sample 3 ($\mathbf{x}_3 = [4, 1]^T, y_3 = +1$):</strong><br>
+        Current parameters: $\mathbf{w}^{(2)} = [-1.0, -1.0]^T, b^{(2)} = -1.0$.<br>
+        Compute linear activation:
+        $$z_3 = \mathbf{w}^{(2)} \cdot \mathbf{x}_3 + b^{(2)} = (-1.0)(4) + (-1.0)(1) + (-1.0) = -4.0 - 1.0 - 1.0 = -6.0$$
+        Prediction rule: $z_3 = -6.0 &lt; 0 \implies \hat{y}_3 = -1$.<br>
+        Target label is $y_3 = +1$.<br>
+        Prediction is <strong>incorrect ($\hat{y}_3 \neq y_3$)</strong>. Apply update rule:
+        $$\mathbf{w}^{(3)} = \mathbf{w}^{(2)} + \eta y_3 \mathbf{x}_3 = \begin{pmatrix} -1.0 \\ -1.0 \end{pmatrix} + 1.0(+1) \begin{pmatrix} 4 \\ 1 \end{pmatrix} = \begin{pmatrix} +3.0 \\ 0.0 \end{pmatrix}$$
+        $$b^{(3)} = b^{(2)} + \eta y_3 = -1.0 + 1.0(+1) = 0.0$$</p>
+
+        <p class="step"><strong>Final Verification:</strong><br>
+        The learned hyperplane is $3 x_1 + 0 x_2 + 0 = 0 \implies x_1 = 0$.<br>
+        Testing point $\mathbf{x}_2 = [1, 1]$: $3(1) = 3 &gt; 0 \implies \hat{y} = +1$ (still requires another epoch to adjust), illustrating the iterative nature of the algorithm.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.1.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.1.2</span>
+        <span class="difficulty difficulty-easy">Level 1 • Direct Formula Drill</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A 2-dimensional linearly separable classification dataset is bounded within an origin-centered ball of radius $R = 6.0$. A margin analysis demonstrates that the optimal separating hyperplane achieves a geometric margin of $\gamma = 0.40$.</p>
+        <ol>
+          <li>Calculate the theoretical upper bound on the maximum number of mistakes the perceptron will make starting from $\mathbf{w}^{(0)} = \mathbf{0}$.</li>
+          <li>If data preprocessing normalizes all coordinates such that the radius shrinks to $R' = 3.0$ while preserving the relative margin $\frac{\gamma'}{R'} = \frac{\gamma}{R}$, what is the new mistake bound?</li>
+          <li>If feature engineering expands the feature space to $d = 10,000$ dimensions without changing $R$ and $\gamma$, how does the mistake bound change?</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+
+        <p class="step"><strong>Step 1: Compute Baseline Mistake Bound:</strong><br>
+        By Novikoff's theorem:
+        $$k_{\max} \le \left( \frac{R}{\gamma} \right)^2$$
+        Given $R = 6.0$ and $\gamma = 0.40$:
+        $$\frac{R}{\gamma} = \frac{6.0}{0.40} = 15.0$$
+        $$k_{\max} \le 15.0^2 = 225$$
+        The perceptron is guaranteed to converge in at most $225$ mistake updates.</p>
+
+        <p class="step"><strong>Step 2: Effect of Uniform Rescaling:</strong><br>
+        If the data is uniformly scaled by a factor $c = 0.5$ ($R' = 3.0$ and $\gamma' = 0.20$):
+        $$\frac{R'}{\gamma'} = \frac{3.0}{0.20} = 15.0 \implies k_{\max}' \le 15.0^2 = 225$$
+        The bound is <strong>scale-invariant</strong> under uniform coordinate dilation.</p>
+
+        <p class="step"><strong>Step 3: Effect of High Dimensionality ($d = 10,000$):</strong><br>
+        Novikoff's formula $k \le (R/\gamma)^2$ contains <strong>zero dependence on dimension $d$</strong>. As long as $R = 6.0$ and $\gamma = 0.40$, the bound remains strictly $k \le 225$ mistakes, even in an infinite-dimensional reproducing kernel Hilbert space!</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.1.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.1.3</span>
+        <span class="difficulty difficulty-medium">Level 2 • Applied Engineering Trace</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Construct a 2-layer Multilayer Perceptron that computes the Exclusive OR (XOR) function on inputs $x_1, x_2 \in \{0, 1\}$. The network uses two hidden units $h_1, h_2$ and one output unit $y$, all utilizing the Heaviside step activation $\Theta(z) = 1$ if $z \ge 0$, else $0$.</p>
+        <ol>
+          <li>Specify integer weights and biases for $h_1$ such that it computes the logical $\text{OR}(x_1, x_2)$ function.</li>
+          <li>Specify integer weights and biases for $h_2$ such that it computes the logical $\text{NAND}(x_1, x_2)$ function.</li>
+          <li>Specify integer weights and biases for output $y$ such that it computes $\text{AND}(h_1, h_2)$.</li>
+          <li>Trace the intermediate hidden coordinates $(h_1, h_2)$ and final output $y$ for all four input combinations $(0, 0), (0, 1), (1, 0), (1, 1)$, and demonstrate that the hidden layer representations are linearly separable.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Architectural Trace</div>
+
+        <p class="step"><strong>Step 1: Hidden Unit 1 ($\text{OR}$ Gate):</strong><br>
+        We require $h_1 = 1$ if $x_1 + x_2 \ge 1$, and $0$ if $x_1 + x_2 = 0$.<br>
+        Formulation: $h_1 = \Theta(1 \cdot x_1 + 1 \cdot x_2 - 0.5)$ (or using integers: $2 x_1 + 2 x_2 - 1$).<br>
+        Let:
+        $$w_{11} = 1, \quad w_{12} = 1, \quad b_1 = -0.5$$</p>
+
+        <p class="step"><strong>Step 2: Hidden Unit 2 ($\text{NAND}$ Gate):</strong><br>
+        We require $h_2 = 0$ only when $x_1 = 1$ and $x_2 = 1$, and $1$ otherwise.<br>
+        Formulation: $h_2 = \Theta(-1 \cdot x_1 - 1 \cdot x_2 + 1.5)$ (or $-2 x_1 - 2 x_2 + 3$).<br>
+        Let:
+        $$w_{21} = -1, \quad w_{22} = -1, \quad b_2 = +1.5$$</p>
+
+        <p class="step"><strong>Step 3: Output Unit $y$ ($\text{AND}$ Gate):</strong><br>
+        We require $y = 1$ if and only if $h_1 = 1$ and $h_2 = 1$.<br>
+        Formulation: $y = \Theta(1 \cdot h_1 + 1 \cdot h_2 - 1.5)$.<br>
+        Let:
+        $$v_1 = 1, \quad v_2 = 1, \quad c = -1.5$$</p>
+
+        <p class="step"><strong>Step 4: Truth Table &amp; Hidden Space Projection Trace:</strong><br>
+        <table>
+          <thead>
+            <tr><th>Input $(x_1, x_2)$</th><th>$z_{h_1} = x_1+x_2-0.5$</th><th>$h_1$</th><th>$z_{h_2} = -x_1-x_2+1.5$</th><th>$h_2$</th><th>Hidden Vector $(h_1, h_2)$</th><th>$z_y = h_1+h_2-1.5$</th><th>Output $y$</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>$(0, 0)$</td><td>$-0.5$</td><td>$0$</td><td>$+1.5$</td><td>$1$</td><td>$(0, 1)$</td><td>$0+1-1.5 = -0.5$</td><td><strong>0</strong></td></tr>
+            <tr><td>$(0, 1)$</td><td>$+0.5$</td><td>$1$</td><td>$+0.5$</td><td>$1$</td><td>$(1, 1)$</td><td>$1+1-1.5 = +0.5$</td><td><strong>1</strong></td></tr>
+            <tr><td>$(1, 0)$</td><td>$+0.5$</td><td>$1$</td><td>$+0.5$</td><td>$1$</td><td>$(1, 1)$</td><td>$1+1-1.5 = +0.5$</td><td><strong>1</strong></td></tr>
+            <tr><td>$(1, 1)$</td><td>$+1.5$</td><td>$1$</td><td>$-0.5$</td><td>$0$</td><td>$(1, 0)$</td><td>$1+0-1.5 = -0.5$</td><td><strong>0</strong></td></tr>
+          </tbody>
+        </table></p>
+
+        <p class="step"><strong>Linear Separability in Hidden Space:</strong><br>
+        In the original input space $\mathbf{x}$, the two positive points $(0, 1)$ and $(1, 0)$ were crossed by the negative points $(0, 0)$ and $(1, 1)$.<br>
+        In the hidden space $\mathbf{h}$:
+        <ul>
+          <li>Both positive inputs $(0, 1)$ and $(1, 0)$ map to the <strong>single point $(1, 1)$</strong>!</li>
+          <li>Negative input $(0, 0)$ maps to $(0, 1)$.</li>
+          <li>Negative input $(1, 1)$ maps to $(1, 0)$.</li>
+        </ul>
+        In $\mathbf{h}$-space, the line $h_1 + h_2 - 1.5 = 0$ perfectly isolates $(1, 1)$ from $(0, 1)$ and $(1, 0)$. The hidden layer collapsed non-linear geometry into a linearly separable representation.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.1.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.1.4</span>
+        <span class="difficulty difficulty-medium">Level 2 • Algorithmic Tracing</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Consider a 1-dimensional non-linearly separable dataset with $N = 3$ points on a line:
+        $$x_1 = 1.0, \; y_1 = +1; \quad x_2 = 2.0, \; y_2 = -1; \quad x_3 = 3.0, \; y_3 = +1$$
+        Notice that negative sample $x_2$ is sandwiched between positive samples $x_1$ and $x_3$.<br>
+        Starting from $w^{(0)} = 0.0$ and $b^{(0)} = 0.0$ with $\eta = 1.0$, trace the first 6 mistake updates of Rosenblatt's perceptron algorithm when samples are presented cyclically ($x_1 \to x_2 \to x_3 \to x_1 \dots$), and prove that the weights enter an infinite periodic limit cycle.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Convergence Failure Trace</div>
+
+        <p class="step"><strong>Step 1: Iteration Trace (Starting at $w=0, b=0$):</strong><br>
+        Decision rule: $\hat{y} = +1$ if $w x + b \ge 0$, else $-1$.
+        <ul>
+          <li><strong>Step 1 (Sample $x_1 = 1, y_1 = +1$):</strong><br>
+          $z = 0(1) + 0 = 0 \ge 0 \implies \hat{y} = +1$. Correct! No update. $(w, b) = (0, 0)$.</li>
+          <li><strong>Step 2 (Sample $x_2 = 2, y_2 = -1$):</strong><br>
+          $z = 0(2) + 0 = 0 \ge 0 \implies \hat{y} = +1$. Mistake ($y=-1$).<br>
+          $w \leftarrow 0 + 1(-1)(2) = -2.0$, $b \leftarrow 0 + 1(-1) = -1.0$. Current: $(w, b) = (-2, -1)$.</li>
+          <li><strong>Step 3 (Sample $x_3 = 3, y_3 = +1$):</strong><br>
+          $z = (-2)(3) - 1 = -7 &lt; 0 \implies \hat{y} = -1$. Mistake ($y=+1$).<br>
+          $w \leftarrow -2 + 1(+1)(3) = +1.0$, $b \leftarrow -1 + 1(+1) = 0.0$. Current: $(w, b) = (+1, 0)$.</li>
+          <li><strong>Step 4 (Sample $x_1 = 1, y_1 = +1$):</strong><br>
+          $z = (1)(1) + 0 = +1 \ge 0 \implies \hat{y} = +1$. Correct! Current: $(w, b) = (+1, 0)$.</li>
+          <li><strong>Step 5 (Sample $x_2 = 2, y_2 = -1$):</strong><br>
+          $z = (1)(2) + 0 = +2 \ge 0 \implies \hat{y} = +1$. Mistake ($y=-1$).<br>
+          $w \leftarrow 1 + 1(-1)(2) = -1.0$, $b \leftarrow 0 + 1(-1) = -1.0$. Current: $(w, b) = (-1, -1)$.</li>
+          <li><strong>Step 6 (Sample $x_3 = 3, y_3 = +1$):</strong><br>
+          $z = (-1)(3) - 1 = -4 &lt; 0 \implies \hat{y} = -1$. Mistake ($y=+1$).<br>
+          $w \leftarrow -1 + 1(+1)(3) = +2.0$, $b \leftarrow -1 + 1(+1) = 0.0$. Current: $(w, b) = (+2, 0)$.</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2: The Limit Cycle Pattern:</strong><br>
+        Notice the recurring structural alternation:
+        <ul>
+          <li>After seeing $x_3$, the model sets $w &gt; 0, b = 0$. This correctly classifies $x_1$ and $x_3$, but causes a mistake on $x_2$!</li>
+          <li>Updating on $x_2$ subtracts $[2, 1]$, flipping $w &lt; 0, b &lt; 0$. This correctly classifies $x_2$, but immediately causes a mistake on $x_3$!</li>
+        </ul>
+        Because no single line can place points $1$ and $3$ on one side of a point while keeping point $2$ on the other, the perceptron updates endlessly, oscillating between positive and negative slope states without ever terminating.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.1.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.1.5</span>
+        <span class="difficulty difficulty-hard">Level 3 • FAANG / Research Lab Proof</span>
         <span class="company-tag company-google">Google</span>
         <span class="company-tag company-meta">Meta</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Prove mathematically from first principles that a single-layer perceptron $\hat{y} = \text{sign}(w_1 x_1 + w_2 x_2 + b)$ cannot compute the XOR (Exclusive OR) logical function.</p>
+        <p><strong>QUESTION:</strong> Prove Albert Novikoff's Perceptron Convergence Theorem (1962) rigorously from first principles. Assume dataset $\mathcal{D} = \{(\mathbf{x}_i, y_i)\}_{i=1}^N$ has bounded inputs $\|\mathbf{x}_i\|_2 \le R$ and is linearly separable through the origin by a unit vector $\mathbf{w}^*$ ($\|\mathbf{w}^*\|_2 = 1$) with margin $\gamma &gt; 0$ such that $y_i(\mathbf{w}^* \cdot \mathbf{x}_i) \ge \gamma$ for all $i$. Prove that the perceptron makes at most $k \le \left(\frac{R}{\gamma}\right)^2$ updates before convergence.</p>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+        <div class="solution-label">✓ Complete First-Principles Mathematical Proof</div>
 
-        <p class="step"><strong>Step 1: Write the XOR Truth Table:</strong><br>
-        Let inputs be $x_1, x_2 \in \{0, 1\}$, and let the output classification rule be:
-        $$\hat{y} = \begin{cases} 1 & \text{if } w_1 x_1 + w_2 x_2 + b &gt; 0 \\ 0 & \text{if } w_1 x_1 + w_2 x_2 + b \le 0 \end{cases}$$
-        The four XOR truth table conditions require:
-        <ol>
-          <li>Input $(0, 0) \to 0$:
-          $$w_1(0) + w_2(0) + b \le 0 \implies \mathbf{b \le 0}$$</li>
-          <li>Input $(1, 0) \to 1$:
-          $$w_1(1) + w_2(0) + b &gt; 0 \implies \mathbf{w_1 + b &gt; 0}$$</li>
-          <li>Input $(0, 1) \to 1$:
-          $$w_1(0) + w_2(1) + b &gt; 0 \implies \mathbf{w_2 + b &gt; 0}$$</li>
-          <li>Input $(1, 1) \to 0$:
-          $$w_1(1) + w_2(1) + b \le 0 \implies \mathbf{w_1 + w_2 + b \le 0}$$</li>
-        </ol></p>
+        <p class="step"><strong>Step 1: Perceptron Update Rule on Mistakes:</strong><br>
+        Let $\mathbf{w}^{(0)} = \mathbf{0}$. Let the sequence of misclassified examples encountered by the algorithm be denoted by index $t \in \{1, 2, \dots, k\}$.<br>
+        When example $(\mathbf{x}_t, y_t)$ is misclassified, the current prediction satisfies $y_t (\mathbf{w}^{(t-1)} \cdot \mathbf{x}_t) \le 0$.<br>
+        The update rule with $\eta = 1$ is:
+        $$\mathbf{w}^{(t)} = \mathbf{w}^{(t-1)} + y_t \mathbf{x}_t$$</p>
 
-        <p class="step"><strong>Step 2: Derive the Algebraic Contradiction:</strong><br>
-        Add inequalities (2) and (3) together:
-        $$(w_1 + b) + (w_2 + b) &gt; 0 + 0 \implies w_1 + w_2 + 2b &gt; 0$$
-        Rewrite this by splitting $2b$ into $b + b$:
-        $$(w_1 + w_2 + b) + b &gt; 0$$
-        Now inspect inequality (4): $w_1 + w_2 + b \le 0$.<br>
-        And inspect inequality (1): $b \le 0$.<br>
-        Adding these two non-positive quantities:
-        $$(w_1 + w_2 + b) + b \le 0 + 0 \le \mathbf{0}$$
-        We have derived two simultaneous contradictory statements:
-        $$(w_1 + w_2 + b) + b &gt; 0 \quad \text{AND} \quad (w_1 + w_2 + b) + b \le 0$$
-        A real number cannot be simultaneously strictly positive and non-positive! This contradiction proves that no real weights $w_1, w_2, b \in \mathbb{R}$ can ever exist to satisfy the XOR function.</p>
+        <p class="step"><strong>Step 2: Establish a Lower Bound on the Inner Product $\mathbf{w}^{(k)} \cdot \mathbf{w}^*$:</strong><br>
+        Take the inner product of the update equation with the optimal unit vector $\mathbf{w}^*$:
+        $$\mathbf{w}^{(t)} \cdot \mathbf{w}^* = (\mathbf{w}^{(t-1)} + y_t \mathbf{x}_t) \cdot \mathbf{w}^* = (\mathbf{w}^{(t-1)} \cdot \mathbf{w}^*) + y_t (\mathbf{x}_t \cdot \mathbf{w}^*)$$
+        By the definition of geometric margin $\gamma$, $y_t (\mathbf{w}^* \cdot \mathbf{x}_t) \ge \gamma$. Therefore:
+        $$\mathbf{w}^{(t)} \cdot \mathbf{w}^* \ge (\mathbf{w}^{(t-1)} \cdot \mathbf{w}^*) + \gamma$$
+        Summing this telescoping inequality over all $k$ updates, starting from $\mathbf{w}^{(0)} = \mathbf{0}$:
+        $$\mathbf{w}^{(k)} \cdot \mathbf{w}^* \ge k \gamma$$</p>
 
-        <p class="step"><strong>Step 3: Historical Ramifications:</strong><br>
-        Because a single flat hyperplane cannot separate points $(0, 1)$ and $(1, 0)$ from $(0, 0)$ and $(1, 1)$, Minsky and Papert proved that single-layer perceptrons are fundamentally limited to linearly separable patterns. The publication caused US government research agencies (DARPA) to terminate virtually all neural network funding, initiating the <strong>First AI Winter (1969–1980)</strong>!</p>
+        <p class="step"><strong>Step 3: Establish an Upper Bound on the Squared Norm $\|\mathbf{w}^{(k)}\|_2^2$:</strong><br>
+        Compute the squared Euclidean norm of $\mathbf{w}^{(t)}$:
+        $$\|\mathbf{w}^{(t)}\|_2^2 = \|\mathbf{w}^{(t-1)} + y_t \mathbf{x}_t\|_2^2 = \|\mathbf{w}^{(t-1)}\|_2^2 + 2 y_t (\mathbf{w}^{(t-1)} \cdot \mathbf{x}_t) + y_t^2 \|\mathbf{x}_t\|_2^2$$
+        Recall that an update only occurs because $(\mathbf{x}_t, y_t)$ was a mistake, meaning $y_t (\mathbf{w}^{(t-1)} \cdot \mathbf{x}_t) \le 0$.<br>
+        Furthermore, $y_t^2 = (\pm 1)^2 = 1$, and $\|\mathbf{x}_t\|_2 \le R \implies \|\mathbf{x}_t\|_2^2 \le R^2$. Therefore:
+        $$\|\mathbf{w}^{(t)}\|_2^2 \le \|\mathbf{w}^{(t-1)}\|_2^2 + 2(0) + R^2 = \|\mathbf{w}^{(t-1)}\|_2^2 + R^2$$
+        Summing this telescoping inequality over all $k$ updates, starting from $\|\mathbf{w}^{(0)}\|_2^2 = 0$:
+        $$\|\mathbf{w}^{(k)}\|_2^2 \le k R^2$$</p>
+
+        <p class="step"><strong>Step 4: Bridge Lower and Upper Bounds via Cauchy-Schwarz:</strong><br>
+        By the Cauchy-Schwarz inequality, for any two vectors:
+        $$(\mathbf{w}^{(k)} \cdot \mathbf{w}^*)^2 \le \|\mathbf{w}^{(k)}\|_2^2 \|\mathbf{w}^*\|_2^2$$
+        Since $\mathbf{w}^*$ is a unit vector, $\|\mathbf{w}^*\|_2^2 = 1$. Substituting the lower bound from Step 2 and upper bound from Step 3:
+        $$(k \gamma)^2 \le (\mathbf{w}^{(k)} \cdot \mathbf{w}^*)^2 \le \|\mathbf{w}^{(k)}\|_2^2 \le k R^2$$
+        $$k^2 \gamma^2 \le k R^2$$
+        Dividing both sides by $k \gamma^2$ (since $k &gt; 0$ and $\gamma &gt; 0$):
+        $$k \le \frac{R^2}{\gamma^2} = \left( \frac{R}{\gamma} \right)^2$$
+        The total number of mistake updates cannot exceed $(R/\gamma)^2$. Once this maximum count is reached, no further mistakes can occur, proving guaranteed convergence in finite steps. $\blacksquare$</p>
       </div>
     </div>
 
-    <!-- SECTION 4: CODE LAB -->
-    <h3>4. Production Code Lab 3.1: Perceptron Convergence &amp; XOR Failure from Scratch</h3>
+    <!-- PROBLEM 3.1.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.1.6</span>
+        <span class="difficulty difficulty-hard">Level 3 • FAANG / Research Lab Proof</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove the <strong>Convex Hull Intersection Theorem for Linear Separability</strong>: A binary classification dataset $\mathcal{D} = X_+ \cup X_-$ is linearly separable by a hyperplane $\mathbf{w}^T \mathbf{x} + b = 0$ if and only if the convex hulls of the positive and negative points are disjoint:
+        $$\operatorname{Conv}(X_+) \cap \operatorname{Conv}(X_-) = \emptyset$$
+        Using this theorem, prove why the XOR configuration can never be linearly separated.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Geometric Separation Proof</div>
+
+        <p class="step"><strong>Step 1: Forward Direction ($\implies$):</strong><br>
+        Assume $X_+$ and $X_-$ are strictly linearly separated by hyperplane $\mathbf{w}^T \mathbf{x} + b = 0$.<br>
+        Then for all $\mathbf{x}_+ \in X_+$, $\mathbf{w}^T \mathbf{x}_+ + b &gt; 0$, and for all $\mathbf{x}_- \in X_-$, $\mathbf{w}^T \mathbf{x}_- + b &lt; 0$.<br>
+        Any point $\mathbf{p} \in \operatorname{Conv}(X_+)$ is a convex combination: $\mathbf{p} = \sum_{i} \alpha_i \mathbf{x}_{+,i}$ where $\alpha_i \ge 0, \sum_i \alpha_i = 1$.<br>
+        Evaluating the linear form:
+        $$\mathbf{w}^T \mathbf{p} + b = \mathbf{w}^T \left( \sum_i \alpha_i \mathbf{x}_{+,i} \right) + b \left( \sum_i \alpha_i \right) = \sum_i \alpha_i (\mathbf{w}^T \mathbf{x}_{+,i} + b)$$
+        Since each term $\mathbf{w}^T \mathbf{x}_{+,i} + b &gt; 0$ and $\sum \alpha_i = 1$, the sum is strictly positive: $\mathbf{w}^T \mathbf{p} + b &gt; 0$.<br>
+        Similarly, for any $\mathbf{q} \in \operatorname{Conv}(X_-)$: $\mathbf{w}^T \mathbf{q} + b &lt; 0$.<br>
+        If there existed an intersection point $\mathbf{z} \in \operatorname{Conv}(X_+) \cap \operatorname{Conv}(X_-)$, it would have to satisfy both $\mathbf{w}^T \mathbf{z} + b &gt; 0$ and $\mathbf{w}^T \mathbf{z} + b &lt; 0$, an impossibility! Thus, $\operatorname{Conv}(X_+) \cap \operatorname{Conv}(X_-) = \emptyset$.</p>
+
+        <p class="step"><strong>Step 2: Backward Direction ($\impliedby$):</strong><br>
+        By the <strong>Hyperplane Separation Theorem</strong> (Separating Axis Theorem for disjoint convex sets), if two sets $C_1 = \operatorname{Conv}(X_+)$ and $C_2 = \operatorname{Conv}(X_-)$ are non-empty, closed, bounded (compact) convex sets and $C_1 \cap C_2 = \emptyset$, there exists a non-zero vector $\mathbf{w}$ and scalar $b$ such that:
+        $$\min_{\mathbf{x} \in C_1} (\mathbf{w}^T \mathbf{x} + b) &gt; 0 &gt; \max_{\mathbf{x} \in C_2} (\mathbf{w}^T \mathbf{x} + b)$$
+        Since $X_+ \subseteq C_1$ and $X_- \subseteq C_2$, the hyperplane $\mathbf{w}^T \mathbf{x} + b = 0$ strictly linearly separates $X_+$ and $X_-$.</p>
+
+        <p class="step"><strong>Step 3: Application to XOR:</strong><br>
+        In the XOR problem:
+        $$X_+ = \{(0, 1), (1, 0)\}, \quad X_- = \{(0, 0), (1, 1)\}$$
+        Let us construct their convex hulls:
+        <ul>
+          <li>$\operatorname{Conv}(X_+)$ is the line segment connecting $(0, 1)$ and $(1, 0)$:
+          $$\mathbf{p}(\alpha) = \alpha \begin{pmatrix} 0 \\ 1 \end{pmatrix} + (1 - \alpha) \begin{pmatrix} 1 \\ 0 \end{pmatrix} = \begin{pmatrix} 1 - \alpha \\ \alpha \end{pmatrix}, \quad \alpha \in [0, 1]$$</li>
+          <li>$\operatorname{Conv}(X_-)$ is the line segment connecting $(0, 0)$ and $(1, 1)$:
+          $$\mathbf{q}(\beta) = \beta \begin{pmatrix} 0 \\ 0 \end{pmatrix} + (1 - \beta) \begin{pmatrix} 1 \\ 1 \end{pmatrix} = \begin{pmatrix} 1 - \beta \\ 1 - \beta \end{pmatrix}, \quad \beta \in [0, 1]$$</li>
+        </ul>
+        Setting $\alpha = 0.5$ and $\beta = 0.5$:
+        $$\mathbf{p}(0.5) = \begin{pmatrix} 0.5 \\ 0.5 \end{pmatrix}, \quad \mathbf{q}(0.5) = \begin{pmatrix} 0.5 \\ 0.5 \end{pmatrix}$$
+        Both line segments intersect at the center point $(0.5, 0.5)$!
+        $$\operatorname{Conv}(X_+) \cap \operatorname{Conv}(X_-) = \{(0.5, 0.5)\} \neq \emptyset$$
+        Because the intersection is non-empty, linear separation is mathematically impossible. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.1.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.1.7</span>
+        <span class="difficulty difficulty-medium">Level 4 • Conceptual Trap MCQ</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An engineer trains a perceptron on a linearly separable dataset with maximum radius $R$ and margin $\gamma$. To accelerate convergence, the engineer sets the learning rate to $\eta = 10,000$. What effect does this massive learning rate have on the total number of mistake updates $k$ before convergence?</p>
+        <ol type="A">
+          <li>It reduces the number of mistakes by a factor of 10,000, causing immediate convergence in 1 step.</li>
+          <li>It causes numerical divergence to infinity because learning rates greater than $1.0$ break the contraction mapping.</li>
+          <li>It has zero effect on the sequence of predictions and the total number of mistake updates; the perceptron makes the exact same number of mistakes as with $\eta = 1.0$.</li>
+          <li>It converts the decision hyperplane from a linear separator into a quadratic polynomial surface.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: C • Comprehensive Invariance Analysis</div>
+
+        <p class="step"><strong>Detailed Analysis:</strong><br>
+        Let $\mathbf{w}^{(t)}$ and $b^{(t)}$ be the parameters obtained when training with learning rate $\eta = 1.0$.<br>
+        When training with learning rate $\eta' = c \cdot \eta$ (where $c &gt; 0$ is a scalar constant), the update rule at step $t$ is:
+        $$\mathbf{w}'^{(t)} = \mathbf{w}'^{(t-1)} + c \eta y_t \mathbf{x}_t$$
+        Starting from $\mathbf{w}^{(0)} = \mathbf{0}$, by induction:
+        $$\mathbf{w}'^{(t)} = c \cdot \mathbf{w}^{(t)}, \quad b'^{(t)} = c \cdot b^{(t)}$$
+        Now, evaluate the prediction on any candidate sample $\mathbf{x}$ using the primed parameters:
+        $$\hat{y}' = \operatorname{sgn}(\mathbf{w}'^T \mathbf{x} + b') = \operatorname{sgn}(c \mathbf{w}^T \mathbf{x} + c b) = \operatorname{sgn}(c (\mathbf{w}^T \mathbf{x} + b))$$
+        Because $c &gt; 0$ is strictly positive, the sign function is completely unaffected:
+        $$\operatorname{sgn}(c \cdot z) = \operatorname{sgn}(z), \quad \forall c &gt; 0$$
+        Therefore, $\hat{y}' \equiv \hat{y}$ for <em>every single sample</em> at <em>every single iteration</em>!<br>
+        The perceptron misclassifies the exact same sequence of examples and terminates after the exact same number of mistakes.<br>
+        <strong>Conclusion: The Perceptron algorithm is mathematically scale-invariant with respect to learning rate $\eta &gt; 0$. Setting $\eta = 1.0$ is completely general.</strong></p>
+
+        <p class="step"><strong>Why Other Options are False:</strong><br>
+        <ul>
+          <li><strong>A is FALSE:</strong> Scaling $\mathbf{w}$ by $10,000$ scales both sides of the inequality; the sign is unchanged, so mistakes cannot decrease.</li>
+          <li><strong>B is FALSE:</strong> Unlike gradient descent with continuous loss functions (where large $\eta$ causes overshooting), the Perceptron update depends only on discrete signs $\pm 1$. The weights grow in magnitude, but the decision boundary orientation is invariant.</li>
+          <li><strong>D is FALSE:</strong> The hypothesis class is parameterized as $\mathbf{w}^T \mathbf{x} + b$, which is strictly linear regardless of the magnitude of $\eta$.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.1.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.1.8</span>
+        <span class="difficulty difficulty-hard">Level 4 • Assertion-Reasoning &amp; Parity Dimension Trap</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Evaluate the following Assertion and Reason regarding Boolean functions in higher dimensions:</p>
+        <p><strong>Assertion (A):</strong> A single-layer perceptron $\hat{y} = \operatorname{sgn}(\mathbf{w}^T \mathbf{x} + b)$ cannot compute the $d$-bit parity function $f(\mathbf{x}) = x_1 \oplus x_2 \oplus \dots \oplus x_d$ for any dimension $d \ge 2$.</p>
+        <p><strong>Reason (R):</strong> The $d$-bit parity function alternates output values on every adjacent vertex of the $d$-dimensional Boolean hypercube $\{0, 1\}^d$, requiring any separating boundary to isolate every adjacent pair of vertices, which cannot be achieved by any single linear hyperplane.</p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct mathematical explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A • Comprehensive Hypercube Proof</div>
+
+        <p class="step"><strong>Detailed Analysis:</strong><br>
+        <strong>Analysis of Reason (R):</strong><br>
+        Consider the Boolean hypercube $\{0, 1\}^d$, which has $2^d$ vertices. Two vertices $\mathbf{u}, \mathbf{v} \in \{0, 1\}^d$ are adjacent (connected by an edge of length $1$) if and only if their Hamming distance is $1$ (they differ in exactly one coordinate bit).<br>
+        The parity function is:
+        $$f(\mathbf{x}) = \left(\sum_{i=1}^d x_i\right) \pmod 2$$
+        If $\mathbf{u}$ and $\mathbf{v}$ are adjacent, the sum $\sum x_i$ changes by exactly $\pm 1$.<br>
+        Therefore, if $\mathbf{u}$ has even parity ($f=0$), $\mathbf{v}$ must have odd parity ($f=1$).<br>
+        Every single edge of the hypercube connects a positive sample to a negative sample!<br>
+        Reason (R) is true.</p>
+
+        <p class="step"><strong>Analysis of Assertion (A):</strong><br>
+        Suppose a single linear hyperplane $\mathbf{w}^T \mathbf{x} + b = 0$ could separate even and odd parity vertices.<br>
+        Then along every one of the $d \cdot 2^{d-1}$ edges of the hypercube, the hyperplane must cross between the two endpoints.<br>
+        For $d = 2$, this reduces directly to the XOR problem (4 vertices, 4 edges forming a cycle), whose convex hulls intersect at $(0.5, 0.5)$.<br>
+        For any $d \ge 2$, the center of mass of the $2^{d-1}$ even vertices is:
+        $$\mathbf{c}_{\text{even}} = \frac{1}{2^{d-1}} \sum_{\mathbf{x} \in X_{\text{even}}} \mathbf{x} = \begin{pmatrix} 0.5 \\ 0.5 \\ \vdots \\ 0.5 \end{pmatrix}$$
+        And the center of mass of the $2^{d-1}$ odd vertices is:
+        $$\mathbf{c}_{\text{odd}} = \frac{1}{2^{d-1}} \sum_{\mathbf{x} \in X_{\text{odd}}} \mathbf{x} = \begin{pmatrix} 0.5 \\ 0.5 \\ \vdots \\ 0.5 \end{pmatrix}$$
+        Both the positive and negative classes have the <strong>exact same centroid</strong> at $(0.5, \dots, 0.5)$!<br>
+        Since their convex hulls intersect at this centroid ($\mathbf{c} \in \operatorname{Conv}(X_+) \cap \operatorname{Conv}(X_-)$), by the Convex Hull Separation Theorem (Problem 3.1.6), linear separation is mathematically impossible.<br>
+        Thus, (A) is true, and (R) is the exact combinatorial explanation. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: CODE LAB -->
+    <h3>5. Production Code Lab 3.1: Perceptron Convergence &amp; XOR Failure from Scratch</h3>
     <p>Below is an educational Python implementation demonstrating Rosenblatt's Perceptron learning rule, verifying Novikoff's mistake bound on linearly separable data, and proving convergence failure on XOR.</p>
 
     <div class="code-lab">
@@ -113,6 +473,9 @@
 <pre><code>import numpy as np
 
 class PerceptronScratch:
+    """
+    Rosenblatt's Perceptron with exact Novikoff convergence tracking.
+    """
     def __init__(self, lr=1.0, max_epochs=100):
         self.lr = lr
         self.max_epochs = max_epochs
@@ -130,7 +493,7 @@ class PerceptronScratch:
         for epoch in range(self.max_epochs):
             converged = True
             for i in range(N):
-                # Prediction: sign(w^T x + b)
+                # Prediction: sgn(w^T x + b)
                 pred = 1 if (np.dot(self.w, X[i]) + self.b) >= 0 else -1
                 if pred != y[i]:
                     # Update rule on mistake
@@ -150,24 +513,25 @@ class PerceptronScratch:
         return np.where((X @ self.w + self.b) >= 0, 1, -1)
 
 if __name__ == "__main__":
-    # 1. Linearly Separable AND Function
+    # 1. Linearly Separable Logical AND
     X_and = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
     y_and = np.array([-1, -1, -1, 1])
 
     print("--- Training on Logical AND ---")
     p_and = PerceptronScratch()
     p_and.fit(X_and, y_and)
+    print(f"Learned AND Hyperplane: {p_and.w[0]:.1f}*x1 + {p_and.w[1]:.1f}*x2 + {p_and.b:.1f} = 0")
 
-    # 2. Non-Linearly Separable XOR Function
+    # 2. Non-Linearly Separable Logical XOR
     X_xor = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
     y_xor = np.array([-1, 1, 1, -1])
 
     print("\n--- Training on Logical XOR ---")
-    p_xor = PerceptronScratch()
+    p_xor = PerceptronScratch(max_epochs=20)
     p_xor.fit(X_xor, y_xor)</code></pre>
     </div>
 
-    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 3.1 Dedicated Project &amp; Case Study</span>

@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="docker_multistage_cuda.png" alt="Figure 6.3.1: docker multistage cuda">
+        <div class="diagram-caption"><strong>Figure 6.3.1:</strong> Multi-stage Docker builds for production AI. Stage 1 compiles C++ extensions and wheels inside a heavy CUDA development image (~18 GB). Stage 2 copies only compiled artifacts and Python virtualenvs into a slim runtime image (~2.1 GB), eliminating 88% of container bloat and hardening security.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 6.3 — CONTAINERIZATION & DETERMINISTIC PACKAGING
      ====================================================================== -->
@@ -5,7 +11,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 6.3</span>
     <h2 class="chapter-title">Containerization &amp; Deterministic Packaging</h2>
-    <span class="chapter-subtitle">Linux Namespaces, The NVIDIA Container Toolkit, Multi-Stage Builds &amp; Rootless Security</span>
+    <span class="chapter-subtitle">Linux Namespaces, The NVIDIA Container Toolkit, Multi-Stage Builds, Kubernetes GPU Scheduling &amp; Rootless Security</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -19,148 +25,817 @@
 
     <!-- SECTION 1: THE DEPENDENCY MATRIX OF DOOM -->
     <h3>1. The GPU Dependency Matrix of Doom</h3>
-    <p>In standard web engineering, deploying code requires little more than matching the Python runtime version. In deep learning, execution depends on a fragile, multi-layered hardware and driver stack:</p>
-    <ul>
-      <li><strong>Host Linux Kernel:</strong> Base OS kernel drivers (e.g. <code>nvidia.ko</code>).</li>
-      <li><strong>NVIDIA Driver:</strong> Host user-space driver (e.g. Driver version <code>550.54.14</code>).</li>
-      <li><strong>CUDA Driver API:</strong> <code>libcuda.so.1</code> exposing GPU hardware access.</li>
-      <li><strong>CUDA Runtime Toolkit:</strong> <code>libcudart.so</code>, cuDNN, and cuBLAS (e.g. CUDA 12.1 vs 12.4).</li>
-      <li><strong>Python Wheels:</strong> Pre-compiled PyTorch C++ binaries linked against exact shared library versions.</li>
-    </ul>
-    <p>A mismatch between any two layers causes cryptic, catastrophic runtime crashes: <code>CUDA driver version is insufficient for CUDA runtime version</code>. To achieve deterministic reliability, the entire environment must be frozen into an <strong>Open Container Initiative (OCI) image</strong>.</p>
+    <p>In standard web engineering, deploying code requires little more than matching the Python runtime version. In deep learning, execution depends on a fragile, multi-layered hardware, firmware, driver, and user-space software stack:</p>
 
-    <!-- SECTION 2: NVIDIA CONTAINER TOOLKIT -->
-    <h3>2. How Containers Access Physical GPUs: NVIDIA Container Toolkit</h3>
-    <p>Containers are isolated Linux processes governed by Namespaces and Control Groups (cgroups). By default, a container cannot see physical hardware devices like PCIe GPUs.</p>
-
-    <div class="real-world-box">
-      <h4>⚙️ The OCI Runtime Hook Architecture</h4>
-      <p>How does a container talk to an NVIDIA GPU without installing the full 800MB proprietary display driver inside every Docker image?</p>
-      <ol>
-        <li>The host machine installs the base NVIDIA kernel driver once.</li>
-        <li>When Docker launches a container with <code>--gpus all</code>, the <strong>NVIDIA Container Runtime (<code>nvidia-ctk</code>)</strong> intercepts the container lifecycle via an OCI pre-start hook.</li>
-        <li>The hook dynamically bind-mounts the physical device character files from the host into the container filesystem:
-        <ul>
-          <li><code>/dev/nvidia0</code> (Physical GPU 0)</li>
-          <li><code>/dev/nvidiactl</code> (GPU Control device)</li>
-          <li><code>/dev/nvidia-uvm</code> (Unified Virtual Memory manager)</li>
-        </ul>
-        </li>
-        <li>The hook bind-mounts the host's user-space driver libraries (<code>libcuda.so</code>, <code>libnvidia-ml.so</code>) into the container's <code>/usr/lib64</code>.</li>
-      </ol>
-      <p><em>Result: Your Docker image remains clean, containing only application code and CUDA runtime libraries, running seamlessly across any cloud provider (AWS, Azure, GCP, CoreWeave) equipped with compatible host drivers!</em></p>
+    <div class="table-container" style="overflow-x: auto; margin: 1.5em 0;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em;">
+        <thead>
+          <tr style="background-color: #1b4965; color: #ffffff;">
+            <th style="padding: 10px; border: 1px solid #ccc;">Layer</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Component</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Location</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Responsibility &amp; Failure Mode</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Layer 1</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Host Linux Kernel</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Host OS (Ring 0)</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Loads <code>nvidia.ko</code>, <code>nvidia-uvm.ko</code>. Kernel updates without DKMS break modules.</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Layer 2</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">NVIDIA Display Driver</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Host OS (User Space)</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Provides <code>libcuda.so.1</code> (CUDA Driver API). Dictates maximum supported CUDA version.</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Layer 3</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">CUDA Runtime Toolkit</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Container Image</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Provides <code>libcudart.so</code>, <code>libcudnn.so</code>, <code>libcublas.so</code>. Mismatch causes <code>cudaErrorInsufficientDriver</code>.</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Layer 4</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">C++ Compiler &amp; Toolchain</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Build Stage Only</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">GCC / Clang / NVCC compiling FlashAttention or Triton kernels. Must match PyTorch ABI (C++11 standard).</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Layer 5</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Python Wheels &amp; App Code</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Container Runtime</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">PyTorch (<code>torch-2.3.0+cu121</code>), vLLM, transformers, application FastAPI service.</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <!-- SECTION 3: MULTI-STAGE DOCKERFILE -->
-    <h3>3. Multi-Stage Dockerfile Engineering: From 15GB to 1GB</h3>
-    <p>A naive Dockerfile begins with <code>FROM nvidia/cuda:12.1.0-devel-ubuntu22.04</code>, installs GCC, pip, and builds custom wheels. The resulting image is a bloated <strong>15 Gigabytes</strong>, takes 12 minutes to download over Kubernetes cluster networks, and contains C++ compilers that represent a severe security vulnerability!</p>
+    <p>A mismatch between any two layers causes cryptic, catastrophic runtime crashes: <code>CUDA driver version is insufficient for CUDA runtime version</code>. To achieve deterministic reliability across clouds (AWS, GCP, Azure, CoreWeave), the entire environment must be frozen into an <strong>Open Container Initiative (OCI) image</strong>.</p>
 
-    <p><strong>Multi-Stage Builds</strong> solve this by decoupling the build environment from the deployment runtime:</p>
+    <!-- SECTION 2: LINUX NAMESPACES AND CGROUPS V2 -->
+    <h3>2. Linux Namespaces &amp; cgroups v2 for AI Workloads</h3>
+    <p>A container is not a virtual machine; it is a standard Linux process isolated by the kernel through two foundational subsystems:</p>
     <ul>
-      <li><strong>Stage 1 (Builder):</strong> Uses a heavy CUDA development image with compilers (GCC, Clang, CMake) to compile custom C++ and Triton extensions into wheel packages.</li>
-      <li><strong>Stage 2 (Runtime):</strong> Uses a minimal, stripped-down base image. Copies *only* the compiled wheels from Stage 1, deletes all cache directories, and runs as an unprivileged, non-root user (UID 10001).</li>
+      <li><strong>Namespaces (Isolation):</strong> Partition kernel resources so processes view private instances:
+        <ul>
+          <li><code>pid</code>: Process ID virtualization (container process sees itself as PID 1).</li>
+          <li><code>net</code>: Private network devices, IP routing tables, and port allocations.</li>
+          <li><code>mnt</code>: Isolated filesystem mount hierarchy.</li>
+          <li><code>ipc</code>: Inter-process communication (System V IPC, POSIX message queues, shared memory <code>/dev/shm</code>).</li>
+          <li><code>user</code>: Virtualizes UIDs/GIDs, allowing a containerized user (e.g. UID 10001) to run securely without host root capabilities.</li>
+        </ul>
+      </li>
+      <li><strong>Control Groups (cgroups v2 — Resource Metering &amp; Limits):</strong>
+        <ul>
+          <li><strong>CPU Bandwidth:</strong> Enforced via <code>cpu.max = "$QUOTA $PERIOD"</code>. If a container exceeds its quota, the CFS (Completely Fair Scheduler) throttles CPU cycles.</li>
+          <li><strong>Memory Constraints:</strong> Governed by <code>memory.max</code>. If host memory exceeds this threshold, the Linux kernel Out-Of-Memory (OOM) killer selects and terminates the process with the highest <code>oom_score_adj</code>, emitting exit code <code>137</code>.</li>
+        </ul>
+      </li>
     </ul>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Containerization</h3>
+    <!-- SECTION 3: NVIDIA CONTAINER TOOLKIT -->
+    <h3>3. How Containers Access Physical GPUs: NVIDIA Container Toolkit</h3>
+    <p>By default, Linux namespaces hide physical PCIe hardware devices from containers. The <strong>NVIDIA Container Toolkit (<code>nvidia-ctk</code>)</strong> bridges host kernel drivers to container user-space through the OCI Runtime Hook specification:</p>
 
+    <div class="real-world-box">
+      <h4>⚙️ The OCI Prestart Hook Lifecycle</h4>
+      <ol>
+        <li><strong>Container Instantiation:</strong> The container engine (<code>containerd</code> / Docker) reads the image manifest and prepares namespaces.</li>
+        <li><strong>Hook Execution:</strong> Before the container's entrypoint process starts, the OCI runtime executes the <code>nvidia-container-runtime-hook</code>.</li>
+        <li><strong>Environment Variable Inspection:</strong> The hook parses container environment variables:
+          <ul>
+            <li><code>NVIDIA_VISIBLE_DEVICES=0,1</code> (or <code>all</code>): Determines which physical GPUs to expose.</li>
+            <li><code>NVIDIA_DRIVER_CAPABILITIES=compute,utility</code>: Exposes CUDA execution and monitoring libraries.</li>
+          </ul>
+        </li>
+        <li><strong>Device Injection:</strong> The hook dynamically bind-mounts physical character devices from the host:
+          $$\{ \texttt{/dev/nvidia0}, \dots, \texttt{/dev/nvidiaN}, \texttt{/dev/nvidiactl}, \texttt{/dev/nvidia-uvm}, \texttt{/dev/nvidia-uvm-tools} \}$$
+          and updates the container's cgroup device allowlist (major number 195 for NVIDIA, 234 for UVM).
+        </li>
+        <li><strong>User-Space Driver Dynamic Linkage:</strong> The hook bind-mounts host user-space libraries (<code>libcuda.so.1</code>, <code>libnvidia-ml.so.1</code>) directly into the container's linker search path (<code>/usr/lib/x86_64-linux-gnu/</code>).</li>
+      </ol>
+      <p><em>Key Architectural Insight: The 800MB proprietary NVIDIA display driver lives strictly on the host. The Docker image remains clean, containing only application code and CUDA runtime libraries!</em></p>
+    </div>
+
+    <!-- SECTION 4: MULTI-STAGE DOCKERFILE ENGINEERING -->
+    <h3>4. Multi-Stage Dockerfile Engineering: From 18GB to 1.8GB</h3>
+    <p>A naive single-stage Dockerfile based on <code>nvidia/cuda:12.1.0-devel-ubuntu22.04</code> bundles GCC, NVCC, static libraries, header files, and pip build artifacts. The resulting <strong>18 GB image</strong> creates severe operational bottlenecks:</p>
+    <ul>
+      <li><strong>Kubernetes Cold-Start Thrashing:</strong> Autoscaling pods take 5 to 15 minutes to pull layers over cluster networks.</li>
+      <li><strong>Expanded Attack Surface:</strong> Shipping C/C++ compilers into production containers enables attackers executing Remote Code Execution (RCE) to compile local root exploits.</li>
+    </ul>
+
+    <p><strong>Multi-Stage Builds</strong> solve this by strictly segregating the compilation environment from the execution runtime:</p>
+    <ul>
+      <li><strong>Stage 1 (Builder):</strong> Heavyweight development base with compilers (GCC, Clang, CMake, NVCC). Compiles custom C++ extensions (e.g. FlashAttention, AWQ, vLLM kernels) into isolated wheel packages.</li>
+      <li><strong>Stage 2 (Runtime):</strong> Minimal base image (e.g. <code>nvidia/cuda:12.1.1-base-ubuntu22.04</code> or distroless). Copies *only* the compiled Python wheels and application source code, deletes package caches, strips binary debug symbols (<code>strip --strip-unneeded</code>), and drops root privileges to an unprivileged user (UID 10001).</li>
+    </ul>
+
+    <!-- SECTION 5: KUBERNETES GPU SCHEDULING -->
+    <h3>5. Kubernetes GPU Scheduling, Device Plugins &amp; Shared Memory</h3>
+    <p>In Kubernetes clusters, GPU hardware is scheduled as an <strong>Extended Resource</strong> managed by the NVIDIA Kubernetes Device Plugin:</p>
+
+    <div class="table-container" style="overflow-x: auto; margin: 1.5em 0;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em;">
+        <thead>
+          <tr style="background-color: #1b4965; color: #ffffff;">
+            <th style="padding: 10px; border: 1px solid #ccc;">GPU Allocation Mechanism</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Hardware Isolation</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Memory Protection</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Production Use Case</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Exclusive GPU (<code>limits: nvidia.com/gpu: 1</code>)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Full physical GPU dedicated to a single Pod.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Full hardware VRAM boundary.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">LLM pre-training, fine-tuning, large batch inference (vLLM).</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>NVIDIA MIG (Multi-Instance GPU)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Physical silicon partitioning (Compute Instances + Memory controllers).</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Guaranteed hardware QoS; hardware memory error isolation.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Multi-tenant A100/H100 clusters running independent microservices.</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Time-Slicing (K8s Device Plugin)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Software round-robin scheduling across processes.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">No memory protection; one OOM crash kills all collocated pods.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Development clusters, intermittent burst workloads.</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>MPS (Multi-Process Service)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Concurrent kernel execution via shared hardware context.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Software memory limits via <code>CUDA_MPS_PINNED_DEVICE_MEM_LIMIT</code>.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">High-throughput low-latency embedding and classification services.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ======================================================================
+         SECTION 6: 4-TIER GRADED PRACTICE SUITE
+         ====================================================================== -->
+    <h3>4-Tier Graded Practice Suite — Containerization &amp; Deterministic Packaging</h3>
+    <p>Eight rigorous, step-by-step problems spanning numerical network sizing, GPU memory virtualization, algorithmic container lifecycle traces, layer caching proofs, and security traps.</p>
+
+    <!-- TIER 1: NUMERICAL DRILLS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+    <!-- Problem 6.3.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 6.3.1</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-aws">AWS</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An AI platform experiences an abrupt traffic spike, triggering a Kubernetes Horizontal Pod Autoscaler (HPA) to spin up $N = 16$ worker pods simultaneously across empty worker nodes. You are evaluating two container packaging strategies:</p>
+        <ul>
+          <li><strong>Strategy A (Unoptimized Devel Image):</strong> Raw image size $S_{\text{unopt}} = 14.8\text{ GB}$ (contains full CUDA devel toolkit, GCC toolchain, pip caches).</li>
+          <li><strong>Strategy B (Hardened Multi-Stage Runtime):</strong> Raw image size $S_{\text{opt}} = 1.85\text{ GB}$ (stripped runtime, zero compilers, compiled wheels only).</li>
+        </ul>
+        <p><strong>Cluster &amp; Network Parameters:</strong></p>
+        <ul>
+          <li>The worker node pool shares a rack-level network switch with aggregate ingress bandwidth $B = 10\text{ Gbps} = 1.25\text{ GB/s}$.</li>
+          <li>Due to TCP windowing, congestion control, and registry rate limits, effective aggregate bandwidth is $\eta = 80\%$ ($B_{\text{eff}} = 1.0\text{ GB/s}$). All 16 nodes pull concurrently with equal bandwidth shares.</li>
+          <li>Container image layer compression (gzip) reduces download transfer size to $50\%$ of raw size ($S_{\text{dl}} = 0.50 \times S_{\text{raw}}$).</li>
+          <li>Local decompression speed per node is $v_{\text{decomp}} = 250\text{ MB/s}$ of uncompressed data, executed immediately after download.</li>
+          <li>Container process initialization and CUDA driver context initialization take $T_{\text{init}} = 4.5\text{ seconds}$.</li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the total download time $T_{\text{dl}}$, decompression time $T_{\text{decomp}}$, and overall cold-start latency $T_{\text{cold}}$ for Strategy A.</li>
+          <li>Calculate the corresponding metrics for Strategy B.</li>
+          <li>Calculate the percentage reduction in cold-start latency and the total network transfer bandwidth saved across the cluster.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Numerical Solution</div>
+
+        <p class="step"><strong>Step 1: Strategy A (Unoptimized Image) Calculations:</strong><br>
+        Raw image size per node: $S_{\text{unopt}} = 14.8\text{ GB}$.<br>
+        Compressed download size per node:
+        $$S_{\text{dl, unopt}} = 0.50 \times 14.8\text{ GB} = 7.4\text{ GB}$$
+        Total data transferred across $N = 16$ nodes over the shared rack uplink:
+        $$D_{\text{total, unopt}} = 16 \times 7.4\text{ GB} = 118.4\text{ GB}$$
+        Since all 16 nodes share the effective aggregate bandwidth $B_{\text{eff}} = 1.0\text{ GB/s}$:
+        $$T_{\text{dl, unopt}} = \frac{D_{\text{total, unopt}}}{B_{\text{eff}}} = \frac{118.4\text{ GB}}{1.0\text{ GB/s}} = 118.4\text{ seconds}$$
+        Decompression occurs locally on each node in parallel:
+        $$T_{\text{decomp, unopt}} = \frac{S_{\text{unopt}}}{v_{\text{decomp}}} = \frac{14.8\text{ GB}}{0.250\text{ GB/s}} = 59.2\text{ seconds}$$
+        Total cold-start latency for Strategy A:
+        $$T_{\text{cold, unopt}} = T_{\text{dl, unopt}} + T_{\text{decomp, unopt}} + T_{\text{init}} = 118.4\text{ s} + 59.2\text{ s} + 4.5\text{ s} = 182.1\text{ seconds} \approx 3.035\text{ minutes}$$</p>
+
+        <p class="step"><strong>Step 2: Strategy B (Hardened Multi-Stage Image) Calculations:</strong><br>
+        Raw image size per node: $S_{\text{opt}} = 1.85\text{ GB}$.<br>
+        Compressed download size per node:
+        $$S_{\text{dl, opt}} = 0.50 \times 1.85\text{ GB} = 0.925\text{ GB}$$
+        Total data transferred across $N = 16$ nodes:
+        $$D_{\text{total, opt}} = 16 \times 0.925\text{ GB} = 14.8\text{ GB}$$
+        Total download time:
+        $$T_{\text{dl, opt}} = \frac{14.8\text{ GB}}{1.0\text{ GB/s}} = 14.8\text{ seconds}$$
+        Decompression time per node:
+        $$T_{\text{decomp, opt}} = \frac{1.85\text{ GB}}{0.250\text{ GB/s}} = 7.4\text{ seconds}$$
+        Total cold-start latency for Strategy B:
+        $$T_{\text{cold, opt}} = T_{\text{dl, opt}} + T_{\text{decomp, opt}} + T_{\text{init}} = 14.8\text{ s} + 7.4\text{ s} + 4.5\text{ s} = 26.7\text{ seconds}$$</p>
+
+        <p class="step"><strong>Step 3: Comparative Analysis &amp; Network Savings:</strong><br>
+        Absolute latency saved:
+        $$\Delta T = 182.1\text{ s} - 26.7\text{ s} = 155.4\text{ seconds}$$
+        Percentage latency reduction:
+        $$\text{Reduction} = \frac{182.1 - 26.7}{182.1} \times 100\% = \frac{155.4}{182.1} \times 100\% \approx 85.34\%$$
+        Total network bandwidth saved across the cluster:
+        $$\Delta D = 118.4\text{ GB} - 14.8\text{ GB} = 103.6\text{ GB}$$
+        <em>Conclusion: Multi-stage packaging reduces pod cold start from over 3 minutes to under 27 seconds, preventing cascade timeouts and SLA violations during autoscaling spikes.</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 6.3.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.3.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-nvidia">NVIDIA</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are deploying $M = 4$ identical text-embedding service containers onto a single physical NVIDIA A100-SXM4-80GB GPU ($V_{\text{total}} = 80\text{ GB} = 81,920\text{ MB}$).</p>
+        <p><strong>Workload Specifications:</strong></p>
+        <ul>
+          <li>Model weights footprint: $W = 1,200\text{ MB}$.</li>
+          <li>Activation memory per active concurrent request (batch size $B = 32$, sequence length $L = 512$): $A_{\text{req}} = 125\text{ MB}$.</li>
+          <li>Peak request concurrency per container: $C = 16$ concurrent streams.</li>
+          <li>CUDA runtime scratchpad and memory fragmentation overhead: $V_{\text{scratch}} = 350\text{ MB}$ per process.</li>
+          <li>System headroom requirement: The Kubernetes node reserves $5\%$ of total GPU memory for system stability ($V_{\text{res}} = 0.05 \times 81,920\text{ MB} = 4,096\text{ MB}$).</li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the peak GPU memory $V_{\text{proc}}$ consumed by a single container under peak concurrency $C = 16$ (excluding CUDA context overhead).</li>
+          <li>Under standard time-slicing (without MPS), each container initializes an independent primary CUDA context requiring $V_{\text{ctx}} = 450\text{ MB}$. Calculate total GPU memory allocated across all 4 containers and determine the free VRAM.</li>
+          <li>Under NVIDIA Multi-Process Service (MPS), a single shared control daemon manages the GPU context ($V_{\text{ctx, shared}} = 450\text{ MB}$ total). If the 4 containers share compute equally ($\texttt{CUDA\_MPS\_ACTIVE\_THREAD\_PERCENTAGE} = 25\%$), calculate total memory consumed and determine the maximum request concurrency $C_{\max}$ that each container could handle if the remaining allocatable VRAM is distributed evenly across all 4 containers.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Numerical Solution</div>
+
+        <p class="step"><strong>Step 1: Single Container Peak Memory Consumption:</strong><br>
+        For a single container handling $C = 16$ concurrent streams:
+        $$V_{\text{proc}} = W + (C \times A_{\text{req}}) + V_{\text{scratch}}$$
+        $$V_{\text{proc}} = 1,200\text{ MB} + (16 \times 125\text{ MB}) + 350\text{ MB} = 1,200 + 2,000 + 350 = 3,550\text{ MB}$$</p>
+
+        <p class="step"><strong>Step 2: Total Memory under Standard Time-Slicing (No MPS):</strong><br>
+        Without MPS, each process creates its own CUDA context ($V_{\text{ctx}} = 450\text{ MB}$):
+        $$V_{\text{container, ts}} = V_{\text{proc}} + V_{\text{ctx}} = 3,550\text{ MB} + 450\text{ MB} = 4,000\text{ MB}$$
+        Across $M = 4$ independent containers:
+        $$V_{\text{total, ts}} = 4 \times 4,000\text{ MB} = 16,000\text{ MB}$$
+        Total usable GPU memory after deducting the 5% node reserve:
+        $$V_{\text{usable}} = V_{\text{total}} - V_{\text{res}} = 81,920\text{ MB} - 4,096\text{ MB} = 77,824\text{ MB}$$
+        Remaining unallocated usable VRAM under time-slicing:
+        $$V_{\text{free, ts}} = 77,824\text{ MB} - 16,000\text{ MB} = 61,824\text{ MB}$$</p>
+
+        <p class="step"><strong>Step 3: Total Memory and Max Concurrency under MPS:</strong><br>
+        Under MPS, the primary CUDA context is shared across all processes ($V_{\text{ctx, shared}} = 450\text{ MB}$ once):
+        $$V_{\text{total, mps}} = (4 \times V_{\text{proc}}) + V_{\text{ctx, shared}} = (4 \times 3,550\text{ MB}) + 450\text{ MB} = 14,200\text{ MB} + 450\text{ MB} = 14,650\text{ MB}$$
+        Total remaining usable VRAM under MPS:
+        $$V_{\text{avail, mps}} = 77,824\text{ MB} - 14,650\text{ MB} = 63,174\text{ MB}$$
+        Distributing this remaining memory equally across the $M = 4$ containers:
+        $$\Delta V_{\text{per\_container}} = \frac{63,174\text{ MB}}{4} = 15,793.5\text{ MB}$$
+        Since each additional concurrent request requires $A_{\text{req}} = 125\text{ MB}$:
+        $$\Delta C = \left\lfloor \frac{15,793.5\text{ MB}}{125\text{ MB}} \right\rfloor = \lfloor 126.348 \rfloor = 126\text{ additional streams}$$
+        Maximum concurrency supported per container:
+        $$C_{\max} = C_{\text{base}} + \Delta C = 16 + 126 = 142\text{ concurrent streams}$$
+        Total cluster concurrency across all 4 containers on a single A100:
+        $$C_{\text{cluster}} = 4 \times 142 = 568\text{ concurrent streams}$$</p>
+      </div>
+    </div>
+
+    <!-- TIER 2: APPLIED ENGINEERING TRACES -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+    <!-- Problem 6.3.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.3.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An engineer executes the following command on a host containing 4 physical NVIDIA GPUs:</p>
+        <pre><code>docker run --gpus '"device=1,2"' \
+  -e NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+  -v /data/models:/models:ro \
+  pytorch-inference:latest</code></pre>
+        <p>Construct a rigorous algorithmic trace table detailing the step-by-step actions performed by the container runtime stack (Docker CLI $\to$ <code>containerd</code> $\to$ <code>runc</code> $\to$ <code>nvidia-container-toolkit</code> $\to$ Linux Kernel) during container creation. For each step, identify: (a) Subsystem executing, (b) Exact filesystem/kernel operation, (c) Device nodes or libraries injected, and (d) Security/isolation violation prevented.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Algorithmic Execution Trace Table</div>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Step</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Subsystem</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Exact Kernel / OS Action</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Filesystem / Device Artifact</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Failure / Security Risk Prevented</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Docker Engine / containerd</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Parses CLI flag <code>--gpus</code> into OCI runtime specification (<code>config.json</code>). Appends prestart hook.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>config.json</code>: <code>"hooks": {"prestart": [{"path": "/usr/bin/nvidia-container-toolkit"}]}</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Prevents launching container without hardware access hooks.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">runc (OCI Runtime)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Invokes <code>clone()</code> with <code>CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWNET | CLONE_NEWIPC</code>.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Initializes container rootfs and isolated mount/PID namespaces.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Prevents host process namespace leakage.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">nvidia-ctk (Prestart Hook)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Reads <code>NVIDIA_VISIBLE_DEVICES="1,2"</code> and <code>NVIDIA_DRIVER_CAPABILITIES</code> from container environment.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Translates logical GPU indices 1 and 2 to physical PCIe bus IDs.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Prevents accidental access to unallocated GPUs (GPU 0 and GPU 3 remain completely hidden).</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>4</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">cgroups v2 Controller</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Writes allow rules to <code>cgroup.procs</code> and <code>devices.allow</code> for major 195 (NVIDIA) and major 234 (UVM).</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Permits read/write/mknod for minors corresponding only to GPU 1, GPU 2, <code>nvidiactl</code>, and <code>nvidia-uvm</code>.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Hardware isolation: blocks syscalls attempting to open <code>/dev/nvidia0</code> or <code>/dev/nvidia3</code> (emits <code>EPERM</code>).</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>5</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">nvidia-container-cli</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Performs bind-mount of character device nodes into container's private <code>/dev</code> directory.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Injects: <code>/dev/nvidia1</code>, <code>/dev/nvidia2</code>, <code>/dev/nvidiactl</code>, <code>/dev/nvidia-uvm</code>, <code>/dev/nvidia-uvm-tools</code>.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Without <code>/dev/nvidia-uvm</code>, unified memory page migrations fail with <code>cudaErrorInitializationError</code>.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>6</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">nvidia-container-cli</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Locates host user-space driver shared libraries and bind-mounts them into container linker paths.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Bind-mounts: <code>libcuda.so.1</code>, <code>libnvidia-ml.so.1</code>, <code>libnvidia-ptxjitcompiler.so.1</code> into <code>/usr/lib64</code>.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Eliminates driver version mismatch: container dynamically links against host's installed driver.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>7</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Container Entrypoint</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Executes <code>python serve.py</code>. PyTorch calls <code>cudaGetDeviceCount(&amp;count)</code>.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">CUDA Runtime queries <code>libcuda.so.1</code>, which returns exactly <code>count = 2</code>.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Application sees logical <code>cuda:0</code> (physical GPU 1) and <code>cuda:1</code> (physical GPU 2) with zero host awareness.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Problem 6.3.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.3.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-uber">Uber</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Consider an AI engineering team building a container for an LLM microservice using BuildKit. The team maintains the following single-stage Dockerfile:</p>
+        <pre><code># Base Image
+1: FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+2: RUN apt-get update && apt-get install -y --no-install-recommends python3-pip python3-dev && rm -rf /var/lib/apt/lists/*
+3: WORKDIR /app
+4: COPY . /app
+5: RUN pip3 install --no-cache-dir -r requirements.txt
+6: ENTRYPOINT ["python3", "serve.py"]</code></pre>
+        <p>Over a two-day sprint, developers push 4 successive code changes:</p>
+        <ul>
+          <li><strong>Commit 1:</strong> Initial clean build from scratch.</li>
+          <li><strong>Commit 2:</strong> Developer edits a docstring in <code>serve.py</code> (no dependency changes).</li>
+          <li><strong>Commit 3:</strong> Developer adds a new package <code>scipy==1.12.0</code> to <code>requirements.txt</code>.</li>
+          <li><strong>Commit 4:</strong> Developer refactors the Dockerfile to follow the <em>Dependency Isolation Pattern</em>:
+            <pre><code># Refactored Order:
+3: WORKDIR /app
+4a: COPY requirements.txt /app/requirements.txt
+4b: RUN pip3 install --no-cache-dir -r requirements.txt
+4c: COPY . /app</code></pre>
+            and subsequently edits <code>serve.py</code> once more.
+          </li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Construct a layer cache status matrix tracking Cache Hit vs Cache Miss for each line across Commits 1, 2, 3, and 4.</li>
+          <li>Explain why Commit 2 under the naive Dockerfile triggers a catastrophic cache invalidation on Line 5, and compute the redundant build time incurred if <code>pip3 install</code> takes 420 seconds.</li>
+          <li>Demonstrate how the refactored Dockerfile in Commit 4 isolates layer invalidation.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Layer Cache Evaluation &amp; Optimization Trace</div>
+
+        <p class="step"><strong>Step 1: Layer Cache Invalidation Matrix:</strong></p>
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Dockerfile Instruction</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Commit 1 (Initial)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Commit 2 (Edit serve.py)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Commit 3 (Add scipy)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Commit 4 (Refactored)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>FROM nvidia/cuda:...</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">MISS (Pull base)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">HIT</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">HIT</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">HIT</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>RUN apt-get update...</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">MISS (Execute apt)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">HIT</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">HIT</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">HIT</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>WORKDIR /app</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">MISS</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">HIT</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">HIT</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">HIT</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>COPY . /app</code> (Naive)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">MISS</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>MISS (Checksum changed)</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>MISS (Checksum changed)</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><em>Replaced by 4a, 4b, 4c</em></td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>RUN pip3 install...</code> (Naive)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">MISS (Re-download wheels)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>MISS (Cascade invalidation!)</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>MISS (Cascade invalidation!)</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><em>Replaced</em></td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>COPY requirements.txt</code> (Refactored)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">—</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">—</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">—</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>HIT</strong></td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>RUN pip3 install -r reqs</code> (Refactored)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">—</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">—</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">—</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>HIT (Preserved!)</strong></td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>COPY . /app</code> (Refactored)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">—</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">—</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">—</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>MISS (Only app code copied)</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="step"><strong>Step 2: Analysis of Naive Failure in Commit 2:</strong><br>
+        In Docker, a <code>COPY</code> command calculates the cryptographic hash (SHA-256) of every file in the source directory. When the developer edited <code>serve.py</code>, the directory checksum changed. Docker invalidated the cache for Line 4 (<code>COPY . /app</code>).<br>
+        By Docker's strict linear dependency invariant, <strong>any cache miss immediately invalidates all subsequent layers</strong>. Consequently, Line 5 (<code>RUN pip3 install</code>) was forced to execute from scratch, re-downloading and compiling PyTorch and dependencies (taking 420 seconds / 7 minutes), even though <code>requirements.txt</code> was identical!</p>
+
+        <p class="step"><strong>Step 3: Refactoring Resolution:</strong><br>
+        By copying <em>only</em> <code>requirements.txt</code> first, the <code>pip3 install</code> layer is tied strictly to the hash of dependencies. Application code changes in <code>serve.py</code> only invalidate the final <code>COPY . /app</code> step, which completes in under 0.8 seconds. Build time drops from 420 seconds to 2 seconds!</p>
+      </div>
+    </div>
+
+    <!-- TIER 3: MATHEMATICAL PROOFS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 3: FAANG Tier-1 / Research Lab Mathematical Proofs</h4>
+
+    <!-- Problem 6.3.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.3.5</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Formalize the Dockerfile build process as an ordered sequence of $N$ build steps $\mathcal{S} = \langle S_1, S_2, \dots, S_N \rangle$.</p>
+        <p><strong>Mathematical Formulation:</strong></p>
+        <ul>
+          <li>Each step $S_k$ has an execution duration $t_k > 0$.</li>
+          <li>At each build event, the inputs to step $S_k$ mutate with independent probability $p_k \in (0, 1)$.</li>
+          <li><strong>The Cascade Invalidation Rule:</strong> If step $S_k$ experiences a cache miss, it must re-execute, and all downstream steps $S_j$ ($j > k$) are forced to re-execute regardless of whether their own inputs changed.</li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Derive the closed-form expression for the probability that step $S_k$ executes during a random build event.</li>
+          <li>Derive the expected total build time $\mathbb{E}[T(\mathcal{S})]$ as a function of $\{t_k\}$ and $\{p_k\}$.</li>
+          <li>Using an exchange argument (adjacent transposition), prove that if two adjacent steps $S_i$ and $S_{i+1}$ have mutually independent input dependencies (i.e. neither consumes artifacts produced by the other), the expected build time is strictly minimized if and only if they are ordered such that $p_i \le p_{i+1}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Rigorous Mathematical Proof via Exchange Argument</div>
+
+        <p class="step"><strong>Step 1: Probability of Step Execution:</strong><br>
+        Let $E_k$ be the event that step $S_k$ must execute. By the Cascade Invalidation Rule, step $S_k$ executes if and only if its own inputs changed, OR at least one preceding step $S_j$ ($j < k$) experienced a cache miss.<br>
+        Conversely, step $S_k$ is a <strong>Cache Hit</strong> if and only if NO step from $S_1$ through $S_k$ changed its inputs. Let $X_j \in \{0, 1\}$ indicate whether step $S_j$'s inputs mutated ($P(X_j = 1) = p_j$). Under input independence:
+        $$P(\text{Hit}_k) = P\left(\bigcap_{j=1}^k \{X_j = 0\}\right) = \prod_{j=1}^k (1 - p_j)$$
+        Therefore, the execution probability $P(E_k)$ is the complement:
+        $$P(E_k) = 1 - P(\text{Hit}_k) = 1 - \prod_{j=1}^k (1 - p_j)$$</p>
+
+        <p class="step"><strong>Step 2: Expected Total Build Time:</strong><br>
+        Let total build time be the random variable $T(\mathcal{S}) = \sum_{k=1}^N t_k \cdot \mathbb{I}_{E_k}$, where $\mathbb{I}_{E_k}$ is the indicator variable for event $E_k$. By linearity of expectation:
+        $$\mathbb{E}[T(\mathcal{S})] = \sum_{k=1}^N t_k \cdot \mathbb{E}[\mathbb{I}_{E_k}] = \sum_{k=1}^N t_k \cdot P(E_k)$$
+        Substituting the execution probability derived in Step 1:
+        $$\mathbb{E}[T(\mathcal{S})] = \sum_{k=1}^N t_k \left[ 1 - \prod_{j=1}^k (1 - p_j) \right]$$
+        $$\mathbb{E}[T(\mathcal{S})] = \sum_{k=1}^N t_k - \sum_{k=1}^N t_k \prod_{j=1}^k (1 - p_j)$$</p>
+
+        <p class="step"><strong>Step 3: Proof of Optimal Ordering via Adjacent Transposition:</strong><br>
+        Consider two independent adjacent steps $S_i$ and $S_{i+1}$ in sequence $\mathcal{S}_A = \langle S_1, \dots, S_i, S_{i+1}, \dots, S_N \rangle$.<br>
+        Now consider the transposed sequence $\mathcal{S}_B = \langle S_1, \dots, S_{i+1}, S_i, \dots, S_N \rangle$ where $S_i$ and $S_{i+1}$ are swapped.<br>
+        Let $H_{k} = \prod_{j=1}^k (1 - p_j)$ denote the cumulative hit probability.<br>
+        For all steps preceding $i$ ($k < i$), $H_k$ is identical in both sequences.<br>
+        For all steps succeeding $i+1$ ($k > i+1$), the product $\prod_{j=1}^k (1 - p_j)$ involves both $(1 - p_i)$ and $(1 - p_{i+1})$; by commutativity of multiplication, $H_k$ is identical in both sequences for all $k \ge i+1$!<br>
+        Therefore, the difference in expected build time $\Delta = \mathbb{E}[T(\mathcal{S}_A)] - \mathbb{E}[T(\mathcal{S}_B)]$ depends solely on terms at positions $i$ and $i+1$ in the second summation:
+        $$\text{In } \mathcal{S}_A: \quad \text{Term}_A = t_i \left[H_{i-1}(1 - p_i)\right] + t_{i+1} \left[H_{i-1}(1 - p_i)(1 - p_{i+1})\right]$$
+        $$\text{In } \mathcal{S}_B: \quad \text{Term}_B = t_{i+1} \left[H_{i-1}(1 - p_{i+1})\right] + t_i \left[H_{i-1}(1 - p_{i+1})(1 - p_i)\right]$$
+        Subtracting $\text{Term}_B$ from $\text{Term}_A$:
+        $$\Delta_{\text{terms}} = \text{Term}_A - \text{Term}_B$$
+        $$= H_{i-1} \Big[ t_i(1 - p_i) + t_{i+1}(1 - p_i)(1 - p_{i+1}) - t_{i+1}(1 - p_{i+1}) - t_i(1 - p_i)(1 - p_{i+1}) \Big]$$
+        Factoring terms:
+        $$= H_{i-1} \Big[ t_i (1 - p_i)\big(1 - (1 - p_{i+1})\big) - t_{i+1}(1 - p_{i+1})\big(1 - (1 - p_i)\big) \Big]$$
+        $$= H_{i-1} \Big[ t_i (1 - p_i) p_{i+1} - t_{i+1} (1 - p_{i+1}) p_i \Big]$$
+        Since expected build time $\mathbb{E}[T] = \sum t_k - \sum t_k H_k$, minimizing $\mathbb{E}[T]$ is equivalent to maximizing the sum of terms. Thus, sequence $\mathcal{S}_A$ achieves lower or equal build time than $\mathcal{S}_B$ if and only if:
+        $$\text{Term}_A \ge \text{Term}_B \iff t_i (1 - p_i) p_{i+1} \ge t_{i+1} (1 - p_{i+1}) p_i$$
+        $$\iff \frac{(1 - p_i) / p_i}{t_i} \ge \frac{(1 - p_{i+1}) / p_{i+1}}{t_{i+1}}$$
+        In the standard practical case where steps represent equal or comparable layer build costs (or when ordering independent stages), this condition simplifies to:
+        $$\frac{1 - p_i}{p_i} \ge \frac{1 - p_{i+1}}{p_{i+1}} \iff p_i \le p_{i+1}$$
+        <em>Q.E.D. Build steps must be sorted in strictly ascending order of mutation probability $p_k$. High-stability layers ($p \approx 0.001$ for OS packages, $p \approx 0.05$ for pip requirements) must precede volatile layers ($p \approx 0.90$ for application code).</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 6.3.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.3.6</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-nvidia">NVIDIA</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In distributed deep learning and vision-language training, PyTorch's <code>torch.utils.data.DataLoader</code> coordinates $W$ asynchronous worker processes to read, decode, and transform training batches in parallel.</p>
+        <p><strong>System &amp; Workload Specifications:</strong></p>
+        <ul>
+          <li>Workers serialize generated batches into shared memory (<code>/dev/shm</code>) using memory-mapped anonymous files (POSIX <code>shm_open</code> / <code>mmap</code>) to avoid slow inter-process socket serialization.</li>
+          <li>Batch size per worker: $B = 64$ samples.</li>
+          <li>Each sample is a 3-channel high-resolution tensor: $C = 3$, $H = 512$, $W_{\text{img}} = 512$ with 32-bit floating point precision (4 bytes/float).</li>
+          <li>DataLoader prefetch factor is $K = 3$ (each worker buffers up to $K$ completed batches in the IPC queue).</li>
+          <li>Main process consumption overlap requires an inflight buffer margin of $\gamma = 1.25$.</li>
+          <li>IPC ring-buffer metadata overhead is $\Delta_{\text{IPC}} = 32\text{ MB}$.</li>
+          <li>Default Docker container configuration provisions $\texttt{--shm-size} = 64\text{ MB}$.</li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the uncompressed tensor footprint of a single batch $S_{\text{batch}}$ in Megabytes.</li>
+          <li>Derive the closed-form formula for the minimum shared memory requirement $M_{\text{shm}}$ across $W = 8$ DataLoader workers.</li>
+          <li>Calculate the exact numerical value of $M_{\text{shm}}$ and explain why running this workload in default Docker crashes with <code>ERROR: Unexpected bus error [SIGBUS]</code>.</li>
+          <li>Formulate the production Kubernetes Pod manifest snippet that natively resolves this crash without granting unconstrained <code>ipcMode: host</code> access.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Derivation &amp; Kubernetes Architecture Solution</div>
+
+        <p class="step"><strong>Step 1: Single Batch Memory Footprint:</strong><br>
+        Memory per individual image sample:
+        $$S_{\text{sample}} = C \times H \times W_{\text{img}} \times 4\text{ bytes} = 3 \times 512 \times 512 \times 4\text{ bytes} = 3,145,728\text{ bytes} = 3.0\text{ MB}$$
+        Memory per batch of $B = 64$ samples:
+        $$S_{\text{batch}} = B \times S_{\text{sample}} = 64 \times 3.0\text{ MB} = 192.0\text{ MB}$$</p>
+
+        <p class="step"><strong>Step 2: Closed-Form Formula for Total Shared Memory:</strong><br>
+        Each of the $W$ workers buffers $K$ full batches in the shared memory queue simultaneously. Accounting for the inflight consumption overlap margin $\gamma$ and IPC metadata $\Delta_{\text{IPC}}$:
+        $$M_{\text{shm}} = \gamma \cdot \left( W \times K \times S_{\text{batch}} \right) + \Delta_{\text{IPC}}$$</p>
+
+        <p class="step"><strong>Step 3: Numerical Computation &amp; SIGBUS Root Cause Analysis:</strong><br>
+        Substituting $W = 8$, $K = 3$, $S_{\text{batch}} = 192.0\text{ MB}$, $\gamma = 1.25$, and $\Delta_{\text{IPC}} = 32\text{ MB}$:
+        $$M_{\text{shm}} = 1.25 \times (8 \times 3 \times 192.0\text{ MB}) + 32\text{ MB}$$
+        $$M_{\text{shm}} = 1.25 \times (24 \times 192.0\text{ MB}) + 32\text{ MB} = 1.25 \times 4,608\text{ MB} + 32\text{ MB} = 5,760\text{ MB} + 32\text{ MB} = 5,792\text{ MB} \approx 5.66\text{ GB}$$
+        <strong>Why Default Docker Crashes with SIGBUS:</strong><br>
+        Docker defaults to a <code>tmpfs</code> mount for <code>/dev/shm</code> sized at exactly $64\text{ MB}$.<br>
+        A single batch ($192\text{ MB}$) immediately exceeds this entire partition. When worker process 0 calls <code>mmap()</code> to write the batch, the OS creates the virtual memory mapping successfully. However, when the process actually touches the memory pages, the kernel attempts to allocate physical RAM pages for the <code>tmpfs</code> filesystem.<br>
+        Because the filesystem capacity (64 MB) is exhausted, the kernel cannot service the page fault. Instead of emitting a graceful Python exception, the kernel sends a hardware-level <strong><code>SIGBUS</code> (Bus Error - Exit Code 135)</strong> signal to the worker, immediately killing the training run!</p>
+
+        <p class="step"><strong>Step 4: Hardened Production Kubernetes Solution:</strong><br>
+        Setting <code>ipcMode: host</code> shares the entire host's shared memory segment, creating a severe multi-tenant security vulnerability where collocated pods can read or corrupt each other's memory buffers.<br>
+        The production Kubernetes best practice is to mount an isolated, RAM-backed <code>emptyDir</code> volume onto <code>/dev/shm</code> with an explicit memory limit:
+        <pre><code>spec:
+  containers:
+  - name: torch-training
+    image: company/vision-trainer:v1.0
+    resources:
+      limits:
+        nvidia.com/gpu: 8
+        memory: 64Gi
+    volumeMounts:
+    - mountPath: /dev/shm
+      name: dshm
+  volumes:
+  - name: dshm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 8Gi # Comfortably accommodates 5.79 GB shared memory requirement</code></pre></p>
+      </div>
+    </div>
+
+    <!-- TIER 4: CONCEPTUAL TRAPS & ASSERTION-REASONING -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+    <!-- Problem 6.3.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.3.7</span>
         <span class="difficulty difficulty-hard">Hard</span>
         <span class="company-tag company-google">Google</span>
         <span class="company-tag company-aws">AWS</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> You deploy a PyTorch container to a production Kubernetes cluster. The container crashes on startup with: <code>RuntimeError: Found no NVIDIA driver on your system</code>. Walk through the exact diagnostic hierarchy from the host kernel level up to the Kubernetes manifest.</p>
+        <p><strong>QUESTION:</strong> A machine learning team builds a production container image using <code>nvidia/cuda:12.4.1-runtime-ubuntu22.04</code> and deploys it to an on-premise Kubernetes worker node equipped with NVIDIA Driver version <code>525.60.13</code> (which natively supports up to CUDA 12.0). The container fails to execute GPU workloads. An engineer proposes copying the host's <code>libcuda.so.1</code> directly into the Docker image during <code>docker build</code> to fix the issue.</p>
+        <p>Which of the following statements accurately characterizes why this proposal is fundamentally flawed, and what is the legitimate architectural solution?</p>
+        <ol type="A">
+          <li>The proposal fails because Docker containers cannot read files named <code>.so</code> without <code>CAP_SYS_ADMIN</code>; the legitimate solution is to run the container in privileged mode (<code>--privileged</code>).</li>
+          <li>The proposal fails because <code>libcuda.so.1</code> is the user-space interface to the kernel module <code>nvidia.ko</code>; copying an older user-space library into a CUDA 12.4 container violates the CUDA Runtime ABI, and does not upgrade the host kernel driver. The legitimate solution is either to upgrade the host driver to $\ge 550.54.14$ or utilize the CUDA Forward Compatibility Package on supported data center GPUs.</li>
+          <li>The proposal fails because copying host libraries invalidates the container's OCI checksum; the legitimate solution is to configure <code>LD_PRELOAD=/host/libcuda.so.1</code> in the Dockerfile.</li>
+          <li>The proposal succeeds on consumer GPUs (RTX 4090) but fails on enterprise GPUs (A100) due to firmware ECC locking.</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Diagnostic Hierarchy</div>
+        <div class="solution-label">✓ Correct Answer: B (Exhaustive Distractor Analysis)</div>
 
-        <p class="step"><strong>Step 1: Host Kernel Module Verification:</strong><br>
-        SSH into the physical Kubernetes worker node. Verify that the NVIDIA kernel module is loaded:
-        $$\text{Run: } \texttt{lsmod | grep nvidia}$$
-        If empty, the host driver crashed or failed to recompile after a Linux kernel update (e.g. DKMS failure). Verify with <code>nvidia-smi</code>.</p>
-
-        <p class="step"><strong>Step 2: NVIDIA Container Toolkit &amp; Daemon Configuration:</strong><br>
-        Verify that <code>containerd</code> or <code>dockerd</code> is configured with the NVIDIA runtime as default:
-        $$\text{Check: } \texttt{/etc/docker/daemon.json} \implies \text{"default-runtime": "nvidia"}$$
-        If missing, containers launch with the standard runc runtime, which does not execute the OCI GPU bind-mount hook!</p>
-
-        <p class="step"><strong>Step 3: Kubernetes Resource Limits &amp; Device Plugin:</strong><br>
-        Check the Kubernetes Pod manifest:
-        <pre><code>resources:
-  limits:
-    nvidia.com/gpu: 1 # MANDATORY!</code></pre>
-        If the manifest requests CPU and RAM but forgets <code>nvidia.com/gpu: 1</code>, the NVIDIA Kubernetes Device Plugin will intentionally hide all GPU character devices from the container namespace!</p>
+        <p class="step"><strong>Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Option A is False:</strong> Shared object (<code>.so</code>) libraries are standard Linux ELF binaries; Linux permissions have nothing to do with <code>CAP_SYS_ADMIN</code>. Running containers in <code>--privileged</code> mode creates an enormous security hazard without fixing kernel-driver ABI mismatches.</li>
+          <li><strong>Option B is Correct:</strong> <code>libcuda.so.1</code> (the CUDA Driver API) communicates with the physical GPU exclusively via <code>ioctl()</code> syscalls to <code>/dev/nvidiactl</code> and <code>/dev/nvidiaX</code>, managed by the host kernel module <code>nvidia.ko</code>.
+            <ul>
+              <li>The CUDA Runtime inside the container (<code>libcudart.so.12.4</code>) requires Driver API functions introduced in CUDA 12.4. An older driver (525.x / CUDA 12.0) simply lacks these entry points.</li>
+              <li>Baking <code>libcuda.so.1</code> into the container image breaks portability because it creates a direct conflict with the <code>nvidia-container-toolkit</code>, which dynamically bind-mounts the host's driver library at runtime.</li>
+              <li>The legitimate fix requires upgrading the host NVIDIA driver to a version compatible with CUDA 12.4 (Driver $\ge 550.54$), or on supported enterprise GPUs (V100, A100, H100), deploying the <strong>CUDA Forward Compatibility Package</strong> (<code>cuda-compat-12-4</code>), which mounts user-mode driver translation layers.</li>
+            </ul>
+          </li>
+          <li><strong>Option C is False:</strong> OCI image checksums are computed over the image tarball layers; modifying a file during build simply produces a new valid layer hash. <code>LD_PRELOAD</code> cannot create kernel syscall handlers that do not exist.</li>
+          <li><strong>Option D is False:</strong> CUDA Forward Compatibility is actually <em>unsupported</em> on consumer GeForce/RTX hardware; it is strictly restricted to NVIDIA Data Center / Enterprise GPUs.</li>
+        </ul>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 6.3: Multi-Stage Rootless GPU Dockerfile</h3>
-    <p>Below is a production-hardened, multi-stage Dockerfile for PyTorch inference, implementing non-root user security and minimal image size.</p>
+    <!-- Problem 6.3.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 6.3.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>ASSERTION-REASONING:</strong></p>
+        <p><strong>Assertion (A):</strong> Production deep learning inference containers deployed to multi-tenant Kubernetes clusters must run as an unprivileged non-root user (e.g. UID 10001) with all Linux capabilities dropped (<code>cap_drop: ALL</code>), and this hardening configuration has zero impact on PyTorch's ability to allocate GPU VRAM and launch CUDA compute kernels.</p>
+        <p><strong>Reason (R):</strong> GPU hardware acceleration does not require Linux POSIX capabilities or root privileges; access to physical NVIDIA GPUs is mediated entirely via read/write file permissions on the exposed character device nodes (<code>/dev/nvidia*</code>, <code>/dev/nvidiactl</code>, <code>/dev/nvidia-uvm</code>), which are granted via supplementary group membership (video/render) and cgroups device allowlists.</p>
+        <p><strong>Options:</strong></p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A (Comprehensive Security Analysis)</div>
+
+        <p class="step"><strong>Deep Architectural Analysis:</strong></p>
+        <p><strong>Evaluation of Assertion (A): True.</strong><br>
+        Running containers as <code>root</code> (UID 0) is a major container security vulnerability. In the event of a container breakout (e.g. via <code>runc</code> vulnerability CVE-2024-21626), a root container process escapes to become root on the physical host. Enterprise security policies mandate:
+        <pre><code>securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  readOnlyRootFilesystem: true</code></pre>
+        Under this configuration, PyTorch, vLLM, and Triton Inference Server execute with full GPU hardware acceleration and maximum performance.</p>
+
+        <p class="step"><strong>Evaluation of Reason (R): True &amp; Explanatory.</strong><br>
+        POSIX capabilities (like <code>CAP_SYS_ADMIN</code>, <code>CAP_NET_ADMIN</code>, <code>CAP_SYS_PTRACE</code>) govern host-level administrative actions (mounting filesystems, altering network routes, debugging foreign processes).<br>
+        GPU tensor execution requires only two things:
+        <ol>
+          <li>Opening character devices: <code>open("/dev/nvidia0", O_RDWR)</code> and <code>open("/dev/nvidia-uvm", O_RDWR)</code>. The NVIDIA Container Toolkit ensures these devices have mode <code>0666</code> (read/write for all users) or group permissions matching the container user.</li>
+          <li>Issuing <code>ioctl()</code> and <code>mmap()</code> system calls: Standard unprivileged processes are fully permitted to call <code>ioctl()</code> and <code>mmap()</code> on file descriptors they legitimately hold.</li>
+        </ol>
+        <em>Nuance to remember:</em> The only capability ever required in specialized high-performance computing (HPC) scenarios is <code>CAP_IPC_LOCK</code>, which is needed solely if the application calls <code>mlock()</code> to pin massive quantities of host CPU RAM for direct peer-to-peer RDMA transfers (GPUDirect RDMA over InfiniBand). Standard GPU serving requires zero capabilities.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 7: PRODUCTION CODE LAB -->
+    <h3>6. Production Code Lab 6.3: Hardened Multi-Stage Rootless GPU Dockerfile</h3>
+    <p>Below is a production-hardened, multi-stage Dockerfile for PyTorch inference, implementing non-root user security, layer cache optimization, and sub-2GB image footprint.</p>
 
     <div class="code-lab">
       <div class="code-lab-header">Code Lab 6.3 — Hardened Multi-Stage Production Dockerfile</div>
       <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch63_containerization/Dockerfile" target="_blank">🔗 View in GitHub: part6_mlops/ch63_containerization/Dockerfile</a></p>
 <pre><code># ==============================================================================
-# STAGE 1: Builder (Compiles dependencies and wheels)
+# STAGE 1: Builder (Compiles dependencies and wheels with full toolchain)
 # ==============================================================================
 FROM nvidia/cuda:12.1.1-devel-ubuntu22.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
+# Install build-time dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
     python3-pip \
     python3-dev \
     build-essential \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
+
+# Copy requirements first to leverage Docker layer caching
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir --user -r requirements.txt
+
+# Compile wheels into an isolated target directory
+RUN pip3 install --user --no-warn-script-location -r requirements.txt
+
+# Strip unneeded debug symbols from compiled C++ extensions to save space
+RUN find /root/.local -name "*.so" -exec strip --strip-unneeded {} + 2>/dev/null || true
 
 # ==============================================================================
-# STAGE 2: Minimal Secure Runtime (Rootless)
+# STAGE 2: Minimal Secure Runtime (Rootless & Stripped)
 # ==============================================================================
 FROM nvidia/cuda:12.1.1-base-ubuntu22.04 AS runtime
 
-ENV PYTHONUNBUFFERED=1 \
-    PATH=/home/appuser/.local/bin:$PATH
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PATH=/home/appuser/.local/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
+# Install strictly the minimal runtime Python interpreter (no compilers!)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Security: Create unprivileged non-root user (UID 10001)
-RUN useradd -u 10001 -m -s /bin/bash appuser
+# Security: Create dedicated unprivileged non-root user (UID 10001)
+RUN groupadd -g 10001 appgroup && \
+    useradd -u 10001 -g appgroup -m -s /sbin/nologin appuser
 
 WORKDIR /app
-# Copy only compiled Python site-packages from builder
-COPY --from=builder /root/.local /home/appuser/.local
-COPY --chown=appuser:appuser . /app
 
-USER appuser
+# Copy compiled Python packages from builder stage
+COPY --from=builder --chown=appuser:appgroup /root/.local /home/appuser/.local
+
+# Copy application source code
+COPY --chown=appuser:appgroup src/ /app/src/
+
+# Switch to unprivileged user
+USER 10001:10001
+
 EXPOSE 8000
 
-# Health check to ensure microservice is responding
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+# Health check to ensure model server responds
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
-ENTRYPOINT ["python3", "serve.py"]</code></pre>
+ENTRYPOINT ["python3", "-m", "src.main"]</code></pre>
     </div>
 
-    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <!-- SECTION 8: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 6.3 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 6.3: Hardened Production Microservice Container with CUDA Runtime</h3>
-        <p class="project-desc">Architect, build, and benchmark an automated CI/CD containerization pipeline that compiles custom PyTorch and Triton microservices into hardened, rootless OCI container images with automated vulnerability scanning (Trivy) and sub-second Kubernetes pod cold starts.</p>
+        <h3 class="project-title">Project 6.3: Hardened Production Microservice Container with CUDA Runtime &amp; Kubernetes Deployment</h3>
+        <p class="project-desc">Architect, build, and benchmark an automated CI/CD containerization pipeline that compiles custom PyTorch and Triton microservices into hardened, rootless OCI container images with automated vulnerability scanning (Trivy), sub-30-second Kubernetes pod cold starts, and zero-downtime rolling deployments.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part6_mlops/ch63_containerization/Dockerfile" target="_blank">🔗 Full Project Code: part6_mlops/ch63_containerization/Dockerfile</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In high-compliance cloud deployments (defense, healthcare), container images cannot exceed 2GB and must pass strict container security audits with zero root privileges and zero CVE vulnerabilities. In this project, you build an automated GitHub Actions container pipeline that builds multi-stage GPU images, validates CUDA driver compatibility, and deploys to AWS EKS clusters.</p>
+        <p><strong>Case Study Architecture:</strong> In high-compliance cloud deployments (defense, healthcare, fintech), container images cannot exceed 2GB and must pass strict container security audits with zero root privileges and zero CVE vulnerabilities. In this project, you build an automated GitHub Actions container pipeline that builds multi-stage GPU images, validates CUDA driver compatibility, scans for vulnerabilities using Trivy, and deploys to an AWS EKS cluster with managed GPU node groups and memory-backed shared memory partitions.</p>
       </div>
     </div>
   </div>

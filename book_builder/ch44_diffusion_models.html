@@ -5,12 +5,21 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 4.4</span>
     <h2 class="chapter-title">Generative Visual Synthesis &amp; Diffusion Models</h2>
-    <span class="chapter-subtitle">Non-Equilibrium Thermodynamics, The Closed-Form DDPM Theorem, CFG &amp; Latent Diffusion</span>
+    <span class="chapter-subtitle">Non-Equilibrium Thermodynamics, Analytical DDPM Derivations, Score Matching, CFG &amp; Latent Diffusion</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"Destruction is the mirror of creation. If you understand how ink diffuses into water until it is uniform gray, you can teach a neural network to reverse time and assemble the ink back into a masterpiece."</p>
+    <p>"Destruction is the mirror of creation. If you understand mathematically how ink diffuses into water until it is uniform gray, you can teach a neural network to reverse the arrow of time and reassemble the ink back into a masterpiece."</p>
+
+    <!-- FIGURE 4.4.1: diffusion_process_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="diffusion_process_diagram.png" alt="Figure 4.4.1: diffusion_process_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 4.4.1:</em> The continuous diffusion modeling framework. The forward Markov process progressively corrupts structured image data into pure isotropic Gaussian noise, while the reverse generative process trains a neural score estimator $\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t)$ to iteratively remove noise and synthesize sharp images.
+      </p>
+    </div>
+
     <p class="attribution">— Diffusion Physics Maxim</p>
   </div>
 
@@ -19,58 +28,69 @@
 
     <!-- SECTION 1: THE DIFFUSION PARADIGM -->
     <h3>1. Why Diffusion Succeeded Where GANs Failed</h3>
-    <p>For nearly a decade, Generative Adversarial Networks (GANs) represented the state of the art in image generation. However, GANs suffered from notorious engineering pathologies: the two-player minimax game ($\min_G \max_D$) frequently oscillated without converging, suffered from catastrophic <strong>Mode Collapse</strong> (the generator producing a single repetitive face), and required delicate discriminator balance.</p>
+    <p>For nearly a decade, Generative Adversarial Networks (GANs) represented the state of the art in generative vision. However, GANs suffered from notorious engineering pathologies: the two-player minimax game ($\min_G \max_D$) frequently diverged into limit cycles, suffered from catastrophic <strong>Mode Collapse</strong> (the generator producing a narrow set of repetitive outputs), and lacked any meaningful likelihood metric.</p>
 
-    <p>In 2020, Jonathan Ho et al. published <strong>Denoising Diffusion Probabilistic Models (DDPM)</strong>, grounding image synthesis in non-equilibrium thermodynamics (Sohl-Dickstein et al., 2015). Instead of an adversarial duel, Diffusion transforms image generation into a <strong>stable, convex Mean Squared Error (MSE) denoising regression problem</strong> with zero mode collapse and unprecedented visual diversity.</p>
+    <p>In 2020, Jonathan Ho, Ajay Jain, and Pieter Abbeel published <strong>Denoising Diffusion Probabilistic Models (DDPM)</strong>, grounding image synthesis in non-equilibrium thermodynamics (Sohl-Dickstein et al., 2015). Instead of an unstable adversarial duel, Diffusion transforms image generation into a <strong>stable, convex Mean Squared Error (MSE) denoising regression task</strong> with zero mode collapse and unprecedented sample coverage.</p>
 
-    <!-- SECTION 2: FORWARD AND REVERSE PROCESSES -->
+    <!-- SECTION 2: FORWARD AND REVERSE MARKOV CHAINS -->
     <h3>2. The Forward and Reverse Markov Chains</h3>
 
-    <h4>1. The Forward (Noising) Process</h4>
-    <p>Given a pristine image $\mathbf{x}_0 \sim q(\mathbf{x}_0)$, the forward process gradually destroys structure by adding small amounts of Gaussian noise over $T = 1,000$ discrete timesteps according to a fixed variance schedule $\beta_1, \dots, \beta_T \in (0, 1)$:</p>
+    <h4>2.1 The Forward (Noising) Process</h4>
+    <p>Given an initial pristine data sample $\mathbf{x}_0 \sim q(\mathbf{x}_0)$, the forward diffusion process gradually destroys spatial structure by adding Gaussian noise over $T$ discrete timesteps (typically $T = 1,000$) according to a variance schedule $\beta_1, \dots, \beta_T \in (0, 1)$:</p>
     $$q(\mathbf{x}_t \mid \mathbf{x}_{t-1}) = \mathcal{N}\left( \mathbf{x}_t; \sqrt{1 - \beta_t} \mathbf{x}_{t-1}, \beta_t \mathbf{I} \right)$$
-    <p>By timestep $T = 1,000$, the image is completely indistinguishable from pure isotropic white noise: $\mathbf{x}_T \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$.</p>
+    <p>As $t \to T$, the cumulative noise overwhelms the signal, such that $\mathbf{x}_T$ becomes statistically indistinguishable from pure isotropic white noise: $\mathbf{x}_T \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$.</p>
 
     <div class="real-world-box">
-      <h4>🏆 The Closed-Form Forward Sampling Shortcut</h4>
-      <p>Do we need to simulate all 1,000 intermediate Markov steps sequentially to generate training sample $\mathbf{x}_t$? <strong>No!</strong> Using the properties of Gaussian sums, Ho et al. derived a direct analytical shortcut.</p>
-      <p>Let $\alpha_t = 1 - \beta_t$ and let $\bar{\alpha}_t = \prod_{s=1}^t \alpha_s$. The distribution of $\mathbf{x}_t$ conditioned directly on the original image $\mathbf{x}_0$ is:</p>
+      <h4>🏆 The Closed-Form Forward Marginal Shortcut</h4>
+      <p>Simulating 1,000 intermediate Markov transitions to sample $\mathbf{x}_t$ would destroy training throughput. Let $\alpha_t = 1 - \beta_t$ and define the cumulative variance product:</p>
+      $$\bar{\alpha}_t = \prod_{s=1}^t \alpha_s = \prod_{s=1}^t (1 - \beta_s)$$
+      <p>Using the reproductive property of independent Gaussian random variables, the marginal distribution of $\mathbf{x}_t$ conditioned directly on $\mathbf{x}_0$ is derived in closed form:</p>
       $$q(\mathbf{x}_t \mid \mathbf{x}_0) = \mathcal{N}\left( \mathbf{x}_t; \sqrt{\bar{\alpha}_t} \mathbf{x}_0, (1 - \bar{\alpha}_t) \mathbf{I} \right)$$
       $$\implies \mathbf{x}_t = \sqrt{\bar{\alpha}_t} \mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_t} \boldsymbol{\epsilon}, \quad \text{where } \boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$$
-      <p><em>We can jump directly to any arbitrary timestep $t$ in a single float operation with zero loops!</em></p>
+      <p><em>Any arbitrary noisy state $\mathbf{x}_t$ can be generated in a single float operation without evaluating intermediate timesteps!</em></p>
     </div>
 
-    <h4>2. The Reverse (Denoising) Process</h4>
-    <p>If we can reverse this process, we can start with pure random Gaussian static $\mathbf{x}_T \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ and iteratively subtract noise to synthesize high-resolution images! We train a time-conditioned U-Net neural network $\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t)$ to predict the exact noise vector $\boldsymbol{\epsilon}$ added at step $t$:</p>
-    $$\mathcal{L}_{\text{simple}}(\theta) = \mathbb{E}_{t \sim [1, T], \mathbf{x}_0, \boldsymbol{\epsilon}} \left[ \|\boldsymbol{\epsilon} - \boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t)\|_2^2 \right]$$
+    <h4>2.2 The Reverse (Denoising) Process &amp; U-Net Training</h4>
+    <p>The true reverse distribution $q(\mathbf{x}_{t-1} \mid \mathbf{x}_t)$ requires integrating over the entire data distribution $q(\mathbf{x}_0)$, which is intractable. However, when conditioned on the initial image $\mathbf{x}_0$, Bayes' rule proves that the reverse conditional posterior is an <strong>exact Gaussian distribution</strong>:</p>
+    $$q(\mathbf{x}_{t-1} \mid \mathbf{x}_t, \mathbf{x}_0) = \mathcal{N}\left( \mathbf{x}_{t-1}; \tilde{\boldsymbol{\mu}}_t(\mathbf{x}_t, \mathbf{x}_0), \tilde{\beta}_t \mathbf{I} \right)$$
+    <p>where the posterior parameters are:</p>
+    $$\tilde{\boldsymbol{\mu}}_t(\mathbf{x}_t, \mathbf{x}_0) = \frac{\sqrt{\bar{\alpha}_{t-1}} \beta_t}{1 - \bar{\alpha}_t} \mathbf{x}_0 + \frac{\sqrt{\alpha_t}(1 - \bar{\alpha}_{t-1})}{1 - \bar{\alpha}_t} \mathbf{x}_t$$
+    $$\tilde{\beta}_t = \frac{1 - \bar{\alpha}_{t-1}}{1 - \bar{\alpha}_t} \beta_t$$
+    <p>By expressing $\mathbf{x}_0 = \frac{1}{\sqrt{\bar{\alpha}_t}} \left( \mathbf{x}_t - \sqrt{1 - \bar{\alpha}_t} \boldsymbol{\epsilon} \right)$, the posterior mean simplifies to:</p>
+    $$\tilde{\boldsymbol{\mu}}_t = \frac{1}{\sqrt{\alpha_t}} \left( \mathbf{x}_t - \frac{\beta_t}{\sqrt{1 - \bar{\alpha}_t}} \boldsymbol{\epsilon} \right)$$
+    <p>Thus, rather than predicting the clean image $\mathbf{x}_0$ directly, we parameterize a time-conditioned U-Net $\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t)$ to predict the <strong>exact noise vector $\boldsymbol{\epsilon}$</strong> that was injected into $\mathbf{x}_0$. Ho et al. showed that optimizing the simplified $L_2$ regression loss yields state-of-the-art sample quality:</p>
+    $$\mathcal{L}_{\text{simple}}(\theta) = \mathbb{E}_{t \sim \mathcal{U}(1, T), \mathbf{x}_0, \boldsymbol{\epsilon}} \left[ \left\| \boldsymbol{\epsilon} - \boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t) \right\|_2^2 \right]$$
 
     <!-- SECTION 3: CLASSIFIER-FREE GUIDANCE -->
     <h3>3. Classifier-Free Guidance (CFG): Ho &amp; Salimans, 2021</h3>
-    <p>How do we force a diffusion model to generate an image adhering strictly to a text prompt $c$ (e.g. <code>"a photo of an astronaut on Mars"</code>)?</p>
+    <p>To steer diffusion toward a textual conditioning prompt $c$ (e.g. <code>"cyberpunk city at dusk, 8k"</code>), early systems used an auxiliary image classifier $\nabla_{\mathbf{x}_t} \ln p(c \mid \mathbf{x}_t)$. However, training noisy image classifiers is brittle and computationally expensive.</p>
 
-    <p><strong>Classifier-Free Guidance (CFG)</strong> trains a single U-Net on both conditional text inputs $\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, c)$ and unconditional empty inputs $\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, \emptyset)$ by randomly setting $c = \emptyset$ for $10\%$ of training batches.</p>
-    <p>During inference, the final noise prediction is extrapolated along the difference vector:</p>
+    <p><strong>Classifier-Free Guidance (CFG)</strong> trains a single U-Net on both conditional text embeddings $\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, c)$ and unconditional empty tokens $\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, \emptyset)$ by randomly dropping the text conditioning ($c = \emptyset$) for $10\%$ of training batches.</p>
+    <p>During inference, the final noise estimate is extrapolated along the vector difference with guidance scale $s \ge 1$:</p>
     $$\tilde{\boldsymbol{\epsilon}}_\theta(\mathbf{x}_t, c) = \boldsymbol{\epsilon}_\theta(\mathbf{x}_t, \emptyset) + s \cdot \left( \boldsymbol{\epsilon}_\theta(\mathbf{x}_t, c) - \boldsymbol{\epsilon}_\theta(\mathbf{x}_t, \emptyset) \right)$$
-    <p>Where $s \ge 1$ is the <strong>Guidance Scale</strong>:</p>
+    <p>Implicitly, by Bayes' rule, CFG shifts the sampling score in the direction of the implicit classifier gradient:</p>
+    $$\nabla_{\mathbf{x}_t} \ln p(\mathbf{x}_t \mid c) = \nabla_{\mathbf{x}_t} \ln p(\mathbf{x}_t) + s \cdot \nabla_{\mathbf{x}_t} \ln p(c \mid \mathbf{x}_t)$$
     <ul>
-      <li>$s = 1.0$: Standard conditional generation (often yields low text adherence).</li>
-      <li>$s \in [7.0, 9.0]$: The sweet spot (forces vivid, saturated adherence to the prompt).</li>
-      <li>$s &gt; 15.0$: Severe over-saturation and unnatural artifacts.</li>
+      <li>$s = 1.0$: Standard conditional generation (high diversity, modest prompt adherence).</li>
+      <li>$s \in [7.0, 9.0]$: The production sweet spot (striking visual fidelity, sharp prompt adherence).</li>
+      <li>$s > 15.0$: Severe over-saturation, color burn, and distorted geometric artifacts.</li>
     </ul>
 
-    <!-- SECTION 4: LATENT DIFFUSION (STABLE DIFFUSION) -->
+    <!-- SECTION 4: LATENT DIFFUSION -->
     <h3>4. Latent Diffusion Models (Stable Diffusion): Rombach et al., 2022</h3>
-    <p>Running diffusion directly in pixel space on a $512 \times 512 \times 3$ image ($786,432$ float dimensions) requires astronomical compute. Robin Rombach et al. introduced <strong>Latent Diffusion (Stable Diffusion)</strong>:</p>
+    <p>Executing diffusion in pixel space on a $512 \times 512 \times 3$ image requires calculating self-attention and convolutions across $786,432$ float coordinates at every step, creating enormous compute barriers. Robin Rombach et al. solved this with <strong>Latent Diffusion Models (LDM)</strong>:</p>
     <ol>
-      <li>A pre-trained Variational Autoencoder (VAE) compresses the $512 \times 512 \times 3$ image into a compact <strong>Latent Representation $z \in \mathbb{R}^{64 \times 64 \times 4}$ ($16,384$ dimensions)</strong>.</li>
-      <li>The diffusion forward and reverse denoising processes run <em>strictly inside the compressed latent space</em>, <strong>slashing computational cost by $48\times$</strong>!</li>
-      <li>Cross-Attention layers inside the U-Net condition on CLIP text embeddings.</li>
-      <li>Once the latent $z_0$ is denoised, the VAE decoder expands it back into full $512 \times 512$ pixel resolution in a single 10ms forward pass!</li>
+      <li><strong>Perceptual Compression:</strong> A pre-trained VAE encoder compresses the $512 \times 512 \times 3$ pixel image into a compact latent representation $\mathbf{z} \in \mathbb{R}^{64 \times 64 \times 4}$ ($16,384$ coordinates).</li>
+      <li><strong>Latent Diffusion:</strong> The forward noise schedule and reverse denoising U-Net run <em>exclusively inside the compressed $64 \times 64$ latent manifold</em>, <strong>slashing FLOP requirements by $48\times$</strong>!</li>
+      <li><strong>Cross-Attention Conditioning:</strong> Text tokens from a pre-trained text encoder (CLIP ViT-L/14 or T5) are injected into the U-Net through multi-head cross-attention blocks:
+      $$\mathbf{Q} = \mathbf{W}_Q \mathbf{z}_t, \quad \mathbf{K} = \mathbf{W}_K \mathbf{c}_{\text{text}}, \quad \mathbf{V} = \mathbf{W}_V \mathbf{c}_{\text{text}}$$</li>
+      <li><strong>High-Resolution Decoding:</strong> Once the latent representation $\mathbf{z}_0$ is completely denoised, the VAE decoder expands it back into the full $512 \times 512$ RGB pixel image in a single forward pass.</li>
     </ol>
 
-    <!-- SECTION 5: FAANG INTERVIEW PROBLEMS -->
+    <!-- SECTION 5: 4-TIER PRACTICE SUITE -->
     <h3>FAANG &amp; Tier-1 AI Interview Problems — Diffusion Models</h3>
 
+    <!-- PROBLEM 4.4.1: TIER 1 NUMERICAL WARMUP -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 4.4.1</span>
@@ -79,38 +99,342 @@
         <span class="company-tag company-openai">OpenAI</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Prove the closed-form forward sampling formula $\mathbf{x}_t = \sqrt{\bar{\alpha}_t} \mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_t} \boldsymbol{\epsilon}$ from the single-step Gaussian definition $\mathbf{x}_t = \sqrt{\alpha_t} \mathbf{x}_{t-1} + \sqrt{1 - \alpha_t} \boldsymbol{\epsilon}_{t-1}$.</p>
+        <p><strong>QUESTION (Closed-Form Forward Diffusion Theorem Proof):</strong> In DDPM, the single-step forward transition is defined as:</p>
+        $$\mathbf{x}_t = \sqrt{1 - \beta_t} \mathbf{x}_{t-1} + \sqrt{\beta_t} \boldsymbol{\epsilon}_{t-1}, \quad \boldsymbol{\epsilon}_{t-1} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$$
+        <p>Let $\alpha_t = 1 - \beta_t$ and $\bar{\alpha}_t = \prod_{s=1}^t \alpha_s$. Prove by mathematical induction that for any arbitrary timestep $t$, $\mathbf{x}_t$ can be sampled directly from $\mathbf{x}_0$ via the closed-form equation:</p>
+        $$\mathbf{x}_t = \sqrt{\bar{\alpha}_t} \mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_t} \boldsymbol{\epsilon}, \quad \text{where } \boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$$
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+        <div class="solution-label">✓ Complete First-Principles Mathematical Proof</div>
 
-        <p class="step"><strong>Step 1: Unroll One Step of the Recurrence:</strong><br>
-        Let $\mathbf{x}_t = \sqrt{\alpha_t} \mathbf{x}_{t-1} + \sqrt{1 - \alpha_t} \boldsymbol{\epsilon}_{t-1}$, where $\boldsymbol{\epsilon}_{t-1} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$.<br>
-        Similarly, for step $t-1$:
-        $$\mathbf{x}_{t-1} = \sqrt{\alpha_{t-1}} \mathbf{x}_{t-2} + \sqrt{1 - \alpha_{t-1}} \boldsymbol{\epsilon}_{t-2}$$
-        Substitute $\mathbf{x}_{t-1}$ into the equation for $\mathbf{x}_t$:
-        $$\mathbf{x}_t = \sqrt{\alpha_t} \left( \sqrt{\alpha_{t-1}} \mathbf{x}_{t-2} + \sqrt{1 - \alpha_{t-1}} \boldsymbol{\epsilon}_{t-2} \right) + \sqrt{1 - \alpha_t} \boldsymbol{\epsilon}_{t-1}$$
-        $$\mathbf{x}_t = \sqrt{\alpha_t \alpha_{t-1}} \mathbf{x}_{t-2} + \sqrt{\alpha_t (1 - \alpha_{t-1})} \boldsymbol{\epsilon}_{t-2} + \sqrt{1 - \alpha_t} \boldsymbol{\epsilon}_{t-1}$$</p>
+        <p class="step"><strong>Step 1: Base Case ($t=1$):</strong>
+        For $t=1$, $\bar{\alpha}_1 = \alpha_1 = 1 - \beta_1$.
+        The single-step transition gives:
+        $$\mathbf{x}_1 = \sqrt{\alpha_1} \mathbf{x}_0 + \sqrt{1 - \alpha_1} \boldsymbol{\epsilon}_0 = \sqrt{\bar{\alpha}_1} \mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_1} \boldsymbol{\epsilon}_0$$
+        The base case holds trivially.</p>
 
-        <p class="step"><strong>Step 2: Apply the Gaussian Sum Theorem:</strong><br>
-        Notice that $\boldsymbol{\epsilon}_{t-2}$ and $\boldsymbol{\epsilon}_{t-1}$ are independent standard Gaussians: $\mathcal{N}(\mathbf{0}, \mathbf{I})$.<br>
-        The linear combination of two independent Gaussians $a \mathbf{X} + b \mathbf{Y}$ where $\mathbf{X}, \mathbf{Y} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ is itself a Gaussian with zero mean and variance $a^2 + b^2$:<br>
-        $$\text{Combined Variance} = \left( \sqrt{\alpha_t (1 - \alpha_{t-1})} \right)^2 + \left( \sqrt{1 - \alpha_t} \right)^2 = \alpha_t (1 - \alpha_{t-1}) + 1 - \alpha_t = \alpha_t - \alpha_t \alpha_{t-1} + 1 - \alpha_t = 1 - \alpha_t \alpha_{t-1}$$
+        <p class="step"><strong>Step 2: Induction Hypothesis:</strong>
+        Assume the proposition holds for timestep $t-1$:
+        $$\mathbf{x}_{t-1} = \sqrt{\bar{\alpha}_{t-1}} \mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_{t-1}} \boldsymbol{\epsilon}_{t-2}^*, \quad \boldsymbol{\epsilon}_{t-2}^* \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$$</p>
+
+        <p class="step"><strong>Step 3: Inductive Step for Timestep $t$:</strong>
+        From the single-step Markov definition:
+        $$\mathbf{x}_t = \sqrt{\alpha_t} \mathbf{x}_{t-1} + \sqrt{1 - \alpha_t} \boldsymbol{\epsilon}_{t-1}, \quad \boldsymbol{\epsilon}_{t-1} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$$
+        Substitute the induction hypothesis for $\mathbf{x}_{t-1}$:
+        $$\mathbf{x}_t = \sqrt{\alpha_t} \left( \sqrt{\bar{\alpha}_{t-1}} \mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_{t-1}} \boldsymbol{\epsilon}_{t-2}^* \right) + \sqrt{1 - \alpha_t} \boldsymbol{\epsilon}_{t-1}$$
+        $$\mathbf{x}_t = \sqrt{\alpha_t \bar{\alpha}_{t-1}} \mathbf{x}_0 + \left( \sqrt{\alpha_t(1 - \bar{\alpha}_{t-1})} \boldsymbol{\epsilon}_{t-2}^* + \sqrt{1 - \alpha_t} \boldsymbol{\epsilon}_{t-1} \right)$$
+        Since $\bar{\alpha}_t = \alpha_t \bar{\alpha}_{t-1}$, the first term is $\sqrt{\bar{\alpha}_t} \mathbf{x}_0$.
+        Now consider the noise term $a \mathbf{X} + b \mathbf{Y}$ with $\mathbf{X}, \mathbf{Y} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ independent:
+        $$a = \sqrt{\alpha_t(1 - \bar{\alpha}_{t-1})}, \quad b = \sqrt{1 - \alpha_t}$$
+        The sum of two independent Gaussians is a Gaussian with variance $a^2 + b^2$:
+        $$\sigma_{\text{combined}}^2 = a^2 + b^2 = \alpha_t(1 - \bar{\alpha}_{t-1}) + (1 - \alpha_t) = \alpha_t - \alpha_t \bar{\alpha}_{t-1} + 1 - \alpha_t = 1 - \alpha_t \bar{\alpha}_{t-1} = 1 - \bar{\alpha}_t$$
         Therefore:
-        $$\sqrt{\alpha_t (1 - \alpha_{t-1})} \boldsymbol{\epsilon}_{t-2} + \sqrt{1 - \alpha_t} \boldsymbol{\epsilon}_{t-1} = \sqrt{1 - \alpha_t \alpha_{t-1}} \boldsymbol{\epsilon}'$$
-        Where $\boldsymbol{\epsilon}' \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$. Thus:
-        $$\mathbf{x}_t = \sqrt{\alpha_t \alpha_{t-1}} \mathbf{x}_{t-2} + \sqrt{1 - \alpha_t \alpha_{t-1}} \boldsymbol{\epsilon}'$$</p>
-
-        <p class="step"><strong>Step 3: Extend to $t$ Steps via Induction:</strong><br>
-        Repeating this recursive substitution all the way back to $t = 0$:
-        $$\mathbf{x}_t = \sqrt{\prod_{s=1}^t \alpha_s} \mathbf{x}_0 + \sqrt{1 - \prod_{s=1}^t \alpha_s} \boldsymbol{\epsilon}$$
-        Setting $\bar{\alpha}_t = \prod_{s=1}^t \alpha_s$:
-        $$\mathbf{x}_t = \sqrt{\bar{\alpha}_t} \mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_t} \boldsymbol{\epsilon}, \quad \text{where } \boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$$
-        <strong>Q.E.D. The forward diffusion marginal distribution is analytically exact for any arbitrary timestep!</strong></p>
+        $$\sqrt{\alpha_t(1 - \bar{\alpha}_{t-1})} \boldsymbol{\epsilon}_{t-2}^* + \sqrt{1 - \alpha_t} \boldsymbol{\epsilon}_{t-1} = \sqrt{1 - \bar{\alpha}_t} \boldsymbol{\epsilon}$$
+        where $\boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$.
+        Substituting this back:
+        $$\mathbf{x}_t = \sqrt{\bar{\alpha}_t} \mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_t} \boldsymbol{\epsilon} \quad \blacksquare$$
+        By mathematical induction, the closed-form marginal holds for all $t \in \{1, \dots, T\}$.</p>
       </div>
     </div>
 
-    <!-- SECTION 6: CODE LAB -->
+    <!-- PROBLEM 4.4.2: TIER 1 NUMERICAL WARMUP -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.4.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Forward Diffusion Alpha-Bar Numerical Drill):</strong> A toy diffusion model operating on 2D coordinates has clean sample $\mathbf{x}_0 = [1.0, -0.5]^T$. The variance schedule for the first two steps is $\beta_1 = 0.10, \beta_2 = 0.20$. The sampled standard Gaussian noise vectors are $\boldsymbol{\epsilon}_1 = [0.20, -0.40]^T$ (at $t=1$) and $\boldsymbol{\epsilon}_2 = [-0.10, 0.30]^T$ (at $t=2$).</p>
+        <ol>
+          <li>Calculate $\alpha_1, \alpha_2$, and cumulative products $\bar{\alpha}_1, \bar{\alpha}_2$.</li>
+          <li>Calculate $\mathbf{x}_1$ using the step-by-step Markov transition $\mathbf{x}_1 = \sqrt{\alpha_1} \mathbf{x}_0 + \sqrt{1 - \alpha_1} \boldsymbol{\epsilon}_1$.</li>
+          <li>Calculate $\mathbf{x}_2$ using the step-by-step Markov transition $\mathbf{x}_2 = \sqrt{\alpha_2} \mathbf{x}_1 + \sqrt{1 - \alpha_2} \boldsymbol{\epsilon}_2$.</li>
+          <li>Construct the single equivalent Gaussian noise vector $\boldsymbol{\epsilon}^*$ such that the direct shortcut $\sqrt{\bar{\alpha}_2} \mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_2} \boldsymbol{\epsilon}^*$ matches $\mathbf{x}_2$ identically.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Numerical Verification</div>
+
+        <p class="step"><strong>Step 1: Noise Schedule Parameters:</strong>
+        <ul>
+          <li>$\alpha_1 = 1 - \beta_1 = 1 - 0.10 = \mathbf{0.90}$</li>
+          <li>$\alpha_2 = 1 - \beta_2 = 1 - 0.20 = \mathbf{0.80}$</li>
+          <li>$\bar{\alpha}_1 = \alpha_1 = \mathbf{0.90}$</li>
+          <li>$\bar{\alpha}_2 = \alpha_1 \times \alpha_2 = 0.90 \times 0.80 = \mathbf{0.72}$</li>
+        </ul>
+        Square roots:
+        $$\sqrt{\alpha_1} = \sqrt{0.90} \approx 0.94868, \quad \sqrt{1 - \alpha_1} = \sqrt{0.10} \approx 0.31623$$
+        $$\sqrt{\alpha_2} = \sqrt{0.80} \approx 0.89443, \quad \sqrt{1 - \alpha_2} = \sqrt{0.20} \approx 0.44721$$
+        $$\sqrt{\bar{\alpha}_2} = \sqrt{0.72} \approx 0.84853, \quad \sqrt{1 - \bar{\alpha}_2} = \sqrt{0.28} \approx 0.52915$$</p>
+
+        <p class="step"><strong>Step 2: Step-by-Step Transition to $\mathbf{x}_1$:</strong>
+        $$\mathbf{x}_1 = \sqrt{0.90} \begin{bmatrix} 1.0 \\ -0.5 \end{bmatrix} + \sqrt{0.10} \begin{bmatrix} 0.20 \\ -0.40 \end{bmatrix} = \begin{bmatrix} 0.94868 + 0.31623(0.20) \\ -0.47434 + 0.31623(-0.40) \end{bmatrix} = \begin{bmatrix} 0.94868 + 0.06325 \\ -0.47434 - 0.12649 \end{bmatrix} = \mathbf{\begin{bmatrix} 1.01193 \\ -0.60083 \end{bmatrix}}$$</p>
+
+        <p class="step"><strong>Step 3: Step-by-Step Transition to $\mathbf{x}_2$:</strong>
+        $$\mathbf{x}_2 = \sqrt{0.80} \mathbf{x}_1 + \sqrt{0.20} \boldsymbol{\epsilon}_2 = 0.89443 \begin{bmatrix} 1.01193 \\ -0.60083 \end{bmatrix} + 0.44721 \begin{bmatrix} -0.10 \\ 0.30 \end{bmatrix} = \begin{bmatrix} 0.90510 - 0.04472 \\ -0.53740 + 0.13416 \end{bmatrix} = \mathbf{\begin{bmatrix} 0.86038 \\ -0.40324 \end{bmatrix}}$$</p>
+
+        <p class="step"><strong>Step 4: Direct Shortcut Verification:</strong>
+        We equate $\mathbf{x}_2 = \sqrt{\bar{\alpha}_2} \mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_2} \boldsymbol{\epsilon}^*$:
+        $$\begin{bmatrix} 0.86038 \\ -0.40324 \end{bmatrix} = 0.84853 \begin{bmatrix} 1.0 \\ -0.5 \end{bmatrix} + 0.52915 \boldsymbol{\epsilon}^* = \begin{bmatrix} 0.84853 \\ -0.42426 \end{bmatrix} + 0.52915 \boldsymbol{\epsilon}^*$$
+        Solving for $\boldsymbol{\epsilon}^*$:
+        $$\boldsymbol{\epsilon}^* = \frac{1}{0.52915} \left( \begin{bmatrix} 0.86038 \\ -0.40324 \end{bmatrix} - \begin{bmatrix} 0.84853 \\ -0.42426 \end{bmatrix} \right) = \frac{1}{0.52915} \begin{bmatrix} 0.01185 \\ 0.02102 \end{bmatrix} \approx \mathbf{\begin{bmatrix} 0.0224 \\ 0.0397 \end{bmatrix}}$$
+        This proves that the composite multi-step transition matches the single direct Gaussian step $\mathbf{x}_2 = \sqrt{\bar{\alpha}_2}\mathbf{x}_0 + \sqrt{1-\bar{\alpha}_2}\boldsymbol{\epsilon}^*$ identically.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.4.3: TIER 2 APPLIED ENGINEERING -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.4.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-stability">Stability AI</span>
+        <span class="company-tag company-runway">Runway</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Classifier-Free Guidance Extrapolation Trace):</strong> During a reverse diffusion step, the U-Net predicts two 2D noise vectors for a noisy latent coordinate:</p>
+        <ul>
+          <li>Unconditional noise prediction: $\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, \emptyset) = [0.12, -0.08]^T$</li>
+          <li>Text-conditioned noise prediction: $\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, c) = [0.44, -0.32]^T$</li>
+        </ul>
+        <ol>
+          <li>Compute the guided noise prediction $\tilde{\boldsymbol{\epsilon}}_\theta$ for guidance scales $s = 1.0$ (standard conditional), $s = 7.5$ (production default), and $s = 15.0$ (over-saturated).</li>
+          <li>Calculate the Euclidean norm $\|\tilde{\boldsymbol{\epsilon}}_\theta\|_2$ across all three guidance scales.</li>
+          <li>Explain why excessively large guidance scales ($s > 15$) trigger the visual artifact known as <strong>Latent Clamping / Color Burn</strong>, and how Dynamic Thresholding (Imagen) resolves it.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step CFG Extrapolation Trace</div>
+
+        <p class="step"><strong>Step 1: Guided Noise Vector Calculations:</strong>
+        Formula: $\tilde{\boldsymbol{\epsilon}}_\theta = \boldsymbol{\epsilon}_\emptyset + s (\boldsymbol{\epsilon}_c - \boldsymbol{\epsilon}_\emptyset)$.
+        Difference vector:
+        $$\boldsymbol{\Delta} = \boldsymbol{\epsilon}_c - \boldsymbol{\epsilon}_\emptyset = \begin{bmatrix} 0.44 - 0.12 \\ -0.32 - (-0.08) \end{bmatrix} = \begin{bmatrix} 0.32 \\ -0.24 \end{bmatrix}$$
+        <ul>
+          <li><strong>For $s = 1.0$:</strong>
+          $$\tilde{\boldsymbol{\epsilon}}_{1.0} = \boldsymbol{\epsilon}_\emptyset + 1.0 \boldsymbol{\Delta} = \boldsymbol{\epsilon}_c = \mathbf{\begin{bmatrix} 0.44 \\ -0.32 \end{bmatrix}}$$</li>
+          <li><strong>For $s = 7.5$:</strong>
+          $$\tilde{\boldsymbol{\epsilon}}_{7.5} = \begin{bmatrix} 0.12 \\ -0.08 \end{bmatrix} + 7.5 \begin{bmatrix} 0.32 \\ -0.24 \end{bmatrix} = \begin{bmatrix} 0.12 + 2.40 \\ -0.08 - 1.80 \end{bmatrix} = \mathbf{\begin{bmatrix} 2.52 \\ -1.88 \end{bmatrix}}$$</li>
+          <li><strong>For $s = 15.0$:</strong>
+          $$\tilde{\boldsymbol{\epsilon}}_{15.0} = \begin{bmatrix} 0.12 \\ -0.08 \end{bmatrix} + 15.0 \begin{bmatrix} 0.32 \\ -0.24 \end{bmatrix} = \begin{bmatrix} 0.12 + 4.80 \\ -0.08 - 3.60 \end{bmatrix} = \mathbf{\begin{bmatrix} 4.92 \\ -3.68 \end{bmatrix}}$$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2: Vector Norm Growth:</strong>
+        <ul>
+          <li>$\|\tilde{\boldsymbol{\epsilon}}_{1.0}\|_2 = \sqrt{0.44^2 + (-0.32)^2} = \sqrt{0.1936 + 0.1024} = \sqrt{0.296} \approx \mathbf{0.544}$</li>
+          <li>$\|\tilde{\boldsymbol{\epsilon}}_{7.5}\|_2 = \sqrt{2.52^2 + (-1.88)^2} = \sqrt{6.3504 + 3.5344} = \sqrt{9.8848} \approx \mathbf{3.144}$</li>
+          <li>$\|\tilde{\boldsymbol{\epsilon}}_{15.0}\|_2 = \sqrt{4.92^2 + (-3.68)^2} = \sqrt{24.2064 + 13.5424} = \sqrt{37.7488} \approx \mathbf{6.144}$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 3: Latent Clamping Pathology &amp; Resolution:</strong>
+        When $s > 15$, the predicted noise norm explodes ($6.14 \gg 1.0$). In the reverse step:
+        $$\hat{\mathbf{x}}_0 = \frac{\mathbf{x}_t - \sqrt{1 - \bar{\alpha}_t} \tilde{\boldsymbol{\epsilon}}}{\sqrt{\bar{\alpha}_t}}$$
+        An excessively large $\tilde{\boldsymbol{\epsilon}}$ drives the predicted clean latent coordinates $\hat{\mathbf{x}}_0$ far outside the standard Gaussian support (e.g. coordinates reach $\pm 5.0$ instead of $[-1, 1]$). When these extreme values are converted to pixel space by the VAE decoder and clamped to $[0, 255]$, color channels saturate to pure neon cyan, yellow, or blown-out white (<em>color burn</em>).
+        <strong>Dynamic Thresholding (Saharia et al., Imagen):</strong> Instead of clipping latents to a fixed $[-1, 1]$, compute the $99.5$-th percentile absolute value $s_{\text{thresh}} = \text{percentile}(|\hat{\mathbf{x}}_0|, 99.5)$. If $s_{\text{thresh}} > 1.0$, divide the entire latent map by $s_{\text{thresh}}$: $\hat{\mathbf{x}}_0 \leftarrow \hat{\mathbf{x}}_0 / s_{\text{thresh}}$, preserving relative color contrasts without clipping artifacts.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.4.4: TIER 2 APPLIED ENGINEERING -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.4.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-midjourney">Midjourney</span>
+        <span class="company-tag company-bytedance">ByteDance</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (DDIM Deterministic Inversion &amp; ODE Step Trace):</strong> Standard DDPM sampling requires $T = 1,000$ sequential stochastic evaluations. Denoising Diffusion Implicit Models (DDIM; Song et al., 2020) generalize DDPM to a non-Markovian deterministic ODE with sampling parameter $\sigma_t = 0$:</p>
+        $$\mathbf{x}_{\tau_{i-1}} = \sqrt{\bar{\alpha}_{\tau_{i-1}}} \underbrace{\left( \frac{\mathbf{x}_{\tau_i} - \sqrt{1 - \bar{\alpha}_{\tau_i}} \boldsymbol{\epsilon}_\theta(\mathbf{x}_{\tau_i})}{\sqrt{\bar{\alpha}_{\tau_i}}} \right)}_{\hat{\mathbf{x}}_0} + \sqrt{1 - \bar{\alpha}_{\tau_{i-1}}} \boldsymbol{\epsilon}_\theta(\mathbf{x}_{\tau_i})$$
+        <p>Suppose an accelerated scheduler executes an inference trajectory skipping from timestep $\tau_i = 600$ to $\tau_{i-1} = 550$. The parameters are:</p>
+        $$\bar{\alpha}_{600} = 0.36 \implies \sqrt{\bar{\alpha}_{600}} = 0.60, \quad \sqrt{1 - \bar{\alpha}_{600}} = 0.80$$
+        $$\bar{\alpha}_{550} = 0.49 \implies \sqrt{\bar{\alpha}_{550}} = 0.70, \quad \sqrt{1 - \bar{\alpha}_{550}} = \sqrt{0.51} \approx 0.71414$$
+        <p>Given current noisy state $\mathbf{x}_{600} = [1.40, -0.60]^T$ and U-Net noise prediction $\boldsymbol{\epsilon}_\theta = [1.00, -0.50]^T$:</p>
+        <ol>
+          <li>Calculate the predicted clean sample $\hat{\mathbf{x}}_0$.</li>
+          <li>Calculate the updated state $\mathbf{x}_{550}$.</li>
+          <li>Explain why setting $\sigma_t = 0$ allows exact deterministic image inversion ($\mathbf{x}_0 \to \mathbf{x}_T \to \mathbf{x}_0$) for real image editing.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step DDIM Trajectory Computation</div>
+
+        <p class="step"><strong>Step 1: Clean Sample Prediction $\hat{\mathbf{x}}_0$:</strong>
+        $$\hat{\mathbf{x}}_0 = \frac{\mathbf{x}_{600} - \sqrt{1 - \bar{\alpha}_{600}} \boldsymbol{\epsilon}_\theta}{\sqrt{\bar{\alpha}_{600}}} = \frac{\begin{bmatrix} 1.40 \\ -0.60 \end{bmatrix} - 0.80 \begin{bmatrix} 1.00 \\ -0.50 \end{bmatrix}}{0.60} = \frac{\begin{bmatrix} 1.40 - 0.80 \\ -0.60 + 0.40 \end{bmatrix}}{0.60} = \frac{\begin{bmatrix} 0.60 \\ -0.20 \end{bmatrix}}{0.60} = \mathbf{\begin{bmatrix} 1.0000 \\ -0.3333 \end{bmatrix}}$$</p>
+
+        <p class="step"><strong>Step 2: DDIM Step to $\tau_{i-1} = 550$:</strong>
+        $$\mathbf{x}_{550} = \sqrt{\bar{\alpha}_{550}} \hat{\mathbf{x}}_0 + \sqrt{1 - \bar{\alpha}_{550}} \boldsymbol{\epsilon}_\theta$$
+        $$\mathbf{x}_{550} = 0.70 \begin{bmatrix} 1.0000 \\ -0.3333 \end{bmatrix} + 0.71414 \begin{bmatrix} 1.0000 \\ -0.5000 \end{bmatrix} = \begin{bmatrix} 0.7000 \\ -0.2333 \end{bmatrix} + \begin{bmatrix} 0.71414 \\ -0.35707 \end{bmatrix} = \mathbf{\begin{bmatrix} 1.4141 \\ -0.5904 \end{bmatrix}}$$</p>
+
+        <p class="step"><strong>Step 3: Deterministic Inversion Mechanics:</strong>
+        When $\sigma_t = 0$, the stochastic noise injection term $\sigma_t \boldsymbol{\epsilon}$ vanishes completely. The reverse diffusion process becomes the exact numerical discretization of a <strong>deterministic Probability Flow ODE</strong> (Song et al., 2020). Because an ODE has no random stochasticity, time can be run backward and forward with zero entropy gain:
+        <ul>
+          <li><strong>Forward Inversion ($\mathbf{x}_0 \to \mathbf{x}_T$):</strong> Integrating the ODE backward in time maps any real input image $\mathbf{x}_0$ to its unique, deterministic latent noise representation $\mathbf{x}_T$.</li>
+          <li><strong>Image Editing:</strong> Once inverted, an engineer modifies the text prompt $c_{\text{new}}$ (e.g. adding <code>"wearing sunglasses"</code>) and runs the reverse ODE from $\mathbf{x}_T$ to synthesize the edited image while perfectly preserving non-target facial identity!</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.4.5: TIER 3 MATHEMATICAL PROOF -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.4.5</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-deepmind">DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Mathematical Proof of the Gaussian Reverse Conditional Posterior):</strong> In DDPM, the reverse step is conditioned on the clean data sample $\mathbf{x}_0$. Applying Bayes' Rule:</p>
+        $$q(\mathbf{x}_{t-1} \mid \mathbf{x}_t, \mathbf{x}_0) = q(\mathbf{x}_t \mid \mathbf{x}_{t-1}, \mathbf{x}_0) \frac{q(\mathbf{x}_{t-1} \mid \mathbf{x}_0)}{q(\mathbf{x}_t \mid \mathbf{x}_0)}$$
+        <ol>
+          <li>Prove that $q(\mathbf{x}_{t-1} \mid \mathbf{x}_t, \mathbf{x}_0)$ is an exact Gaussian distribution $\mathcal{N}(\tilde{\boldsymbol{\mu}}_t, \tilde{\beta}_t \mathbf{I})$.</li>
+          <li>Derive the analytical formulas for the posterior mean $\tilde{\boldsymbol{\mu}}_t$ and posterior variance $\tilde{\beta}_t$:
+          $$\tilde{\boldsymbol{\mu}}_t = \frac{\sqrt{\bar{\alpha}_{t-1}}\beta_t}{1 - \bar{\alpha}_t} \mathbf{x}_0 + \frac{\sqrt{\alpha_t}(1 - \bar{\alpha}_{t-1})}{1 - \bar{\alpha}_t} \mathbf{x}_t, \quad \tilde{\beta}_t = \frac{1 - \bar{\alpha}_{t-1}}{1 - \bar{\alpha}_t} \beta_t$$</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete First-Principles Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Express Probability Densities in Exponential Form:</strong>
+        All three terms in Bayes' rule are Gaussians:
+        $$q(\mathbf{x}_t \mid \mathbf{x}_{t-1}) \propto \exp\left( -\frac{\|\mathbf{x}_t - \sqrt{\alpha_t} \mathbf{x}_{t-1}\|^2}{2\beta_t} \right)$$
+        $$q(\mathbf{x}_{t-1} \mid \mathbf{x}_0) \propto \exp\left( -\frac{\|\mathbf{x}_{t-1} - \sqrt{\bar{\alpha}_{t-1}} \mathbf{x}_0\|^2}{2(1 - \bar{\alpha}_{t-1})} \right)$$
+        $$q(\mathbf{x}_t \mid \mathbf{x}_0) \propto \exp\left( -\frac{\|\mathbf{x}_t - \sqrt{\bar{\alpha}_t} \mathbf{x}_0\|^2}{2(1 - \bar{\alpha}_t)} \right)$$
+        Multiplying and dividing densities:
+        $$q(\mathbf{x}_{t-1} \mid \mathbf{x}_t, \mathbf{x}_0) \propto \exp\left( -\frac{1}{2} \left[ \frac{\|\mathbf{x}_t - \sqrt{\alpha_t} \mathbf{x}_{t-1}\|^2}{\beta_t} + \frac{\|\mathbf{x}_{t-1} - \sqrt{\bar{\alpha}_{t-1}} \mathbf{x}_0\|^2}{1 - \bar{\alpha}_{t-1}} - \frac{\|\mathbf{x}_t - \sqrt{\bar{\alpha}_t} \mathbf{x}_0\|^2}{1 - \bar{\alpha}_t} \right] \right)$$</p>
+
+        <p class="step"><strong>Step 2: Complete the Square with Respect to $\mathbf{x}_{t-1}$:</strong>
+        Collect all terms quadratic in $\mathbf{x}_{t-1}$:
+        $$\text{Quadratic Term} = \mathbf{x}_{t-1}^T \mathbf{x}_{t-1} \left( \frac{\alpha_t}{\beta_t} + \frac{1}{1 - \bar{\alpha}_{t-1}} \right)$$
+        Find a common denominator:
+        $$\frac{\alpha_t(1 - \bar{\alpha}_{t-1}) + \beta_t}{\beta_t(1 - \bar{\alpha}_{t-1})} = \frac{\alpha_t - \alpha_t \bar{\alpha}_{t-1} + 1 - \alpha_t}{\beta_t(1 - \bar{\alpha}_{t-1})} = \frac{1 - \bar{\alpha}_t}{\beta_t(1 - \bar{\alpha}_{t-1})}$$
+        Since a Gaussian density has quadratic form $\exp(-\frac{1}{2\tilde{\beta}_t} \|\mathbf{x}_{t-1} - \tilde{\boldsymbol{\mu}}_t\|^2)$, the coefficient of $\mathbf{x}_{t-1}^2$ is $\frac{1}{\tilde{\beta}_t}$:
+        $$\frac{1}{\tilde{\beta}_t} = \frac{1 - \bar{\alpha}_t}{\beta_t(1 - \bar{\alpha}_{t-1})} \implies \mathbf{\tilde{\beta}_t = \frac{1 - \bar{\alpha}_{t-1}}{1 - \bar{\alpha}_t} \beta_t} \quad \blacksquare$$</p>
+
+        <p class="step"><strong>Step 3: Collect Linear Terms in $\mathbf{x}_{t-1}$:</strong>
+        The linear term in the exponent is:
+        $$\text{Linear Term} = 2 \mathbf{x}_{t-1}^T \left( \frac{\sqrt{\alpha_t}}{\beta_t} \mathbf{x}_t + \frac{\sqrt{\bar{\alpha}_{t-1}}}{1 - \bar{\alpha}_{t-1}} \mathbf{x}_0 \right)$$
+        By matching with the expansion of $-\frac{1}{2\tilde{\beta}_t} \|\mathbf{x}_{t-1} - \tilde{\boldsymbol{\mu}}_t\|^2 = -\frac{1}{2\tilde{\beta}_t} (\mathbf{x}_{t-1}^2 - 2 \mathbf{x}_{t-1}^T \tilde{\boldsymbol{\mu}}_t + \dots)$, the linear coefficient equals $\frac{\tilde{\boldsymbol{\mu}}_t}{\tilde{\beta}_t}$:
+        $$\frac{\tilde{\boldsymbol{\mu}}_t}{\tilde{\beta}_t} = \frac{\sqrt{\alpha_t}}{\beta_t} \mathbf{x}_t + \frac{\sqrt{\bar{\alpha}_{t-1}}}{1 - \bar{\alpha}_{t-1}} \mathbf{x}_0$$
+        Multiplying both sides by $\tilde{\beta}_t = \frac{\beta_t(1 - \bar{\alpha}_{t-1})}{1 - \bar{\alpha}_t}$:
+        $$\tilde{\boldsymbol{\mu}}_t = \left(\frac{\beta_t(1 - \bar{\alpha}_{t-1})}{1 - \bar{\alpha}_t}\right) \left[ \frac{\sqrt{\alpha_t}}{\beta_t} \mathbf{x}_t + \frac{\sqrt{\bar{\alpha}_{t-1}}}{1 - \bar{\alpha}_{t-1}} \mathbf{x}_0 \right]$$
+        Multiplying through:
+        $$\tilde{\boldsymbol{\mu}}_t = \frac{\sqrt{\alpha_t}(1 - \bar{\alpha}_{t-1})}{1 - \bar{\alpha}_t} \mathbf{x}_t + \frac{\sqrt{\bar{\alpha}_{t-1}} \beta_t}{1 - \bar{\alpha}_t} \mathbf{x}_0 \quad \blacksquare$$
+        The posterior distribution is strictly Gaussian, with analytical mean $\tilde{\boldsymbol{\mu}}_t$ and variance $\tilde{\beta}_t$.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.4.6: TIER 3 MATHEMATICAL PROOF -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.4.6</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-stanford">Stanford</span>
+        <span class="company-tag company-meta">Meta FAIR</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Mathematical Equivalence of DDPM and Denoising Score Matching):</strong> In Score-Based Generative Modeling (Song &amp; Ermon, 2019), a neural network $\mathbf{s}_\theta(\mathbf{x}_t, t)$ is trained to approximate the Stein score of the perturbed data density: $\mathbf{s}_\theta(\mathbf{x}_t, t) \approx \nabla_{\mathbf{x}_t} \ln q(\mathbf{x}_t)$.</p>
+        <ol>
+          <li>For the Gaussian forward marginal $q(\mathbf{x}_t \mid \mathbf{x}_0) = \mathcal{N}(\sqrt{\bar{\alpha}_t} \mathbf{x}_0, (1 - \bar{\alpha}_t) \mathbf{I})$, calculate the exact analytical score $\nabla_{\mathbf{x}_t} \ln q(\mathbf{x}_t \mid \mathbf{x}_0)$ in terms of injected noise $\boldsymbol{\epsilon}$.</li>
+          <li>Prove that Ho et al.'s noise prediction model $\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t)$ and the score matching model $\mathbf{s}_\theta(\mathbf{x}_t, t)$ are related by:
+          $$\mathbf{s}_\theta(\mathbf{x}_t, t) = -\frac{\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t)}{\sqrt{1 - \bar{\alpha}_t}}$$</li>
+          <li>Prove that the DDPM loss $\mathcal{L}_{\text{simple}} = \|\boldsymbol{\epsilon} - \boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t)\|^2$ is equivalent to Denoising Score Matching weighted by $\sigma_t^2 = 1 - \bar{\alpha}_t$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Score Matching Equivalence Proof</div>
+
+        <p class="step"><strong>Step 1: Analytical Score of the Forward Marginal:</strong>
+        The Gaussian probability density is:
+        $$q(\mathbf{x}_t \mid \mathbf{x}_0) = \frac{1}{(2\pi(1 - \bar{\alpha}_t))^{D/2}} \exp\left( -\frac{\|\mathbf{x}_t - \sqrt{\bar{\alpha}_t} \mathbf{x}_0\|_2^2}{2(1 - \bar{\alpha}_t)} \right)$$
+        Taking the natural logarithm:
+        $$\ln q(\mathbf{x}_t \mid \mathbf{x}_0) = -\frac{D}{2} \ln(2\pi(1 - \bar{\alpha}_t)) - \frac{\|\mathbf{x}_t - \sqrt{\bar{\alpha}_t} \mathbf{x}_0\|_2^2}{2(1 - \bar{\alpha}_t)}$$
+        Differentiating with respect to $\mathbf{x}_t$:
+        $$\nabla_{\mathbf{x}_t} \ln q(\mathbf{x}_t \mid \mathbf{x}_0) = -\frac{\mathbf{x}_t - \sqrt{\bar{\alpha}_t} \mathbf{x}_0}{1 - \bar{\alpha}_t}$$
+        Using the reparameterization $\mathbf{x}_t = \sqrt{\bar{\alpha}_t} \mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_t} \boldsymbol{\epsilon} \implies \mathbf{x}_t - \sqrt{\bar{\alpha}_t} \mathbf{x}_0 = \sqrt{1 - \bar{\alpha}_t} \boldsymbol{\epsilon}$:
+        $$\nabla_{\mathbf{x}_t} \ln q(\mathbf{x}_t \mid \mathbf{x}_0) = -\frac{\sqrt{1 - \bar{\alpha}_t} \boldsymbol{\epsilon}}{1 - \bar{\alpha}_t} = \mathbf{-\frac{\boldsymbol{\epsilon}}{\sqrt{1 - \bar{\alpha}_t}}} \quad \blacksquare$$</p>
+
+        <p class="step"><strong>Step 2: Relationship Between Score and Noise Prediction:</strong>
+        Setting the score network to model the true score $\mathbf{s}_\theta(\mathbf{x}_t, t) \approx \nabla_{\mathbf{x}_t} \ln q(\mathbf{x}_t \mid \mathbf{x}_0)$:
+        $$\mathbf{s}_\theta(\mathbf{x}_t, t) = -\frac{\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t)}{\sqrt{1 - \bar{\alpha}_t}} \iff \boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t) = -\sqrt{1 - \bar{\alpha}_t} \mathbf{s}_\theta(\mathbf{x}_t, t) \quad \blacksquare$$</p>
+
+        <p class="step"><strong>Step 3: Loss Function Equivalence:</strong>
+        The Denoising Score Matching objective with positive weighting function $\lambda(t)$ is:
+        $$\mathcal{L}_{\text{DSM}} = \mathbb{E} \left[ \lambda(t) \left\| \mathbf{s}_\theta(\mathbf{x}_t, t) - \nabla_{\mathbf{x}_t} \ln q(\mathbf{x}_t \mid \mathbf{x}_0) \right\|_2^2 \right]$$
+        Substituting $\nabla_{\mathbf{x}_t} \ln q = -\frac{\boldsymbol{\epsilon}}{\sqrt{1 - \bar{\alpha}_t}}$ and $\mathbf{s}_\theta = -\frac{\boldsymbol{\epsilon}_\theta}{\sqrt{1 - \bar{\alpha}_t}}$:
+        $$\mathcal{L}_{\text{DSM}} = \mathbb{E} \left[ \lambda(t) \left\| -\frac{\boldsymbol{\epsilon}_\theta}{\sqrt{1 - \bar{\alpha}_t}} - \left(-\frac{\boldsymbol{\epsilon}}{\sqrt{1 - \bar{\alpha}_t}}\right) \right\|_2^2 \right] = \mathbb{E} \left[ \frac{\lambda(t)}{1 - \bar{\alpha}_t} \left\| \boldsymbol{\epsilon} - \boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t) \right\|_2^2 \right]$$
+        Setting the weight schedule to $\lambda(t) = 1 - \bar{\alpha}_t = \sigma_t^2$:
+        $$\mathcal{L}_{\text{DSM}} = \mathbb{E} \left[ \left\| \boldsymbol{\epsilon} - \boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t) \right\|_2^2 \right] \equiv \mathcal{L}_{\text{simple}} \quad \blacksquare$$
+        This proves that DDPM noise prediction is <strong>identical to variance-weighted Denoising Score Matching</strong>.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.4.7: TIER 4 CONCEPTUAL TRAP MCQ -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.4.7</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (The Linear vs. Cosine Variance Schedule Pathology):</strong> In their 2021 work <em>"Improved Denoising Diffusion Probabilistic Models"</em>, Nichol &amp; Dhariwal identified that Ho et al.'s original linear variance schedule ($\beta_1 = 10^{-4}$ to $\beta_T = 0.02$) destroys image information too rapidly early in the forward process. Why does the <strong>Cosine Schedule</strong>:</p>
+        $$\bar{\alpha}_t = \frac{f(t)}{f(0)}, \quad f(t) = \cos^2\left( \frac{t/T + s}{1 + s} \cdot \frac{\pi}{2} \right)$$
+        <p>produce superior generation fidelity?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> The linear schedule causes the GPU to divide by zero at $t=1000$; the cosine schedule replaces division with trigonometry.</li>
+          <li><strong>(B)</strong> Under the linear schedule, $\bar{\alpha}_t$ drops precipitously in the first $20\%$ of timesteps ($t \in [1, 200]$), destroying fine edge and texture details prematurely. The cosine schedule enforces a near-linear decay of $\bar{\alpha}_t$ across the middle of the trajectory while flattening out gracefully near $t=0$ (protecting high-frequency details) and near $t=T$ (ensuring smooth noise saturation).</li>
+          <li><strong>(C)</strong> The cosine schedule eliminates the need for the U-Net architecture.</li>
+          <li><strong>(D)</strong> The linear schedule has negative eigenvalues; cosine transformations guarantee positive semi-definiteness.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: (B)</div>
+
+        <p class="step"><strong>Exhaustive Diffusion Analysis:</strong>
+        <ul>
+          <li><strong>(B) is CORRECT:</strong> In the original DDPM linear schedule, $\beta_t$ increases linearly from $10^{-4}$ to $0.02$. Because $\bar{\alpha}_t = \prod (1 - \beta_s)$, $\bar{\alpha}_t$ drops at an accelerating exponential rate. By step $t = 200$ (just $20\%$ of the process), $\bar{\alpha}_t$ has already dropped to $\approx 0.7$, and by $t = 500$, it drops below $0.1$. This destroys high-frequency edge and texture information far too early, leaving the model spending $80\%$ of its capacity on nearly pure Gaussian static. The <strong>Cosine Schedule</strong> uses a squared cosine function with small offset $s = 0.008$. It begins with a very gentle slope near $t=0$ ($\frac{d\bar{\alpha}}{dt} \approx 0$), preserving subtle textural nuance in early steps, maintains a steady linear drop throughout the middle, and flattens out smoothly at $t=T$, ensuring the network learns multi-scale visual features symmetrically.</li>
+          <li><strong>(A) is INCORRECT:</strong> $\beta_T = 0.02$, so $1 - \beta_t = 0.98 \ne 0$; there is no division by zero in the linear schedule.</li>
+          <li><strong>(C) is INCORRECT:</strong> The variance schedule determines the noising trajectory; it does not replace or eliminate the U-Net denoiser.</li>
+          <li><strong>(D) is INCORRECT:</strong> $\beta_t$ and $\bar{\alpha}_t$ are scalar parameters, not matrices with eigenvalue spectra.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.4.8: TIER 4 CONCEPTUAL TRAP MCQ -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.4.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-stability">Stability AI</span>
+        <span class="company-tag company-blackforest">Black Forest Labs</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (The VAE Latent Scale Factor in Stable Diffusion):</strong> In Stable Diffusion (Rombach et al., 2022), when passing training images through the pre-trained VAE encoder, the output latents $\mathbf{z}$ are multiplied by a magic scaling constant before diffusion training:</p>
+        $$\mathbf{z}_{\text{scaled}} = 0.18215 \cdot \mathbf{z}_{\text{VAE}}$$
+        <p>Why is multiplying by the scaling factor $0.18215$ (or dividing by $\approx 5.489$) mathematically necessary for stable diffusion training?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> $0.18215$ represents the Planck constant in visual frequency units.</li>
+          <li><strong>(B)</strong> The pre-trained VAE latent space was regularized with a weak KL penalty ($D_{\text{KL}}$ weight $\approx 10^{-6}$), causing the empirical variance of encoded image latents $\operatorname{Var}(\mathbf{z}_{\text{VAE}})$ to be approximately $5.489^2 \approx 30.13$. Because standard DDPM schedules assume input data has unit variance $\operatorname{Var}(\mathbf{x}_0) \approx 1.0$, feeding unscaled latents causes the initial signal-to-noise ratio $\frac{\bar{\alpha}_t}{1 - \bar{\alpha}_t}$ to mismatch by $30\times$, completely destroying the noise schedule. Scaling by $0.18215 \approx \frac{1}{\sqrt{30.13}}$ forces $\operatorname{Var}(\mathbf{z}_{\text{scaled}}) \approx 1.0$.</li>
+          <li><strong>(C)</strong> It converts 16-bit floating point numbers to 8-bit integers without overflow.</li>
+          <li><strong>(D)</strong> It acts as a learning rate multiplier for the CLIP text encoder.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: (B)</div>
+
+        <p class="step"><strong>Exhaustive Latent Diffusion Analysis:</strong>
+        <ul>
+          <li><strong>(B) is CORRECT:</strong> Standard diffusion theory (DDPM) is formulated on the fundamental mathematical assumption that clean data $\mathbf{x}_0$ is normalized to zero mean and <strong>unit variance</strong> ($\mathbb{E}[\mathbf{x}_0] = 0, \operatorname{Var}(\mathbf{x}_0) \approx 1.0$). This ensures that when $\mathbf{x}_t = \sqrt{\bar{\alpha}_t} \mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_t} \boldsymbol{\epsilon}$ is formed with $\boldsymbol{\epsilon} \sim \mathcal{N}(0, 1)$, the total variance of $\mathbf{x}_t$ is strictly preserved at $1.0$ across all timesteps:
+          $$\operatorname{Var}(\mathbf{x}_t) = \bar{\alpha}_t \operatorname{Var}(\mathbf{x}_0) + (1 - \bar{\alpha}_t) \operatorname{Var}(\boldsymbol{\epsilon}) = \bar{\alpha}_t(1) + (1 - \bar{\alpha}_t)(1) = 1.0$$
+          However, when the authors trained the VAE autoencoder, they used a very small KL regularization weight ($\beta \approx 10^{-6}$) to avoid blurry reconstructions. Consequently, the encoder latents did not conform to $\mathcal{N}(0, 1)$; their empirical standard deviation on the training set was $\sigma_{\text{latent}} \approx 5.4899$. If left unscaled, $\operatorname{Var}(\mathbf{x}_0) \approx 30.14$. At $t = 900$ where $\bar{\alpha} = 0.05$, the data term would still dominate the noise ($\bar{\alpha} \times 30.14 \approx 1.5 > 0.95$), breaking the noise schedule! Multiplying by $\frac{1}{5.4899} \approx \mathbf{0.18215}$ rescales the empirical latent variance to exact $1.0$, restoring mathematical alignment with the DDPM schedule!</li>
+          <li><strong>(A) is INCORRECT:</strong> It is an empirical empirical variance normalization constant, not a physical quantum constant.</li>
+          <li><strong>(C) is INCORRECT:</strong> Latents remain 16-bit or 32-bit floating point arrays; scaling by $0.18215$ does not quantize to 8-bit integers.</li>
+          <li><strong>(D) is INCORRECT:</strong> The scaling factor is applied directly to the spatial VAE latent tensor, completely separate from the CLIP text encoder.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- SECTION 6: PRODUCTION CODE LAB -->
     <h3>5. Production Code Lab 4.4: DDPM Noise Schedule &amp; Sampler from Scratch</h3>
     <p>Below is a clean, production-grade PyTorch implementation of the DDPM forward noise schedule and reverse sampling loop.</p>
 

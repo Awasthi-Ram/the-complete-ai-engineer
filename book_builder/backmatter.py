@@ -54,7 +54,7 @@ BACKMATTER_HTML = """
 
   <div class="chapter-body">
     <p><strong>Ram Awasthi</strong> is an AI engineer, systems researcher, and educator passionate about demystifying artificial intelligence from first principles. With deep expertise across deep learning, large language models, high-performance computing, and production MLOps, Ram has dedicated himself to creating comprehensive, rigorous, and accessible educational resources that empower engineers worldwide to build real-world intelligent systems.</p>
-    <p>Inspired by the classic Indian mathematics textbooks of R.D. Sharma that emphasized thorough intuition, mathematical proof, and relentless problem-solving practice, Ram authored <em>The Complete AI Engineer</em> to bridge the gap between academic theory and production reality.</p>
+    <p>Emphasizing thorough first-principles intuition, exhaustive mathematical derivations, and relentless problem-solving practice, Ram authored <em>The Complete AI Engineer</em> to bridge the gap between academic theory and production reality.</p>
   </div>
 </div>
 
@@ -128,7 +128,7 @@ pip install -r requirements.txt</code></pre>
     <h3 style="font-size: 1.1em; color: #e0e1dd; font-weight: 300; margin-bottom: 1.5em;">From Absolute Beginner to Production-Ready Engineer</h3>
 
     <p style="font-size: 0.9em; line-height: 1.6; margin-bottom: 1.2em; color: #cdd5e0;">
-      Every concept taught the way a great teacher explains it. Inspired by the legendary R.D. Sharma mathematics series, this book teaches artificial intelligence from first principles — moving from mental intuition and rigorous mathematical derivations to solved FAANG interview problems and production-grade engineering code.
+      Every concept taught the way a great teacher explains it. Designed as an exhaustive, first-principles masterwork, this book teaches artificial intelligence from the ground up — moving from mental intuition and rigorous mathematical derivations to solved FAANG interview problems and production-grade engineering code.
     </p>
 
     <div style="background: rgba(255,255,255,0.08); padding: 12px 16px; border-left: 3px solid #5fa8d3; margin-bottom: 1.5em; border-radius: 4px;">

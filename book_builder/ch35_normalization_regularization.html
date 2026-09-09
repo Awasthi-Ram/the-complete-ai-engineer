@@ -11,6 +11,15 @@
 
   <div class="epigraph">
     <p>"Initialization and normalization are the twin pillars of signal propagation. Get them right, and you can train networks 1,000 layers deep. Get them wrong, and your gradients explode or vanish by layer 5."</p>
+
+    <!-- FIGURE 3.5.1: normalization_cubes_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="normalization_cubes_diagram.png" alt="Figure 3.5.1: normalization_cubes_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 3.5.1:</em> Geometric tensor slicing in neural normalization layers across a 3D activation tensor $(N, C, L)$. Batch Normalization normalizes across batch elements $N$; Layer Normalization normalizes across channels $C$ and length $L$ per sample; Instance Normalization normalizes spatially per channel; Group Normalization normalizes across channel sub-groups.
+      </p>
+    </div>
+
     <p class="attribution">— Kaiming He</p>
   </div>
 
@@ -18,88 +27,436 @@
     <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
     <!-- SECTION 1: SIGNAL PROPAGATION & KAIMING INIT -->
-    <h3>1. The Signal Propagation Problem &amp; Kaiming He Initialization</h3>
-    <p>Consider a linear layer $y = \sum_{i=1}^{n_{\text{in}}} w_i x_i$ with independent zero-mean weights and inputs. The variance of output $y$ is:</p>
-    $$\text{Var}(y) = \sum_{i=1}^{n_{\text{in}}} \text{Var}(w_i x_i) = n_{\text{in}} \text{Var}(w) \text{Var}(x)$$
-    <p>To prevent activations from exponentially exploding or vanishing across $L$ layers, we require signal variance to remain constant: $\text{Var}(y) = \text{Var}(x) \implies n_{\text{in}} \text{Var}(w) = 1 \implies \text{Var}(w) = \frac{1}{n_{\text{in}}}$. This is the classical <strong>Xavier (Glorot) Initialization (2010)</strong>.</p>
+    <h3>1. The Signal Propagation Problem &amp; Weight Initialization</h3>
+    <p>Consider a linear layer $y = \sum_{i=1}^{n_{\text{in}}} w_i x_i$ where weights $w_i$ and inputs $x_i$ are independent random variables with zero mean ($\mathbb{E}[w_i] = 0, \mathbb{E}[x_i] = 0$). The variance of the output $y$ is:</p>
+    $$\operatorname{Var}(y) = \sum_{i=1}^{n_{\text{in}}} \operatorname{Var}(w_i x_i) = \sum_{i=1}^{n_{\text{in}}} \left( \mathbb{E}[w_i^2 x_i^2] - (\mathbb{E}[w_i x_i])^2 \right) = n_{\text{in}} \operatorname{Var}(w) \operatorname{Var}(x)$$
+    <p>To prevent activations from exponentially exploding or vanishing across depth, we require signal variance to be preserved: $\operatorname{Var}(y) = \operatorname{Var}(x) \implies n_{\text{in}} \operatorname{Var}(w) = 1 \implies \operatorname{Var}(w) = \frac{1}{n_{\text{in}}}$. Accounting for both the forward pass ($n_{\text{in}}$) and backward pass ($n_{\text{out}}$), <strong>Xavier (Glorot) Initialization (2010)</strong> sets:</p>
+    $$\operatorname{Var}(w) = \frac{2}{n_{\text{in}} + n_{\text{out}}} \implies w \sim \mathcal{N}\left(0, \sqrt{\frac{2}{n_{\text{in}} + n_{\text{out}}}}\right)$$
 
     <div class="real-world-box">
-      <h4>🏆 Why Xavier Fails on ReLU: The Kaiming Derivation (He et al., 2015)</h4>
-      <p>Xavier initialization assumes symmetric linear activations ($E[x] = 0$). However, the Rectified Linear Unit (ReLU) sets all negative values to zero ($\max(0, z)$). What happens to the second moment of a symmetric distribution when passed through ReLU?</p>
-      $$\mathbb{E}[(\text{ReLU}(z))^2] = \int_{-\infty}^0 (0)^2 p(z) dz + \int_0^\infty z^2 p(z) dz = 0 + \frac{1}{2} \int_{-\infty}^\infty z^2 p(z) dz = \mathbf{\frac{1}{2} \mathbb{E}[z^2]}$$
-      <p><strong>The Shocking Consequence:</strong> Because ReLU zeroes out half the inputs, <strong>ReLU halves the variance of the signal at every single layer</strong>! Under Xavier initialization, after 30 layers of ReLU, the signal variance is scaled by $\left(\frac{1}{2}\right)^{30} \approx 9.3 \times 10^{-10}$, completely suffocating the network!</p>
-      <p>To compensate for the 50% energy loss caused by ReLU, Kaiming He doubled the weight variance:</p>
-      $$\text{Var}(w) = \frac{2}{n_{\text{in}}} \implies w \sim \mathcal{N}\left(0, \sqrt{\frac{2}{n_{\text{in}}}}\right)$$
+      <h4>🏆 Why Xavier Fails on ReLU: The Kaiming He Derivation (2015)</h4>
+      <p>Xavier initialization assumes symmetric linear activations where $\mathbb{E}[x] = 0$. However, the Rectified Linear Unit (ReLU) clamps all negative inputs to zero ($\max(0, z)$). What happens to the second moment of a symmetric distribution when passed through ReLU?</p>
+      $$\mathbb{E}[(\operatorname{ReLU}(z))^2] = \int_{-\infty}^0 (0)^2 p(z) dz + \int_0^\infty z^2 p(z) dz = 0 + \frac{1}{2} \int_{-\infty}^\infty z^2 p(z) dz = \mathbf{\frac{1}{2} \mathbb{E}[z^2]}$$
+      <p><strong>The Mathematical Consequence:</strong> Because ReLU zeroes out the entire negative halfplane, <strong>ReLU halves the variance of the signal at every single layer</strong>! Under Xavier initialization, after 30 layers of ReLU, the signal variance is diminished by a factor of:</p>
+      $$\left(\frac{1}{2}\right)^{30} = \frac{1}{1,073,741,824} \approx 9.31 \times 10^{-10}$$
+      <p>The signal is completely extinguished! To compensate for the 50% energy loss caused by ReLU, Kaiming He doubled the initialization variance:</p>
+      $$\operatorname{Var}(w) = \frac{2}{n_{\text{in}}} \implies w \sim \mathcal{N}\left(0, \sqrt{\frac{2}{n_{\text{in}}}}\right)$$
     </div>
 
     <!-- SECTION 2: NORMALIZATION TAXONOMY -->
     <h3>2. The Normalization Taxonomy: BatchNorm, LayerNorm &amp; RMSNorm</h3>
-    <p>Even with optimal weight initialization, internal distributions shift during training. Normalization layers constrain activations to healthy distributions.</p>
+    <p>Even with optimal weight initialization, internal covariate shift and non-linear interactions cause activation distributions to drift during training. Normalization layers constrain activations to stable, well-conditioned manifolds.</p>
 
-    <h4>1. Batch Normalization (Ioffe &amp; Szegedy, 2015)</h4>
-    <p>Normalizes across the mini-batch dimension $N$ for each channel independently:</p>
-    $$\hat{x}_i = \frac{x_i - \mu_B}{\sqrt{\sigma_B^2 + \epsilon}} \gamma + \beta$$
-    <p><em>Why BatchNorm Fails in NLP/LLMs:</em> In text models, sequences have variable lengths and batch sizes are often small ($B=1$ or $2$). When batch size is tiny, batch variance $\sigma_B^2$ is extremely noisy, degrading model accuracy.</p>
-
-    <h4>2. Layer Normalization (Ba, Kiros, Hinton, 2016)</h4>
-    <p>Normalizes across all feature dimensions $d$ for each individual sequence token independently, completely removing dependence on batch size:</p>
-    $$\mu = \frac{1}{d} \sum_{i=1}^d x_i, \quad \sigma^2 = \frac{1}{d} \sum_{i=1}^d (x_i - \mu)^2, \quad \hat{x} = \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} \odot \gamma + \beta$$
-    <p>LayerNorm is the universal standard for BERT and early GPT models.</p>
-
-    <h4>3. RMSNorm: Root Mean Square Normalization (Zhang &amp; Sennrich, 2019)</h4>
-    <p>Zhang and Sennrich asked a fundamental question: is mean-centering ($\mu$) actually necessary, or does all the regularization benefit come from scaling variance? They proved that scaling by the <strong>Root Mean Square (RMS)</strong> alone provides 100% of LayerNorm's training stability while eliminating the mean-centering step:</p>
-    $$\text{RMS}(\mathbf{x}) = \sqrt{\frac{1}{d} \sum_{i=1}^d x_i^2 + \epsilon}$$
-    $$\bar{x}_i = \frac{x_i}{\text{RMS}(\mathbf{x})} \gamma_i$$
-    <p>Because RMSNorm eliminates mean computation and requires fewer memory access operations, it speeds up GPU execution by <strong>$10\%$ to $50\%$</strong>! <strong>RMSNorm is the default normalization in modern frontier models (LLaMA 2/3, Mistral, Gemma).</strong></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Normalization Technique</th>
+          <th>Mathematical Formula</th>
+          <th>Normalization Axis</th>
+          <th>Primary Production Domain</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Batch Normalization</strong> (Ioffe &amp; Szegedy, 2015)</td>
+          <td>$\hat{x} = \frac{x - \mu_B}{\sqrt{\sigma_B^2 + \epsilon}} \gamma + \beta$</td>
+          <td>Across batch dimension $N$ for each channel $(H, W)$ independently.</td>
+          <td>Convolutional Neural Networks (ResNets, ConvNeXt). Fails when batch size $B \le 4$.</td>
+        </tr>
+        <tr>
+          <td><strong>Layer Normalization</strong> (Ba et al., 2016)</td>
+          <td>$\hat{x} = \frac{x - \mu_L}{\sqrt{\sigma_L^2 + \epsilon}} \odot \gamma + \beta$</td>
+          <td>Across feature channels $d$ for each token independently.</td>
+          <td>Recurrent networks, BERT, original Transformer, ViT. Batch-size invariant.</td>
+        </tr>
+        <tr>
+          <td><strong>RMSNorm</strong> (Zhang &amp; Sennrich, 2019)</td>
+          <td>$\bar{x} = \frac{x}{\operatorname{RMS}(\mathbf{x})} \odot \gamma, \quad \operatorname{RMS} = \sqrt{\frac{1}{d}\sum x_i^2 + \epsilon}$</td>
+          <td>Root mean square scaling across feature channels $d$ without mean-centering.</td>
+          <td><strong>The Universal Standard in Modern LLMs</strong> (LLaMA 2/3, Mistral, Gemma). 10–50% faster than LayerNorm.</td>
+        </tr>
+      </tbody>
+    </table>
 
     <!-- SECTION 3: INVERTED DROPOUT -->
     <h3>3. Inverted Dropout (Srivastava et al., 2014)</h3>
-    <p>Dropout prevents complex co-adaptation of neurons by randomly setting a fraction $p \in (0, 1)$ of activations to zero during each training forward pass. In traditional dropout, test-time inference required scaling all weights by $(1 - p)$.</p>
-    <p><strong>Inverted Dropout</strong> scales the surviving activations by $\frac{1}{1 - p}$ during the <em>training forward pass</em>:</p>
-    $$\tilde{h}_i = \begin{cases} \frac{h_i}{1 - p} & \text{with probability } 1 - p \\ 0 & \text{with probability } p \end{cases}$$
-    <p>Because $\mathbb{E}[\tilde{h}_i] = (1 - p) \left( \frac{h_i}{1 - p} \right) + p(0) = h_i$, the expected activation magnitude is preserved during training. At test time, dropout is simply disabled with <strong>zero mathematical modifications or scaling factors</strong>!</p>
+    <p>Dropout prevents complex co-adaptation of neurons by randomly zeroing out activations with probability $p \in (0, 1)$ during training. In standard dropout, inference required multiplying all test-time weights by $(1 - p)$.</p>
+    <p><strong>Inverted Dropout</strong> scales surviving activations by $\frac{1}{1 - p}$ during the <em>training forward pass</em>:</p>
+    $$\tilde{h}_i = \begin{cases} \frac{h_i}{1 - p}, & \text{with probability } 1 - p \\ 0, & \text{with probability } p \end{cases}$$
+    <p>Because $\mathbb{E}[\tilde{h}_i] = (1 - p) \left( \frac{h_i}{1 - p} \right) + p(0) = h_i$, the expected activation magnitude is strictly preserved during training. At inference time, dropout is disabled with <strong>zero latency overhead or weight modifications</strong>!</p>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Normalization</h3>
+    <!-- SECTION 4: 4-TIER PRACTICE SUITE -->
+    <h3>Normalization &amp; Regularization Practice Suite &amp; Complete Worked Solutions</h3>
 
+    <!-- PROBLEM 3.5.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 3.5.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="difficulty difficulty-easy">Level 1 • Direct Numerical Warm-Up Drill</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A single sequence token produces a 4-dimensional activation vector:
+        $$\mathbf{x} = [2.0, 4.0, 6.0, 8.0]^T$$
+        The layer uses Layer Normalization with learned gain parameters $\boldsymbol{\gamma} = [1.0, 1.0, 1.0, 1.0]^T$, learned biases $\boldsymbol{\beta} = [0.0, 0.0, 0.0, 0.0]^T$, and stability epsilon $\epsilon = 10^{-5}$.</p>
+        <ol>
+          <li>Calculate the mean $\mu$ across the feature dimensions.</li>
+          <li>Calculate the variance $\sigma^2$ and standard deviation $\sqrt{\sigma^2 + \epsilon}$.</li>
+          <li>Calculate the normalized output vector $\hat{\mathbf{x}} = \frac{\mathbf{x} - \mu}{\sqrt{\sigma^2 + \epsilon}} \odot \boldsymbol{\gamma} + \boldsymbol{\beta}$.</li>
+          <li>Verify that $\sum_{i=1}^4 \hat{x}_i = 0$ and $\operatorname{Var}(\hat{\mathbf{x}}) = 1.0$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
+
+        <p class="step"><strong>Step 1: Compute Feature Mean $\mu$:</strong><br>
+        $$\mu = \frac{1}{4} \sum_{i=1}^4 x_i = \frac{2.0 + 4.0 + 6.0 + 8.0}{4} = \frac{20.0}{4} = \mathbf{5.0000}$$</p>
+
+        <p class="step"><strong>Step 2: Compute Variance and Standard Deviation:</strong><br>
+        Deviations from the mean:
+        <ul>
+          <li>$2.0 - 5.0 = -3.0 \implies (-3.0)^2 = 9.0$</li>
+          <li>$4.0 - 5.0 = -1.0 \implies (-1.0)^2 = 1.0$</li>
+          <li>$6.0 - 5.0 = +1.0 \implies (+1.0)^2 = 1.0$</li>
+          <li>$8.0 - 5.0 = +3.0 \implies (+3.0)^2 = 9.0$</li>
+        </ul>
+        $$\sigma^2 = \frac{9.0 + 1.0 + 1.0 + 9.0}{4} = \frac{20.0}{4} = \mathbf{5.0000}$$
+        Denominator:
+        $$\sqrt{\sigma^2 + \epsilon} = \sqrt{5.0000 + 10^{-5}} \approx \sqrt{5.0} \approx \mathbf{2.23607}$$</p>
+
+        <p class="step"><strong>Step 3: Compute Normalized Output Vector $\hat{\mathbf{x}}$:</strong><br>
+        With $\gamma_i = 1.0, \beta_i = 0.0$:
+        $$\hat{x}_1 = \frac{2.0 - 5.0}{2.23607} = \frac{-3.0}{2.23607} \approx \mathbf{-1.3416}$$
+        $$\hat{x}_2 = \frac{4.0 - 5.0}{2.23607} = \frac{-1.0}{2.23607} \approx \mathbf{-0.4472}$$
+        $$\hat{x}_3 = \frac{6.0 - 5.0}{2.23607} = \frac{+1.0}{2.23607} \approx \mathbf{+0.4472}$$
+        $$\hat{x}_4 = \frac{8.0 - 5.0}{2.23607} = \frac{+3.0}{2.23607} \approx \mathbf{+1.3416}$$
+        $$\hat{\mathbf{x}} = \begin{pmatrix} -1.3416 \\ -0.4472 \\ +0.4472 \\ +1.3416 \end{pmatrix}$$</p>
+
+        <p class="step"><strong>Step 4: Verification:</strong><br>
+        Sum of elements:
+        $$\sum_{i=1}^4 \hat{x}_i = -1.3416 - 0.4472 + 0.4472 + 1.3416 = \mathbf{0.0000}$$
+        Variance:
+        $$\operatorname{Var}(\hat{\mathbf{x}}) = \frac{(-1.3416)^2 + (-0.4472)^2 + (0.4472)^2 + (1.3416)^2}{4} = \frac{1.800 + 0.200 + 0.200 + 1.800}{4} = \frac{4.000}{4} = \mathbf{1.0000}$$
+        The activation vector is strictly standardized to zero mean and unit variance.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.5.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.5.2</span>
+        <span class="difficulty difficulty-easy">Level 1 • Direct Formula Drill</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A fully connected linear layer has $n_{\text{in}} = 784$ inputs and $n_{\text{out}} = 256$ outputs. Calculate the exact standard deviation $\sigma$ used for initializing weights under:</p>
+        <ol>
+          <li>Xavier (Glorot) Normal Initialization: $\sigma = \sqrt{\frac{2}{n_{\text{in}} + n_{\text{out}}}}$.</li>
+          <li>Kaiming (He) Normal Initialization for standard ReLU ($\alpha = 0$): $\sigma = \sqrt{\frac{2}{n_{\text{in}}}}$.</li>
+          <li>Kaiming Normal Initialization for LeakyReLU with negative slope $\alpha = 0.20$: $\sigma = \sqrt{\frac{2}{(1 + \alpha^2) n_{\text{in}}}}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+
+        <p class="step"><strong>Step 1: Xavier Normal Initialization:</strong><br>
+        $$n_{\text{in}} + n_{\text{out}} = 784 + 256 = 1040$$
+        $$\sigma_{\text{Xavier}} = \sqrt{\frac{2}{1040}} = \sqrt{\frac{1}{520}} \approx \sqrt{0.001923} \approx \mathbf{0.04385}$$</p>
+
+        <p class="step"><strong>Step 2: Kaiming Normal Initialization (ReLU, $\alpha = 0$):</strong><br>
+        $$\sigma_{\text{Kaiming}} = \sqrt{\frac{2}{n_{\text{in}}}} = \sqrt{\frac{2}{784}} = \sqrt{\frac{1}{392}} \approx \sqrt{0.002551} \approx \mathbf{0.05051}$$
+        Notice that $\sigma_{\text{Kaiming}} &gt; \sigma_{\text{Xavier}}$ because Kaiming intentionally injects higher initial variance to compensate for the $50\%$ energy loss caused by ReLU clipping.</p>
+
+        <p class="step"><strong>Step 3: Kaiming Normal Initialization (LeakyReLU, $\alpha = 0.20$):</strong><br>
+        For LeakyReLU, negative inputs are multiplied by $\alpha = 0.20$:
+        $$1 + \alpha^2 = 1 + (0.20)^2 = 1 + 0.04 = 1.04$$
+        $$\text{Denominator} = 1.04 \times 784 = 815.36$$
+        $$\sigma_{\text{LeakyReLU}} = \sqrt{\frac{2}{815.36}} \approx \sqrt{0.002453} \approx \mathbf{0.04952}$$
+        Because LeakyReLU allows $4\%$ of the negative energy to pass through ($\alpha^2 = 0.04$), the required initial variance compensation is slightly smaller than for pure ReLU.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.5.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.5.3</span>
+        <span class="difficulty difficulty-medium">Level 2 • Applied Engineering Trace</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A 1-dimensional Batch Normalization layer maintains running tracking statistics with momentum coefficient $m = 0.10$ (where $\mu_{\text{run}} \leftarrow (1 - m)\mu_{\text{run}} + m \mu_B$). Prior to training, running statistics are initialized at $\mu_{\text{run}}^{(0)} = 0.0$ and $\sigma^{2(0)}_{\text{run}} = 1.0$. The layer has learned parameters $\gamma = 2.0$ and $\beta = 1.0$, with $\epsilon = 10^{-5}$.</p>
+        <ol>
+          <li>A mini-batch of $N = 3$ samples arrives during training: $X = [1.0, 3.0, 5.0]^T$. Compute the batch mean $\mu_B$, batch variance $\sigma_B^2$, and the normalized training outputs $\hat{y}_i$.</li>
+          <li>Compute the updated running statistics $\mu_{\text{run}}^{(1)}$ and $\sigma^{2(1)}_{\text{run}}$ after this training step.</li>
+          <li>At test time, the model is switched to <code>eval()</code> mode. A single inference sample $x_{\text{test}} = 4.0$ arrives. Compute the final evaluation output using the running statistics.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Training vs. Eval Trace</div>
+
+        <p class="step"><strong>Step 1: Training Mode Forward Pass:</strong><br>
+        Batch mean:
+        $$\mu_B = \frac{1.0 + 3.0 + 5.0}{3} = \frac{9.0}{3} = \mathbf{3.0000}$$
+        Batch variance:
+        $$\sigma_B^2 = \frac{(1 - 3)^2 + (3 - 3)^2 + (5 - 3)^2}{3} = \frac{(-2)^2 + 0^2 + 2^2}{3} = \frac{4 + 0 + 4}{3} = \frac{8}{3} \approx \mathbf{2.6667}$$
+        Standard deviation $\sqrt{\sigma_B^2 + \epsilon} = \sqrt{2.6667} \approx 1.6330$.<br>
+        Normalized outputs $\hat{y}_i = \gamma \left( \frac{x_i - \mu_B}{\sqrt{\sigma_B^2 + \epsilon}} \right) + \beta$:
+        <ul>
+          <li>For $x_1 = 1.0$: $\hat{y}_1 = 2.0 \left(\frac{1.0 - 3.0}{1.6330}\right) + 1.0 = 2.0(-1.2247) + 1.0 = -2.4495 + 1.0 = \mathbf{-1.4495}$</li>
+          <li>For $x_2 = 3.0$: $\hat{y}_2 = 2.0 \left(\frac{3.0 - 3.0}{1.6330}\right) + 1.0 = 2.0(0) + 1.0 = \mathbf{+1.0000}$</li>
+          <li>For $x_3 = 5.0$: $\hat{y}_3 = 2.0 \left(\frac{5.0 - 3.0}{1.6330}\right) + 1.0 = 2.0(+1.2247) + 1.0 = +2.4495 + 1.0 = \mathbf{+3.4495}$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2: Update Running Statistics:</strong><br>
+        Using momentum $m = 0.10$:
+        $$\mu_{\text{run}}^{(1)} = (1 - 0.10)\mu_{\text{run}}^{(0)} + 0.10 \mu_B = 0.90(0.0) + 0.10(3.0) = \mathbf{0.3000}$$
+        $$\sigma^{2(1)}_{\text{run}} = (1 - 0.10)\sigma^{2(0)}_{\text{run}} + 0.10 \sigma_B^2 = 0.90(1.0) + 0.10(2.6667) = 0.90 + 0.2667 = \mathbf{1.1667}$$</p>
+
+        <p class="step"><strong>Step 3: Inference Evaluation Mode on $x_{\text{test}} = 4.0$:</strong><br>
+        In <code>eval()</code> mode, the batch statistics are <strong>never used</strong>. The layer strictly uses the frozen running statistics:
+        $$\hat{y}_{\text{test}} = \gamma \left( \frac{x_{\text{test}} - \mu_{\text{run}}^{(1)}}{\sqrt{\sigma^{2(1)}_{\text{run}} + \epsilon}} \right) + \beta$$
+        $$\sqrt{\sigma^{2(1)}_{\text{run}}} = \sqrt{1.1667} \approx 1.0801$$
+        $$\hat{y}_{\text{test}} = 2.0 \left( \frac{4.0 - 0.3000}{1.0801} \right) + 1.0 = 2.0 \left( \frac{3.7000}{1.0801} \right) + 1.0 = 2.0(3.4255) + 1.0 = 6.851 + 1.0 = \mathbf{7.851}$$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.5.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.5.4</span>
+        <span class="difficulty difficulty-medium">Level 2 • Algorithmic Tracing</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A hidden layer activation vector is $\mathbf{h} = [1.5, -2.0, 3.5, 4.0]^T$. The model applies <strong>Inverted Dropout</strong> with dropout rate $p = 0.50$ (so survival probability is $q = 1 - p = 0.50$).</p>
+        <ol>
+          <li>Calculate the inverted scaling factor applied to active neurons during training.</li>
+          <li>Suppose the pseudorandom binary mask samples $\mathbf{m} = [1, 0, 1, 0]^T$ (neurons 2 and 4 are dropped). Compute the resulting masked activation vector $\tilde{\mathbf{h}}$.</li>
+          <li>Prove that the expected value of any activation $\tilde{h}_i$ under inverted dropout is identically equal to its original value: $\mathbb{E}[\tilde{h}_i] = h_i$.</li>
+          <li>What scaling factor is applied during inference evaluation?</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Dropout Trace</div>
+
+        <p class="step"><strong>Step 1: Compute Inverted Scaling Factor:</strong><br>
+        The scaling factor applied during training is:
+        $$\text{Scale} = \frac{1}{1 - p} = \frac{1}{1 - 0.50} = \frac{1}{0.50} = \mathbf{2.0}$$</p>
+
+        <p class="step"><strong>Step 2: Compute Masked Vector $\tilde{\mathbf{h}}$:</strong><br>
+        Multiply each element by $m_i \times \text{Scale} = m_i \times 2.0$:
+        <ul>
+          <li>$\tilde{h}_1 = 1.5 \times 1 \times 2.0 = \mathbf{3.0}$</li>
+          <li>$\tilde{h}_2 = -2.0 \times 0 \times 2.0 = \mathbf{0.0}$</li>
+          <li>$\tilde{h}_3 = 3.5 \times 1 \times 2.0 = \mathbf{7.0}$</li>
+          <li>$\tilde{h}_4 = 4.0 \times 0 \times 2.0 = \mathbf{0.0}$</li>
+        </ul>
+        $$\tilde{\mathbf{h}} = \begin{pmatrix} 3.0 \\ 0.0 \\ 7.0 \\ 0.0 \end{pmatrix}$$</p>
+
+        <p class="step"><strong>Step 3: Expectation Proof:</strong><br>
+        The binary mask variable $M_i \sim \operatorname{Bernoulli}(1 - p)$.
+        $$\tilde{h}_i = \frac{M_i}{1 - p} h_i$$
+        Taking expectations:
+        $$\mathbb{E}[\tilde{h}_i] = \mathbb{E}\left[ \frac{M_i}{1 - p} h_i \right] = \frac{h_i}{1 - p} \mathbb{E}[M_i]$$
+        Since $\mathbb{E}[M_i] = 1 - p$:
+        $$\mathbb{E}[\tilde{h}_i] = \frac{h_i}{1 - p} (1 - p) = \mathbf{h_i}$$
+        The expected energy of every activation is perfectly preserved across training.</p>
+
+        <p class="step"><strong>Step 4: Inference Scaling:</strong><br>
+        At test time, the mask is removed ($\mathbf{m} = \mathbf{1}$) and the scaling factor is <strong>$1.0$ (no scaling whatsoever)</strong>. Inverted dropout shifts the entire computational scaling burden to the training phase, ensuring inference executes with zero latency overhead.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.5.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.5.5</span>
+        <span class="difficulty difficulty-hard">Level 3 • FAANG / Research Lab Proof</span>
         <span class="company-tag company-google">Google</span>
         <span class="company-tag company-meta">Meta</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Derive the analytical backpropagation gradient for <strong>RMSNorm</strong>. Given incoming gradient tensor $\frac{\partial \mathcal{L}}{\partial \bar{\mathbf{x}}} = \mathbf{g}$, derive $\frac{\partial \mathcal{L}}{\partial \mathbf{x}}$ in terms of input vector $\mathbf{x} \in \mathbb{R}^d$ and scaling parameter $\boldsymbol{\gamma}$.</p>
+        <p><strong>QUESTION:</strong> Prove Kaiming He's weight initialization theorem (2015) for deep networks with ReLU activations rigorously from first principles. Consider layer $l$ computing $y_l = \sum_{i=1}^{n_l} w_{l, i} x_{l, i}$, where $x_{l, i} = \operatorname{ReLU}(y_{l-1, i})$. Assume weights $w_{l, i}$ are i.i.d. with mean 0 and variance $\operatorname{Var}(w_l)$, independent of $x_{l, i}$, and pre-activations $y_{l-1}$ follow a symmetric distribution around zero. Prove that:</p>
+        <ol>
+          <li>$\operatorname{Var}(x_{l, i}) = \frac{1}{2} \operatorname{Var}(y_{l-1, i})$.</li>
+          <li>To ensure signal variance remains constant across depth ($\operatorname{Var}(y_l) = \operatorname{Var}(y_{l-1})$), the weights must satisfy:
+          $$\operatorname{Var}(w_l) = \frac{2}{n_l}$$</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
+        <div class="solution-label">✓ Complete First-Principles Mathematical Proof</div>
 
-        <p class="step"><strong>Step 1: Define the Forward Equations:</strong><br>
-        Let $r = \text{RMS}(\mathbf{x}) = \left( \frac{1}{d} \sum_{j=1}^d x_j^2 + \epsilon \right)^{1/2}$.<br>
-        The normalized output is $\bar{x}_i = \frac{x_i}{r} \gamma_i$.<br>
+        <p class="step"><strong>Step 1: Compute the Variance of the Pre-Activation $y_l$:</strong><br>
+        The layer computes $y_l = \sum_{i=1}^{n_l} w_{l, i} x_{l, i}$.<br>
+        Since $w_{l, i}$ has mean zero ($\mathbb{E}[w] = 0$) and is independent of $x_{l, i}$:
+        $$\mathbb{E}[y_l] = \sum_{i=1}^{n_l} \mathbb{E}[w_{l, i}] \mathbb{E}[x_{l, i}] = 0$$
+        The variance of $y_l$ is:
+        $$\operatorname{Var}(y_l) = \mathbb{E}[y_l^2] - (\mathbb{E}[y_l])^2 = \mathbb{E}\left[ \left( \sum_{i=1}^{n_l} w_{l, i} x_{l, i} \right)^2 \right]$$
+        Because $w_{l, i} x_{l, i}$ are mutually independent for different indices $i \neq j$:
+        $$\operatorname{Var}(y_l) = \sum_{i=1}^{n_l} \mathbb{E}[w_{l, i}^2] \mathbb{E}[x_{l, i}^2] = n_l \operatorname{Var}(w_l) \mathbb{E}[x_l^2]$$</p>
+
+        <p class="step"><strong>Step 2: Relate $\mathbb{E}[x_l^2]$ to Pre-Activation Variance $\operatorname{Var}(y_{l-1})$:</strong><br>
+        Recall that $x_l = \operatorname{ReLU}(y_{l-1}) = \max(0, y_{l-1})$.<br>
+        Evaluate the second moment $\mathbb{E}[x_l^2]$:
+        $$\mathbb{E}[x_l^2] = \int_{-\infty}^\infty (\max(0, y_{l-1}))^2 p(y_{l-1}) dy_{l-1}$$
+        Split the integral at zero:
+        $$\mathbb{E}[x_l^2] = \int_{-\infty}^0 (0)^2 p(y_{l-1}) dy_{l-1} + \int_0^\infty y_{l-1}^2 p(y_{l-1}) dy_{l-1} = \int_0^\infty y_{l-1}^2 p(y_{l-1}) dy_{l-1}$$
+        Since $p(y_{l-1})$ is a symmetric probability density centered around zero ($p(-y) = p(y)$):
+        $$\int_0^\infty y_{l-1}^2 p(y_{l-1}) dy_{l-1} = \frac{1}{2} \int_{-\infty}^\infty y_{l-1}^2 p(y_{l-1}) dy_{l-1} = \frac{1}{2} \mathbb{E}[y_{l-1}^2]$$
+        Since $\mathbb{E}[y_{l-1}] = 0$, $\mathbb{E}[y_{l-1}^2] = \operatorname{Var}(y_{l-1})$. Therefore:
+        $$\mathbb{E}[x_l^2] = \frac{1}{2} \operatorname{Var}(y_{l-1})$$</p>
+
+        <p class="step"><strong>Step 3: Combine and Solve for Stable Variance:</strong><br>
+        Substitute the second moment of $x_l$ back into the variance of $y_l$:
+        $$\operatorname{Var}(y_l) = n_l \operatorname{Var}(w_l) \left( \frac{1}{2} \operatorname{Var}(y_{l-1}) \right) = \left( \frac{1}{2} n_l \operatorname{Var}(w_l) \right) \operatorname{Var}(y_{l-1})$$
+        Across an $L$-layer network:
+        $$\operatorname{Var}(y_L) = \operatorname{Var}(y_1) \prod_{l=2}^L \left( \frac{1}{2} n_l \operatorname{Var}(w_l) \right)$$
+        To ensure that the signal neither exponentially vanishes to zero nor explodes to infinity, the multiplier must be exactly 1:
+        $$\frac{1}{2} n_l \operatorname{Var}(w_l) = 1 \implies \operatorname{Var}(w_l) = \frac{2}{n_l}$$
+        This proves Kaiming He's initialization variance formula. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.5.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.5.6</span>
+        <span class="difficulty difficulty-hard">Level 3 • FAANG / Research Lab Proof</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-openai">OpenAI</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In modern Large Language Models (e.g. LLaMA 3), Root Mean Square Normalization (RMSNorm) is defined for vector $\mathbf{x} \in \mathbb{R}^d$ as:
+        $$\bar{x}_i = \frac{x_i}{\operatorname{RMS}(\mathbf{x})} \gamma_i, \quad \text{where } \operatorname{RMS}(\mathbf{x}) = \sqrt{\frac{1}{d} \sum_{j=1}^d x_j^2 + \epsilon}$$
+        Given incoming backpropagated gradient $\mathbf{g} = \frac{\partial \mathcal{L}}{\partial \bar{\mathbf{x}}}$, derive the full vector-form analytical gradient $\frac{\partial \mathcal{L}}{\partial \mathbf{x}}$ and prove that the backpropagated error is strictly orthogonal to the forward activation vector $\mathbf{x}$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete First-Principles Mathematical Derivation</div>
+
+        <p class="step"><strong>Step 1: Establish Forward Quantities:</strong><br>
+        Let $r = \operatorname{RMS}(\mathbf{x}) = \left(\frac{1}{d} \sum_{j=1}^d x_j^2 + \epsilon\right)^{1/2}$.<br>
+        Then $\bar{x}_i = \frac{x_i}{r} \gamma_i$.<br>
         Let incoming gradient be $g_i = \frac{\partial \mathcal{L}}{\partial \bar{x}_i}$.</p>
 
-        <p class="step"><strong>Step 2: Apply the Chain Rule:</strong><br>
-        By the multivariable chain rule:
-        $$\frac{\partial \mathcal{L}}{\partial x_i} = \sum_{j=1}^d \frac{\partial \mathcal{L}}{\partial \bar{x}_j} \frac{\partial \bar{x}_j}{\partial x_i} = \sum_{j=1}^d g_j \frac{\partial}{\partial x_i} \left( \frac{x_j}{r} \gamma_j \right)$$
-        Compute the partial derivative $\frac{\partial}{\partial x_i} \left( \frac{x_j}{r} \right)$:
-        $$\frac{\partial}{\partial x_i} \left( \frac{x_j}{r} \right) = \frac{\delta_{ij}}{r} - \frac{x_j}{r^2} \frac{\partial r}{\partial x_i}$$
+        <p class="step"><strong>Step 2: Compute Partial Derivative $\frac{\partial \bar{x}_j}{\partial x_i}$:</strong><br>
+        $$\frac{\partial \bar{x}_j}{\partial x_i} = \gamma_j \frac{\partial}{\partial x_i} \left( \frac{x_j}{r} \right) = \gamma_j \left[ \frac{\delta_{ij}}{r} - \frac{x_j}{r^2} \frac{\partial r}{\partial x_i} \right]$$
         Compute $\frac{\partial r}{\partial x_i}$:
-        $$\frac{\partial r}{\partial x_i} = \frac{1}{2} \left( \frac{1}{d} \sum_{k=1}^d x_k^2 + \epsilon \right)^{-1/2} \left( \frac{2 x_i}{d} \right) = \frac{x_i}{d \cdot r}$$
-        Substitute back:
-        $$\frac{\partial}{\partial x_i} \left( \frac{x_j}{r} \right) = \frac{\delta_{ij}}{r} - \frac{x_j x_i}{d \cdot r^3}$$</p>
+        $$\frac{\partial r}{\partial x_i} = \frac{1}{2} \left(\frac{1}{d} \sum_{k=1}^d x_k^2 + \epsilon\right)^{-1/2} \left(\frac{2 x_i}{d}\right) = \frac{x_i}{d \cdot r}$$
+        Substituting:
+        $$\frac{\partial \bar{x}_j}{\partial x_i} = \gamma_j \left[ \frac{\delta_{ij}}{r} - \frac{x_j x_i}{d \cdot r^3} \right]$$</p>
 
-        <p class="step"><strong>Step 3: Combine and Factorize:</strong>
-        $$\frac{\partial \mathcal{L}}{\partial x_i} = \sum_{j=1}^d g_j \gamma_j \left[ \frac{\delta_{ij}}{r} - \frac{x_j x_i}{d \cdot r^3} \right] = \frac{g_i \gamma_i}{r} - \frac{x_i}{d \cdot r^3} \sum_{j=1}^d (g_j \gamma_j x_j)$$
-        In vector notation:
-        $$\frac{\partial \mathcal{L}}{\partial \mathbf{x}} = \frac{1}{\text{RMS}(\mathbf{x})} \left[ \mathbf{g} \odot \boldsymbol{\gamma} - \frac{\mathbf{x}}{d \cdot \text{RMS}(\mathbf{x})^2} \left( (\mathbf{g} \odot \boldsymbol{\gamma}) \cdot \mathbf{x} \right) \right]$$
-        Notice that the gradient is strictly orthogonalized against the forward projection direction, guaranteeing stable numerical gradient dynamics!</p>
+        <p class="step"><strong>Step 3: Sum Over All Downstream Paths:</strong><br>
+        By the chain rule:
+        $$\frac{\partial \mathcal{L}}{\partial x_i} = \sum_{j=1}^d g_j \frac{\partial \bar{x}_j}{\partial x_i} = \sum_{j=1}^d g_j \gamma_j \left[ \frac{\delta_{ij}}{r} - \frac{x_j x_i}{d \cdot r^3} \right]$$
+        Splitting the sum:
+        $$\frac{\partial \mathcal{L}}{\partial x_i} = \frac{g_i \gamma_i}{r} - \frac{x_i}{d \cdot r^3} \sum_{j=1}^d (g_j \gamma_j x_j)$$
+        Factoring out $\frac{1}{r}$:
+        $$\frac{\partial \mathcal{L}}{\partial x_i} = \frac{1}{r} \left[ g_i \gamma_i - \frac{x_i}{d \cdot r^2} \sum_{j=1}^d (g_j \gamma_j x_j) \right]$$
+        In compact vector notation, defining $\mathbf{u} = \mathbf{g} \odot \boldsymbol{\gamma}$:
+        $$\frac{\partial \mathcal{L}}{\partial \mathbf{x}} = \frac{1}{\operatorname{RMS}(\mathbf{x})} \left[ \mathbf{u} - \frac{\mathbf{u} \cdot \mathbf{x}}{d \cdot \operatorname{RMS}(\mathbf{x})^2} \mathbf{x} \right]$$</p>
+
+        <p class="step"><strong>Step 4: Prove Orthogonality:</strong><br>
+        Take the inner product of $\frac{\partial \mathcal{L}}{\partial \mathbf{x}}$ with the forward vector $\mathbf{x}$:
+        $$\left( \frac{\partial \mathcal{L}}{\partial \mathbf{x}} \right) \cdot \mathbf{x} = \frac{1}{r} \left[ \mathbf{u} \cdot \mathbf{x} - \frac{\mathbf{u} \cdot \mathbf{x}}{d \cdot r^2} (\mathbf{x} \cdot \mathbf{x}) \right]$$
+        Note that by definition:
+        $$\mathbf{x} \cdot \mathbf{x} = \sum_{i=1}^d x_i^2 = d \cdot r^2 - d \epsilon \approx d \cdot r^2$$
+        Substituting $(\mathbf{x} \cdot \mathbf{x}) = d \cdot r^2$:
+        $$\left( \frac{\partial \mathcal{L}}{\partial \mathbf{x}} \right) \cdot \mathbf{x} = \frac{1}{r} \left[ \mathbf{u} \cdot \mathbf{x} - \frac{\mathbf{u} \cdot \mathbf{x}}{d \cdot r^2} (d \cdot r^2) \right] = \frac{1}{r} [\mathbf{u} \cdot \mathbf{x} - \mathbf{u} \cdot \mathbf{x}] = \mathbf{0}$$
+        The gradient $\frac{\partial \mathcal{L}}{\partial \mathbf{x}}$ is strictly orthogonal to $\mathbf{x}$! This geometric property prevents activations from drifting along the radial scale dimension, ensuring intrinsic variance stability. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.5.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.5.7</span>
+        <span class="difficulty difficulty-medium">Level 4 • Conceptual Trap MCQ</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A computer vision team trains an object detection network using Batch Normalization with batch size $B = 128$. When deploying the model to an autonomous vehicle edge computer where camera frames are processed one-by-one in real time ($B = 1$), the model's Mean Average Precision (mAP) drops from $54\%$ to $1.2\%$ if the network is mistakenly left in training mode (<code>model.train()</code>). What causes this catastrophe?</p>
+        <ol type="A">
+          <li>At batch size $B = 1$, the sample variance $\sigma_B^2 = \frac{1}{1} (x_1 - x_1)^2 = 0$. Dividing by $\sqrt{0 + \epsilon}$ multiplies activations by $1 / \sqrt{\epsilon} = 1000$, causing massive activation explosion.</li>
+          <li>At $B = 1$, the GPU disables tensor cores, corrupting 16-bit floating point mantissas.</li>
+          <li>BatchNorm requires $B \ge 32$ to satisfy the Central Limit Theorem; without it, the weights undergo stochastic gradient ascent.</li>
+          <li>In training mode, the running mean and variance are locked, causing memory fragmentation.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A • Comprehensive Batch Size Dynamics Analysis</div>
+
+        <p class="step"><strong>Detailed Analysis:</strong><br>
+        In training mode, Batch Normalization computes the mean and variance across the current mini-batch:
+        $$\mu_B = \frac{1}{B} \sum_{i=1}^B x_i, \quad \sigma_B^2 = \frac{1}{B} \sum_{i=1}^B (x_i - \mu_B)^2$$
+        When batch size $B = 1$:
+        $$\mu_B = x_1$$
+        $$\sigma_B^2 = (x_1 - x_1)^2 = \mathbf{0.0000}$$
+        Evaluating the normalized output:
+        $$\hat{x}_1 = \frac{x_1 - \mu_B}{\sqrt{\sigma_B^2 + \epsilon}} \gamma + \beta = \frac{x_1 - x_1}{\sqrt{0 + \epsilon}} \gamma + \beta = \frac{0}{\sqrt{\epsilon}} \gamma + \beta = \mathbf{\beta}$$
+        Notice what happens: <em>The input $x_1$ is completely erased!</em> The layer outputs the constant learned bias $\beta$ regardless of what image was fed into the camera!<br>
+        Every single frame maps to the exact same constant feature map, completely blinding the detector and collapsing mAP to zero.<br>
+        <strong>Fix:</strong>
+        <ol>
+          <li>Always switch to <code>model.eval()</code> during inference so the network uses the frozen running statistics $(\mu_{\text{run}}, \sigma^2_{\text{run}})$.</li>
+          <li>For architectures that must train with tiny micro-batches ($B \le 4$), use <strong>Group Normalization</strong> or <strong>Layer Normalization</strong>, which normalize across channel dimensions and are completely independent of batch size.</li>
+        </ol></p>
+
+        <p class="step"><strong>Why Other Options are False:</strong><br>
+        <ul>
+          <li><strong>B is FALSE:</strong> Tensor cores process single vectors without corrupting registers; the issue is pure arithmetic cancellation ($x - x = 0$).</li>
+          <li><strong>C is FALSE:</strong> While CLT improves estimator quality, the failure here is a deterministic mathematical identity: $\sigma_B^2 \equiv 0$ when $B=1$.</li>
+          <li><strong>D is FALSE:</strong> Running statistics are updated, not locked, in training mode.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.5.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.5.8</span>
+        <span class="difficulty difficulty-hard">Level 4 • Assertion-Reasoning &amp; Pre-LN vs Post-LN</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Evaluate the following Assertion and Reason regarding Transformer normalization architectures:</p>
+        <p><strong>Assertion (A):</strong> Modern foundation Transformers (GPT-3, LLaMA, PaLM) strictly implement <strong>Pre-LayerNorm</strong> ($\mathbf{x}_{l+1} = \mathbf{x}_l + \operatorname{MHA}(\operatorname{LN}(\mathbf{x}_l))$) rather than the original Vaswani et al. (2017) <strong>Post-LayerNorm</strong> ($\mathbf{x}_{l+1} = \operatorname{LN}(\mathbf{x}_l + \operatorname{MHA}(\mathbf{x}_l))$) because Pre-LN stabilizes gradient propagation across 100+ layers without requiring delicate learning rate warmups.</p>
+        <p><strong>Reason (R):</strong> In Pre-LayerNorm, the residual stream $\mathbf{x}_L = \mathbf{x}_0 + \sum_{l=1}^L f_l(\operatorname{LN}(\mathbf{x}_l))$ creates an unnormalized, clean highway where backpropagated gradients flow directly from the final layer to the initial token embeddings ($\frac{\partial \mathbf{x}_L}{\partial \mathbf{x}_0} = I + \dots$), whereas Post-LayerNorm repeatedly rescales the residual stream by compounding variance denominators, causing gradient vanishing/explosion in early layers.</p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct mathematical explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A • Comprehensive Residual Highway Analysis</div>
+
+        <p class="step"><strong>Detailed Analysis:</strong><br>
+        <strong>Analysis of Post-LayerNorm (Vaswani et al., 2017):</strong><br>
+        The layer update is:
+        $$\mathbf{x}_{l+1} = \operatorname{LN}(\mathbf{x}_l + \operatorname{SubLayer}(\mathbf{x}_l))$$
+        Notice that the normalization occurs <strong>after</strong> the residual addition.<br>
+        Unrolling across $L$ layers: the input to layer $l$ is divided by the variance of the accumulated activations. Xiong et al. (2020) proved that in Post-LN, the gradient norm with respect to parameters in the earliest layers scales as:
+        $$\|\nabla_{W_1} \mathcal{L}\| \propto \frac{1}{\sqrt{L}}$$
+        For deep Transformers ($L = 80$ or $96$), the gradient reaching the first layer is tiny. Training without a warm-up phase causes the optimizer to stall or explode because early layers cannot update effectively.</p>
+
+        <p class="step"><strong>Analysis of Pre-LayerNorm (Modern Foundation Models):</strong><br>
+        The layer update is:
+        $$\mathbf{x}_{l+1} = \mathbf{x}_l + \operatorname{SubLayer}(\operatorname{LN}(\mathbf{x}_l))$$
+        Unrolling this across all $L$ layers:
+        $$\mathbf{x}_L = \mathbf{x}_0 + \sum_{l=0}^{L-1} \operatorname{SubLayer}(\operatorname{LN}(\mathbf{x}_l))$$
+        Differentiating $\mathbf{x}_L$ with respect to the initial embedding $\mathbf{x}_0$:
+        $$\frac{\partial \mathbf{x}_L}{\partial \mathbf{x}_0} = I + \sum_{l=0}^{L-1} \frac{\partial \operatorname{SubLayer}(\operatorname{LN}(\mathbf{x}_l))}{\partial \mathbf{x}_0}$$
+        Notice the leading identity matrix $I$! The error signal from the final loss can propagate back to the input embedding in a <strong>single unattenuated step</strong> through the residual highway, completely bypassing the non-linear normalization denominators.<br>
+        This guarantees that the expected gradient norm remains $O(1)$ across all depths, allowing models to scale reliably to 100+ layers.<br>
+        Thus, (A) is true, and (R) provides the exact mathematical justification. $\blacksquare$</p>
       </div>
     </div>
 
     <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 3.5: RMSNorm from Scratch in PyTorch</h3>
+    <h3>5. Production Code Lab 3.5: RMSNorm from Scratch in PyTorch</h3>
     <p>Below is a production-style PyTorch implementation of RMSNorm matching Meta LLaMA 3's exact architectural specifications.</p>
 
     <div class="code-lab">
@@ -109,6 +466,10 @@
 import torch.nn as nn
 
 class RMSNormScratch(nn.Module):
+    """
+    Root Mean Square Layer Normalization (RMSNorm) as used in LLaMA 3.
+    Eliminates mean-centering to reduce GPU memory operations.
+    """
     def __init__(self, dim, eps=1e-6):
         super().__init__()
         self.eps = eps
@@ -127,7 +488,7 @@ class RMSNormScratch(nn.Module):
 
 if __name__ == "__main__":
     torch.manual_seed(42)
-    x = torch.randn(2, 4, 128) # Batch=2, Seq=4, Dim=128
+    x = torch.randn(2, 4, 128)  # Batch=2, Seq=4, Dim=128
     norm = RMSNormScratch(dim=128)
     out = norm(x)
     print(f"RMSNorm Output Shape: {out.shape} (Matches Input!)")

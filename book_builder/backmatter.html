@@ -20,21 +20,48 @@
       <tr><td>$\nabla_{\mathbf{w}} \mathcal{L}$</td><td>Gradient vector of loss $\mathcal{L}$ w.r.t $\mathbf{w}$</td><td>Direction of steepest ascent</td></tr>
       <tr><td>$\sigma(z)$</td><td>Sigmoid activation function</td><td>$\frac{1}{1 + e^{-z}}$</td></tr>
       <tr><td>$D_{\text{KL}}(P \parallel Q)$</td><td>Kullback-Leibler Divergence</td><td>Statistical distance between $P$ and $Q$</td></tr>
+      <tr><td>$\mathbb{E}_{x \sim P}[f(x)]$</td><td>Expectation under distribution $P$</td><td>Average value of $f(x)$</td></tr>
+      <tr><td>$\odot$</td><td>Hadamard (element-wise) product</td><td>$(\mathbf{a} \odot \mathbf{b})_i = a_i b_i$</td></tr>
     </table>
 
-    <h3>Essential AI Engineering Terms</h3>
+    <h3>Essential AI Engineering Glossary</h3>
     <ul>
-      <li><strong>Autograd:</strong> Reverse-mode automatic differentiation tracking operations on tensors to compute exact gradients via the chain rule.</li>
-      <li><strong>Backpropagation:</strong> The efficient computational graph algorithm for calculating partial derivatives $\frac{\partial \mathcal{L}}{\partial W^{[l]}}$.</li>
-      <li><strong>BPE (Byte-Pair Encoding):</strong> Subword tokenization algorithm that iteratively merges the most frequent adjacent character pairs into single tokens.</li>
+      <li><strong>Agentic RAG:</strong> An advanced retrieval pattern where an autonomous agent dynamically plans, decomposes multi-part queries, invokes search and compute tools, evaluates retrieval quality, and self-corrects before synthesizing responses.</li>
+      <li><strong>Autograd:</strong> Reverse-mode automatic differentiation tracking operations on computational tensors to compute exact vector-Jacobian products via the chain rule.</li>
+      <li><strong>Backpropagation Through Time (BPTT):</strong> Unrolling a sequential recurrent computational graph across $T$ discrete timesteps to accumulate parameter gradients.</li>
+      <li><strong>Bellman Equation:</strong> The foundational recursive relation in Reinforcement Learning decomposing value functions into immediate rewards plus discounted expected downstream returns: $V(s) = \max_a \sum_{s'} P(s'|s,a)[R(s,a,s') + \gamma V(s')]$.</li>
+      <li><strong>BERT (Bidirectional Encoder Representations from Transformers):</strong> An encoder-only Transformer pre-trained with Masked Language Modeling (MLM) and Next Sentence Prediction (NSP), capturing deep bidirectional context across all tokens.</li>
+      <li><strong>Bi-Encoder:</strong> A Siamese architecture encoding query and document into separate dense vectors offline, enabling sub-millisecond Maximum Inner Product Search (MIPS) at billion scale.</li>
+      <li><strong>BPE (Byte-Pair Encoding):</strong> Subword tokenization algorithm that iteratively merges the most frequent adjacent character or byte pairs into single vocabulary tokens.</li>
+      <li><strong>Cross-Encoder:</strong> An architecture concatenating query and document into a single token sequence, computing all-to-all bidirectional cross-attention for high-precision neural re-ranking.</li>
       <li><strong>Data Leakage:</strong> An evaluation catastrophe where information from the test or target dataset contaminates the training feature pipeline.</li>
-      <li><strong>Inductive Bias:</strong> The set of architectural assumptions a learning algorithm uses to predict outputs for unseen inputs.</li>
-      <li><strong>KV Cache:</strong> An inference optimization that stores Key and Value tensors in GPU memory to prevent redundant quadratic compute during autoregressive generation.</li>
-      <li><strong>LoRA:</strong> Low-Rank Adaptation, freezing base weights $W_0$ and updating parameters through factorized low-rank matrices $B \times A$.</li>
-      <li><strong>PSI (Population Stability Index):</strong> Statistical metric measuring divergence between baseline training feature distributions and production inference traffic.</li>
-      <li><strong>RAG (Retrieval-Augmented Generation):</strong> Augmenting LLM prompts with semantically retrieved context chunks from non-parametric vector databases.</li>
-      <li><strong>ReAct:</strong> An agent framework interleaving Reasoning (Thought) and Acting (Tool execution).</li>
+      <li><strong>Deep Q-Networks (DQN):</strong> An RL algorithm parameterizing the action-value function $Q(s, a; \theta)$ using deep neural networks stabilized by Experience Replay buffers and Target Networks.</li>
+      <li><strong>DoRA (Weight-Decomposed Low-Rank Adaptation):</strong> Parameter-efficient fine-tuning decomposing pre-trained weights into magnitude vectors and directional LoRA matrices, bridging the performance gap with full fine-tuning.</li>
+      <li><strong>FastText:</strong> Word representation model representing words as bags of character $n$-grams, enabling rich embeddings for out-of-vocabulary (OOV) tokens and morphologically complex words.</li>
+      <li><strong>FlashAttention:</strong> An exact IO-aware attention algorithm computing Softmax incrementally inside fast on-chip SRAM via tiling, eliminating quadratic HBM memory reads/writes.</li>
+      <li><strong>GGUF:</strong> The binary file format developed by Georgi Gerganov for fast, single-file loading and quantized local inference of LLMs on CPUs and edge devices with <code>llama.cpp</code>.</li>
+      <li><strong>GloVe (Global Vectors):</strong> An unsupervised embedding algorithm fitting log-bilinear vector dot products to log co-occurrence frequencies from the global corpus matrix via weighted least squares.</li>
+      <li><strong>GQA (Grouped-Query Attention):</strong> An attention variant where multiple query heads share a smaller number of key-value heads, reducing KV Cache memory footprint by $4\times$ to $8\times$ with near-zero degradation.</li>
+      <li><strong>Inductive Bias:</strong> The set of prior mathematical assumptions an algorithm makes about problem geometry (e.g., spatial translation invariance in CNNs, permutation equivariance in Transformers).</li>
+      <li><strong>KV Cache:</strong> An inference optimization that caches Key and Value tensors in GPU memory across decoding steps to avoid redundant quadratic matrix multiplications.</li>
+      <li><strong>LangGraph:</strong> A cyclic graph-based multi-agent orchestration framework built on the Pregel computation model, supporting persistent checkpointers, time-travel, and human-in-the-loop gates.</li>
+      <li><strong>LCEL (LangChain Expression Language):</strong> A declarative, Unix-style composition protocol for building streaming, concurrent, and resilient LLM pipelines using the Runnable interface.</li>
+      <li><strong>LoRA (Low-Rank Adaptation):</strong> Freezes pre-trained base model weights $W_0$ and injects trainable rank-decomposition matrices $B \times A$, reducing trainable parameters by over $99\%$.</li>
+      <li><strong>LSTM (Long Short-Term Memory):</strong> A recurrent neural cell with forget, input, and output gates protecting an uninterrupted linear cell state highway from vanishing gradients.</li>
+      <li><strong>Markov Decision Process (MDP):</strong> A 5-tuple $(\mathcal{S}, \mathcal{A}, P, R, \gamma)$ formalizing sequential decision making where state transitions satisfy the Markov property.</li>
+      <li><strong>MCP (Model Context Protocol):</strong> An open, standardized JSON-RPC protocol defining bidirectional client-host communication between LLM agents and sandboxed external tools.</li>
+      <li><strong>PPO (Proximal Policy Optimization):</strong> An on-policy actor-critic algorithm utilizing a clipped surrogate objective to prevent destabilizing large policy updates during RLHF.</li>
+      <li><strong>PSI (Population Stability Index):</strong> A statistical metric measuring divergence between baseline training distributions and production inference distributions for drift detection.</li>
+      <li><strong>RAG (Retrieval-Augmented Generation):</strong> Augmenting LLM prompts with semantically retrieved context chunks from non-parametric vector databases and knowledge graphs.</li>
+      <li><strong>RAGAS:</strong> The quantitative evaluation framework assessing RAG pipelines across Faithfulness, Answer Relevance, Context Precision, and Context Recall.</li>
+      <li><strong>ReAct:</strong> An autonomous agent framework interleaving Reasoning (Thought) and Acting (Tool execution) in an iterative loop.</li>
+      <li><strong>RoPE (Rotary Position Embedding):</strong> Encodes relative token positions by rotating 2D coordinate slices of query and key vectors in the complex plane.</li>
+      <li><strong>Self-RAG:</strong> A framework training models to generate adaptive reflection tokens to dynamically control when to retrieve, critique retrieval quality, and verify output faithfulness.</li>
       <li><strong>SVD (Singular Value Decomposition):</strong> Factorization of matrix $A$ into $U \Sigma V^T$, providing the mathematically optimal low-rank matrix approximation.</li>
+      <li><strong>SwiGLU:</strong> Gated linear unit activation $\text{Swish}(\mathbf{x}W_{\text{gate}}) \odot (\mathbf{x}W_{\text{up}}) W_{\text{down}}$ widely used in frontier LLMs (LLaMA-3, Mistral, PaLM).</li>
+      <li><strong>TF-IDF:</strong> Term Frequency-Inverse Document Frequency, a classic statistical measure evaluating keyword uniqueness across a document collection.</li>
+      <li><strong>Word2Vec:</strong> Mikolov's continuous text representation architectures (Continuous Bag-of-Words and Skip-Gram) trained with Negative Sampling on unigram frequencies to the 0.75 power.</li>
+      <li><strong>ZeRO (Zero Redundancy Optimizer):</strong> A memory optimization dividing optimizer states (ZeRO-1), gradients (ZeRO-2), and model parameters (ZeRO-3) across data-parallel ranks to train trillion-parameter models.</li>
     </ul>
   </div>
 </div>
@@ -51,7 +78,7 @@
 
   <div class="chapter-body">
     <p><strong>Ram Awasthi</strong> is an AI engineer, systems researcher, and educator passionate about demystifying artificial intelligence from first principles. With deep expertise across deep learning, large language models, high-performance computing, and production MLOps, Ram has dedicated himself to creating comprehensive, rigorous, and accessible educational resources that empower engineers worldwide to build real-world intelligent systems.</p>
-    <p>Inspired by the classic Indian mathematics textbooks of R.D. Sharma that emphasized thorough intuition, mathematical proof, and relentless problem-solving practice, Ram authored <em>The Complete AI Engineer</em> to bridge the gap between academic theory and production reality.</p>
+    <p>Emphasizing thorough first-principles intuition, exhaustive mathematical derivations, and relentless problem-solving practice, Ram authored <em>The Complete AI Engineer</em> to bridge the gap between academic theory and production reality.</p>
   </div>
 </div>
 
@@ -100,18 +127,18 @@ pip install -r requirements.txt</code></pre>
     <h4>3. Verify Environment Health</h4>
 <pre><code>python setup_env.py</code></pre>
 
-    <h4>4. Run Code Labs & Projects Chapter by Chapter</h4>
+    <h4>4. Run Code Labs &amp; Projects Chapter by Chapter</h4>
     <p>The repository mirrors the exact chapter structure of this book:</p>
     <ul>
-      <li><code>part0_foundations/</code> — Vectorization benchmarks & AI development dashboard</li>
-      <li><code>part1_mathematics/</code> — SVD low-rank compression & autograd engine</li>
-      <li><code>part2_classical_ml/</code> — OLS vs SGD, Decision Trees, SVM & ROC-AUC</li>
-      <li><code>part3_neural_networks/</code> — Analytical backprop, AdamW & PyTorch loops</li>
-      <li><code>part4_deep_learning/</code> — Conv2D, LSTM, Transformers & Diffusion</li>
-      <li><code>part5_llms_and_agents/</code> — BPE Tokenizer, KV Cache, LoRA & ReAct Agent</li>
-      <li><code>part6_mlops_production/</code> — FastAPI serving, PSI drift detector & Docker</li>
-      <li><code>part7_ai_system_design/</code> — Industrial two-stage recommendation architecture</li>
-      <li><code>part8_frontier/</code> — Multimodal CLIP search, Q-Learning & INT8 quantization</li>
+      <li><code>part0_foundations/</code> — Vectorization benchmarks &amp; AI development dashboard</li>
+      <li><code>part1_mathematics/</code> — SVD low-rank compression &amp; autograd engine</li>
+      <li><code>part2_classical_ml/</code> — OLS vs SGD, Decision Trees, SVM, RL DQN &amp; ROC-AUC</li>
+      <li><code>part3_neural_networks/</code> — Analytical backprop, AdamW, PyTorch, JAX &amp; RNNs/LSTMs</li>
+      <li><code>part4_deep_learning/</code> — Conv2D, U-Net, Diffusion, ViTs, Whisper &amp; Word2Vec/GloVe</li>
+      <li><code>part5_llms_and_agents/</code> — Transformers, BERT, SBERT, LoRA, DoRA, LangChain &amp; LangGraph</li>
+      <li><code>part6_mlops_production/</code> — FastAPI serving, PSI drift detector &amp; Triton</li>
+      <li><code>part7_ai_system_design/</code> — Industrial two-stage recommendation architecture &amp; vector databases</li>
+      <li><code>part8_frontier/</code> — MCP protocols, test-time compute &amp; physical hardware limits</li>
     </ul>
   </div>
 </div>
@@ -125,7 +152,7 @@ pip install -r requirements.txt</code></pre>
     <h3 style="font-size: 1.1em; color: #e0e1dd; font-weight: 300; margin-bottom: 1.5em;">From Absolute Beginner to Production-Ready Engineer</h3>
 
     <p style="font-size: 0.9em; line-height: 1.6; margin-bottom: 1.2em; color: #cdd5e0;">
-      Every concept taught the way a great teacher explains it. Inspired by the legendary R.D. Sharma mathematics series, this book teaches artificial intelligence from first principles — moving from mental intuition and rigorous mathematical derivations to solved FAANG interview problems and production-grade engineering code.
+      Every concept taught the way a great teacher explains it. Designed as an exhaustive, first-principles masterwork, this book teaches artificial intelligence from the ground up — moving from mental intuition and rigorous mathematical derivations to solved FAANG interview problems and production-grade engineering code.
     </p>
 
     <div style="background: rgba(255,255,255,0.08); padding: 12px 16px; border-left: 3px solid #5fa8d3; margin-bottom: 1.5em; border-radius: 4px;">
@@ -135,14 +162,16 @@ pip install -r requirements.txt</code></pre>
     </div>
 
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.8em; color: #a0aec0; margin-bottom: 1.5em;">
-      <div>✓ Complete Python & Math Foundations</div>
-      <div>✓ Classical Machine Learning from Scratch</div>
-      <div>✓ Analytical Backprop & Neural Networks</div>
-      <div>✓ Modern Transformers & Attention</div>
-      <div>✓ LLMs, Tokenizers, LoRA & Agents</div>
-      <div>✓ Enterprise MLOps & High-Scale Systems</div>
-      <div>✓ 100+ Top FAANG Interview Problems</div>
-      <div>✓ Official Companion GitHub Repository</div>
+      <div>✓ Complete Python &amp; Math Foundations</div>
+      <div>✓ Classical Machine Learning &amp; RL</div>
+      <div>✓ Backprop, PyTorch, JAX, RNNs &amp; LSTMs</div>
+      <div>✓ Vision, Diffusion, ViTs &amp; Audio Whisper</div>
+      <div>✓ Transformers, BERT, SBERT &amp; Embeddings</div>
+      <div>✓ SFT, LoRA, DoRA, GGUF, LCEL &amp; LangGraph</div>
+      <div>✓ Enterprise MLOps &amp; Triton Serving</div>
+      <div>✓ Distributed Vector Databases &amp; RecSys</div>
+      <div>✓ MCP Standard &amp; Test-Time Compute</div>
+      <div>✓ 100+ Solved FAANG Interview Problems</div>
     </div>
 
     <div style="margin-top: auto; padding-top: 1em; border-top: 1px solid rgba(255,255,255,0.15); display: flex; justify-content: space-between; align-items: center;">

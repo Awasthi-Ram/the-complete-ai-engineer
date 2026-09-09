@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="test_time_search_trees.png" alt="Figure 8.2.1: test time search trees">
+        <div class="diagram-caption"><strong>Figure 8.2.1:</strong> Test-Time Compute scaling and reasoning search trees. Rather than relying on single greedy Chain-of-Thought paths that compound errors, test-time scaling explores trees of thoughts via Monte Carlo Tree Search (MCTS), evaluated at each intermediate token step by Process Reward Models (PRMs).</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 8.2 — TEST-TIME COMPUTE & REASONING MODELS
      ====================================================================== -->
@@ -5,7 +11,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 8.2</span>
     <h2 class="chapter-title">Test-Time Compute &amp; Reasoning Models</h2>
-    <span class="chapter-subtitle">The Second Scaling Law, Hidden Chains of Thought, Monte Carlo Tree Search &amp; PRMs</span>
+    <span class="chapter-subtitle">The Second Scaling Law, Hidden Chains of Thought, Process Reward Models (PRMs), Monte Carlo Tree Search &amp; Verification Loops</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -21,7 +27,7 @@
     <h3>1. The Second Scaling Law: Beyond Pre-Training</h3>
     <p>For five years, the AI scaling hypothesis was dominated by the <strong>Kaplan and Chinchilla Pre-Training Scaling Laws</strong>: to make a model smarter, you trained more parameters on more trillions of web tokens. However, around 2024, the pre-training paradigm began experiencing diminishing returns due to the impending depletion of high-quality human text data on the public internet.</p>
 
-    <p>In late 2024, OpenAI unlocked the <strong>Second Scaling Law: Test-Time (Inference) Compute Scaling (o1, o3)</strong>:</p>
+    <p>In late 2024, OpenAI unlocked the <strong>Second Scaling Law: Test-Time (Inference) Compute Scaling (o1, o3, DeepSeek-R1)</strong>:</p>
 
     <div class="real-world-box">
       <h4>⚡ The Test-Time Compute Paradigm</h4>
@@ -29,7 +35,9 @@
       <ul>
         <li>The model "thinks" for 15, 30, or 60 seconds before producing its final user-facing response.</li>
         <li>It generates thousands of internal, hidden <strong>Chain-of-Thought (CoT) tokens</strong> that the user does not see.</li>
-        <li>Mathematical accuracy on competitive benchmarks (International Mathematical Olympiad, Codeforces competitive programming) <strong>scales monotonically as a power law of the number of test-time compute FLOPs expended</strong>!</li>
+        <li>Mathematical accuracy on competitive benchmarks (International Mathematical Olympiad, Codeforces competitive programming) <strong>scales monotonically as a power law of the number of test-time compute FLOPs expended</strong>:
+          $$\text{Error}(C_{\text{test}}) \propto C_{\text{test}}^{-\beta}$$
+        </li>
       </ul>
     </div>
 
@@ -52,123 +60,595 @@
       <li><strong>Expansion:</strong> At reasoning step $t$, sample $K$ candidate next-thought paths (e.g. 5 alternative mathematical approaches).</li>
       <li><strong>Evaluation:</strong> Score each candidate thought path using a Process Reward Model.</li>
       <li><strong>Backtracking:</strong> If a path leads to a contradiction, the model generates an explicit reflection token: <code>"Wait, that leads to a negative discriminant. Let me reconsider step 2..."</code> and backtracks to an earlier node in the thought tree.</li>
-      <li><strong>Verification:</strong> The model writes code or executes formal logic checks to verify its intermediate conclusions before committing to a final answer.</li>
+      <li><strong>Verification:</strong> The model writes code or executes formal logic checks (e.g. Python REPL, Lean 4) to verify its intermediate conclusions before committing to a final answer.</li>
     </ol>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Reasoning Models</h3>
+    <!-- ======================================================================
+         SECTION 4: 4-TIER GRADED PRACTICE SUITE
+         ====================================================================== -->
+    <h3>4-Tier Graded Practice Suite — Test-Time Compute &amp; Reasoning Models</h3>
+    <p>Eight rigorous problems spanning Best-of-N rejection sampling probability, FLOPs and serving cost sizing, MCTS thought-tree execution traces, PRM step-level credit assignment, test-time scaling power law proofs, joint pre-training/test-time budget derivations, hidden thought security traps, and PRM length-hacking dynamics.</p>
 
+    <!-- TIER 1: NUMERICAL DRILLS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+    <!-- Problem 8.2.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 8.2.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="difficulty difficulty-medium">Medium</span>
         <span class="company-tag company-openai">OpenAI</span>
-        <span class="company-tag company-deepmind">DeepMind</span>
+        <span class="company-tag company-deepmind">Google DeepMind</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Explain how Test-Time Compute Scaling alters the serving economics and latency SLAs of enterprise AI applications. Contrast the serving cost of a standard 70B parameter model answering in 500 output tokens vs. a reasoning model generating 25,000 hidden reasoning tokens before outputting a 500-token answer.</p>
+        <p><strong>QUESTION:</strong> An autonomous reasoning model is evaluated on competitive Olympiad mathematics problems. On a difficult question, the single-pass baseline accuracy is $p = 0.04$ ($4\%$ probability that an individual chain-of-thought trajectory produces the correct answer).</p>
+        <p>At inference time, the system deploys <strong>Best-of-$N$ Rejection Sampling</strong>, generating $N = 64$ independent candidate reasoning trajectories. An Outcome-Supervised Reward Model (ORM) acts as a verifier to filter solutions. The ORM has the following classification profile:</p>
+        <ul>
+          <li>True Positive Rate (Sensitivity): $\text{TPR} = P(\text{ORM accepts} \mid \text{Solution is correct}) = 0.95$.</li>
+          <li>False Positive Rate: $\text{FPR} = P(\text{ORM accepts} \mid \text{Solution is incorrect}) = 0.02$.</li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the probability that at least one correct reasoning trajectory exists in the candidate pool of $N = 64$ samples: $P(\text{pass}@64)$.</li>
+          <li>Calculate the expected number of true positive solutions ($\mathbb{E}[\text{TP}]$) and false positive hallucinations ($\mathbb{E}[\text{FP}]$) accepted by the ORM across the 64 samples.</li>
+          <li>Compute the posterior probability $P(\text{Correct} \mid \text{Accepted})$ that a solution accepted by the ORM is mathematically sound.</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Serving Economics Audit</div>
+        <div class="solution-label">✓ Step-by-Step Rejection Sampling Solution</div>
 
-        <p class="step"><strong>Step 1: Token Generation Cost Ratio:</strong>
-        <ul>
-          <li>Standard Model: Generates $500 \text{ tokens}$. At $\$0.80$ per million output tokens:
-          $$\text{Cost}_{\text{standard}} = \frac{500}{1,000,000} \times \$0.80 = \mathbf{\$0.0004 \text{ per query}}$$</li>
-          <li>Reasoning Model: Generates $25,000 \text{ hidden CoT tokens} + 500 \text{ answer tokens} = 25,500 \text{ total tokens}$.
-          $$\text{Cost}_{\text{reasoning}} = \frac{25,500}{1,000,000} \times \$0.80 = \mathbf{\$0.0204 \text{ per query}}$$</li>
-        </ul>
-        $$\text{Cost Factor} = \frac{\$0.0204}{\$0.0004} = \mathbf{51\times \text{ Higher Cost per Query}}!$$</p>
+        <p class="step"><strong>Step 1: Probability of at Least One Correct Solution ($P(\text{pass}@64)$):</strong><br>
+        The probability that all $N = 64$ independent trajectories fail is:
+        $$P(\text{all fail}) = (1 - p)^N = (1 - 0.04)^{64} = (0.96)^{64}$$
+        Calculating the power:
+        $$(0.96)^{64} \approx 0.073877$$
+        Therefore, the probability that at least one solution is correct is:
+        $$P(\text{pass}@64) = 1 - P(\text{all fail}) = 1 - 0.073877 = \mathbf{0.92612 \quad (92.61\%)}$$
+        <em>Remarkable Scaling: Although individual single-pass accuracy is a dismal 4%, expanding test-time compute to 64 samples elevates the solution discovery probability to over 92.6%!</em></p>
 
-        <p class="step"><strong>Step 2: Latency SLA &amp; GPU Hardware Requirements:</strong><br>
-        Generating 25,000 tokens sequentially at 50 tokens/sec takes <strong>$500 \text{ seconds (over 8 minutes!)}$</strong> on a single GPU. To make reasoning models viable for interactive workflows, inference engines deploy <strong>Speculative Decoding with multi-token draft heads and parallel tree exploration</strong>, requiring serving clusters to allocate $4\times$ to $8\times$ more GPUs per concurrent active user session.</p>
+        <p class="step"><strong>Step 2: Expected True Positives and False Positives:</strong><br>
+        In a pool of $N = 64$ samples:
+        $$\text{Expected Correct} = N \times p = 64 \times 0.04 = 2.56\text{ trajectories}$$
+        $$\text{Expected Incorrect} = N \times (1 - p) = 64 \times 0.96 = 61.44\text{ trajectories}$$
+        Applying the ORM verifier:
+        $$\mathbb{E}[\text{TP}] = \text{Expected Correct} \times \text{TPR} = 2.56 \times 0.95 = \mathbf{2.432\text{ true positives}}$$
+        $$\mathbb{E}[\text{FP}] = \text{Expected Incorrect} \times \text{FPR} = 61.44 \times 0.02 = \mathbf{1.2288\text{ false positives}}$$
+        Total solutions accepted by the verifier:
+        $$\mathbb{E}[\text{Accepted}] = 2.432 + 1.2288 = 3.6608\text{ solutions}$$</p>
+
+        <p class="step"><strong>Step 3: Posterior Correctness Probability:</strong><br>
+        By Bayes' Theorem:
+        $$P(\text{Correct} \mid \text{Accepted}) = \frac{\mathbb{E}[\text{TP}]}{\mathbb{E}[\text{Accepted}]} = \frac{2.432}{3.6608} \approx \mathbf{0.66433 \quad (66.43\%)}$$
+        <em>Conclusion: Filtering through the ORM elevates answer precision from the initial 4% prior up to 66.43%! This demonstrates why combining test-time sample generation with reward verification forms the backbone of modern reasoning architectures.</em></p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 8.2: Tree-Search Reasoning Engine with Self-Verification</h3>
-    <p>Below is an educational Python implementation of a Tree-Search Reasoning Engine executing candidate thought expansion, verification scoring, and automated backtracking.</p>
+    <!-- Problem 8.2.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 8.2.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An enterprise deploys a 70-Billion parameter frontier reasoning model ($P = 70 \times 10^9$ parameters) to solve complex code refactoring and formal verification requests.</p>
+        <p><strong>Workload Specifications:</strong></p>
+        <ul>
+          <li>For each request, the model generates an internal hidden reasoning chain of $T_{\text{think}} = 8,192\text{ tokens}$ before emitting a final concise response of $T_{\text{out}} = 512\text{ tokens}$.</li>
+          <li>The computational requirement for autoregressive generation is modeled by the standard forward pass approximation $F = 2 P \times T_{\text{total}}$ FLOPs.</li>
+          <li>The inference server runs on an NVIDIA H100 SXM5 cluster attaining an effective sustained compute throughput of $R_{\text{eff}} = 400\text{ TFLOPS} = 4.0 \times 10^{14}\text{ FLOPs/sec}$ per GPU.</li>
+          <li>Cloud GPU hosting costs &dollar;2.50 per hour per GPU.</li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the total FLOPs expended per query in PetaFLOPs ($10^{15}$ FLOPs).</li>
+          <li>Calculate the execution latency in seconds on a single GPU.</li>
+          <li>Calculate the cloud inference cost per single query.</li>
+          <li>Compare these metrics against a standard non-reasoning model that generates only the 512 output tokens with zero test-time thinking.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step FLOPs &amp; Cost Sizing Solution</div>
+
+        <p class="step"><strong>Step 1: Total Computational FLOPs:</strong><br>
+        Total tokens generated per query:
+        $$T_{\text{total}} = T_{\text{think}} + T_{\text{out}} = 8,192 + 512 = 8,704\text{ tokens}$$
+        Total FLOPs:
+        $$F = 2 \times P \times T_{\text{total}} = 2 \times (70 \times 10^9) \times 8,704 = 1.40 \times 10^{11} \times 8,704$$
+        $$F = 1,218,560,000,000,000\text{ FLOPs} = \mathbf{1.21856 \times 10^{15}\text{ FLOPs (1.219 PetaFLOPs)}}$$</p>
+
+        <p class="step"><strong>Step 2: Execution Latency:</strong><br>
+        At sustained throughput $R_{\text{eff}} = 4.0 \times 10^{14}\text{ FLOPs/sec}$:
+        $$T_{\text{latency}} = \frac{F}{R_{\text{eff}}} = \frac{1.21856 \times 10^{15}\text{ FLOPs}}{4.0 \times 10^{14}\text{ FLOPs/s}} = \mathbf{3.0464\text{ seconds}}$$</p>
+
+        <p class="step"><strong>Step 3: Cloud Inference Cost per Query:</strong><br>
+        GPU cost per second:
+        $$C_{\text{sec}} = \frac{\text{USD } 2.50}{3,600\text{ seconds}} \approx \text{USD } 0.00069444\text{ per second}$$
+        Cost per query:
+        $$C_{\text{query}} = 3.0464\text{ s} \times \text{USD } 0.00069444/\text{s} = \mathbf{\text{USD } 0.002115 \quad (\approx \text{USD } 2.12 \text{ per 1,000 queries})}$$</p>
+
+        <p class="step"><strong>Step 4: Comparison with Non-Reasoning Baseline ($T = 512$ tokens):</strong><br>
+        Baseline metrics:
+        $$F_{\text{baseline}} = 2 \times (70 \times 10^9) \times 512 = 7.168 \times 10^{13}\text{ FLOPs} = 0.07168\text{ PFLOPs}$$
+        $$T_{\text{latency, baseline}} = \frac{7.168 \times 10^{13}}{4.0 \times 10^{14}} = \mathbf{0.1792\text{ seconds}}$$
+        $$C_{\text{query, baseline}} = 0.1792\text{ s} \times \text{USD } 0.00069444/\text{s} = \mathbf{\text{USD } 0.0001244 \quad (\approx \text{USD } 0.12 \text{ per 1,000 queries})}$$
+        <strong>Ratios:</strong>
+        $$\frac{F_{\text{reasoning}}}{F_{\text{baseline}}} = \frac{8,704}{512} = \mathbf{17.0\times\text{ more compute, latency, and cost}}$$
+        <em>Architectural Takeaway: Frontier reasoning models are approximately $17\times$ more expensive than standard LLMs, but they replace human engineering hours that cost &dollar;100/hr with &dollar;0.002 of compute!</em></p>
+      </div>
+    </div>
+
+    <!-- TIER 2: APPLIED ENGINEERING TRACES -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+    <!-- Problem 8.2.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 8.2.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-deepmind">Google DeepMind</span>
+        <span class="company-tag company-openai">OpenAI</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An autonomous mathematical reasoner uses <strong>Monte Carlo Tree Search (MCTS) in Thought Space</strong> guided by a Process Reward Model (PRM). At each node $s$, next-thought actions $a$ are selected using the Predictor Upper Confidence Bound for Trees (PUCT) formula:</p>
+        $$\text{PUCT}(s, a) = Q(s, a) + c_{\text{puct}} \cdot P(s, a) \cdot \frac{\sqrt{\sum_{b} N(s, b)}}{1 + N(s, a)}$$
+        <p>Let exploration constant $c_{\text{puct}} = 1.414$. Root node $s_0$ has prior probabilities $P(s_0, a_1) = 0.60$ (Algebraic substitution) and $P(s_0, a_2) = 0.40$ (Geometric inversion).</p>
+        <p>Initially, all visit counts are zero: $N(s_0, a_1) = N(s_0, a_2) = 0$ and $Q(s_0, a_1) = Q(s_0, a_2) = 0.0$.</p>
+        <p>Trace 3 successive MCTS iterations where:</p>
+        <ul>
+          <li><strong>Iteration 1:</strong> Explores $a_1$; PRM evaluates the resulting thought step with reward $r_1 = 0.85$.</li>
+          <li><strong>Iteration 2:</strong> Evaluates PUCT values; selects and explores the optimal child node; PRM evaluates with reward $r_2 = 0.40$.</li>
+          <li><strong>Iteration 3:</strong> Evaluates PUCT values; selects and explores the optimal node; PRM evaluates with reward $r_3 = 0.90$.</li>
+        </ul>
+        <p>Construct an algorithmic trace table documenting PUCT scores, chosen action, PRM feedback, and backpropagated visit counts and $Q$-values.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Algorithmic MCTS in Thought Space Trace Table</div>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Iter</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">$\text{PUCT}(s_0, a_1)$ Calculation</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">$\text{PUCT}(s_0, a_2)$ Calculation</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Action Chosen</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">PRM Score</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Updated Node State ($N, W, Q$)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0 + 1.414 \times 0.60 \times \frac{\sqrt{0}}{1 + 0} \implies$ Prior: $0.60$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0 + 1.414 \times 0.40 \times \frac{\sqrt{0}}{1 + 0} \implies$ Prior: $0.40$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>Action $a_1$</strong> (Higher prior $0.60 > 0.40$).</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$r = 0.85$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$N(a_1) = 1, W(a_1) = 0.85 \implies \mathbf{Q(a_1) = 0.850}$<br>$N(a_2) = 0, Q(a_2) = 0.0$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.850 + 1.414 \times 0.60 \times \frac{\sqrt{1}}{1 + 1} = 0.850 + 0.424 = \mathbf{1.274}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.000 + 1.414 \times 0.40 \times \frac{\sqrt{1}}{1 + 0} = 0.000 + 0.566 = \mathbf{0.566}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>Action $a_1$</strong> ($1.274 > 0.566$). Expands deeper to child $s_1$.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$r = 0.40$ (Flawed step!)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$N(a_1) = 2, W(a_1) = 0.85 + 0.40 = 1.25$<br>$\mathbf{Q(a_1) = 1.25 / 2 = 0.625}$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.625 + 1.414 \times 0.60 \times \frac{\sqrt{2}}{1 + 2} = 0.625 + 0.400 = \mathbf{1.025}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.000 + 1.414 \times 0.40 \times \frac{\sqrt{2}}{1 + 0} = 0.000 + 0.800 = \mathbf{0.800}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>Action $a_1$</strong> ($1.025 > 0.800$).</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$r = 0.90$ (Correction discovered!)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$N(a_1) = 3, W(a_1) = 1.25 + 0.90 = 2.15$<br>$\mathbf{Q(a_1) = 2.15 / 3 \approx 0.717}$</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p><em>Observation: Notice how PUCT balances the high initial reward of $a_1$ against the exploration incentive of unvisited action $a_2$. In Iteration 2, when $a_1$ hit a flawed step ($r = 0.40$), its $Q$-value dropped, pulling its PUCT score down towards $a_2$.</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 8.2.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 8.2.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-anthropic">Anthropic</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Consider an autonomous model generating a 4-step mathematical proof to find the real roots of $x^2 - 4x + 4 = 0$:</p>
+        <ul>
+          <li><strong>Step 1:</strong> <code>"Identify quadratic coefficients: a = 1, b = -4, c = 4."</code> (Mathematically Sound)</li>
+          <li><strong>Step 2:</strong> <code>"Factor the quadratic: x^2 - 4x + 4 = (x + 2)^2 = 0."</code> (<strong>Critical Algebraic Blunder!</strong> Sign error: should be $(x - 2)^2$).</li>
+          <li><strong>Step 3:</strong> <code>"Set factor to zero: x + 2 = 0 => x = -2."</code> (Logically consistent with flawed Step 2).</li>
+          <li><strong>Step 4:</strong> <code>"Wait, let me evaluate x = 2: 2^2 - 4(2) + 4 = 0. Therefore, the unique real root is x = 2."</code> (<strong>Lucky Compensating Blunder:</strong> Model guesses $x = 2$ and lands on the correct final answer!).</li>
+        </ul>
+        <p>Contrast how credit assignment is handled under:</p>
+        <ol type="a">
+          <li>An <strong>Outcome-Supervised Reward Model (ORM)</strong> evaluating only the final answer.</li>
+          <li>A <strong>Process-Supervised Reward Model (PRM)</strong> scoring each step individually.</li>
+        </ol>
+        <p>Construct a trace table detailing the step-by-step reward signals, policy gradient updates, and resulting reinforcement risks.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Credit Assignment Comparison Trace</div>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Step</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Content &amp; Mathematical Validity</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">ORM Reward Assignment</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">PRM Reward Assignment</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Reinforcement Learning Consequence</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$a=1, b=-4, c=4$ (Sound)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$r = +1.0$ (Deferred)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{r_1 = +1.0}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Both reward models correctly reinforce proper coefficient extraction.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$x^2 - 4x + 4 = (x + 2)^2$ (<strong>FALSE</strong>)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$r = +1.0$ (Deferred)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{r_2 = 0.0\text{ (PENALIZED!)}}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>ORM Trap:</strong> ORM assigns $+1.0$ reward to a mathematically false algebraic factorization, actively teaching the model that $(x+2)^2 = x^2 - 4x + 4$! PRM catches the blunder instantly.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$x + 2 = 0 \implies x = -2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$r = +1.0$ (Deferred)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{r_3 = 0.0}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">ORM reinforces invalid deduction chain; PRM maintains zero reward.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>4</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$x = 2$ (Correct final answer)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{r_{\text{final}} = +1.0}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{r_4 = +1.0}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Both acknowledge correct final verification.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>Total</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>Policy Gradient Update Summary</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\nabla_\theta \mathcal{L} \propto \sum_{t=1}^4 \mathbf{(+1.0)} \nabla \ln \pi(a_t)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\nabla_\theta \mathcal{L} \propto \sum_{t=1}^4 \mathbf{r_t} \nabla \ln \pi(a_t)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>ORM reinforces "lucky errors"</strong>, causing hallucination drift. <strong>PRM isolates and suppresses faulty reasoning</strong> while preserving valid intuition.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TIER 3: MATHEMATICAL PROOFS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 3: FAANG Tier-1 / Research Lab Mathematical Proofs</h4>
+
+    <!-- Problem 8.2.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 8.2.5</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-stanford">Stanford</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Formulate the mathematical proof of the <strong>Test-Time Compute Scaling Law</strong> for tree search over reasoning trajectories.</p>
+        <p>Let a reasoning task require finding a valid path of length $D$ in a thought tree with branching factor $b \ge 2$. At each node, a generator policy samples candidate thought steps, and a verifier (PRM) scores each candidate:</p>
+        <ul>
+          <li>The probability that the generator proposes the mathematically correct next step is $p \in (0, 1)$.</li>
+          <li>The verifier has a false negative rate $\beta = 0$ (never rejects a true step) and a false positive rate $\alpha \in (0, 1)$ (erroneously accepts a false step).</li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>State the condition on $\alpha$ and $b$ required for the expected search tree size to remain finite as search depth $D \to \infty$ (the Subcritical Branching Process condition).</li>
+          <li>Prove that if $\alpha \cdot b < 1$, the expected total compute (number of explored nodes $N$) required to discover the correct proof of depth $D$ is bounded by:
+            $$\mathbb{E}[N] \le \frac{D}{p(1 - \alpha b)}$$
+          </li>
+          <li>Contrast this with an unverified random search ($\alpha = 1$), and prove why process-level verification transforms an exponential search complexity $\mathcal{O}(b^D)$ into a strictly linear complexity $\mathcal{O}(D)$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Proof of Subcritical Branching Reasoning Complexity</div>
+
+        <p class="step"><strong>Step 1: The Branching Process Condition:</strong><br>
+        At each node, the generator explores $b$ candidate branches. Exactly one branch is the mathematically correct continuation, while $b - 1 \approx b$ branches are invalid distractors.<br>
+        For an invalid distractor branch, the verifier accepts it with probability $\alpha$.<br>
+        Let $Z_t$ be the number of false exploration branches surviving at depth $t$.<br>
+        Each surviving false node generates on average $b \cdot \alpha$ surviving children at the next depth:
+        $$\mathbb{E}[Z_{t+1} \mid Z_t] = (\alpha \cdot b) Z_t$$
+        By the Galton-Watson Branching Process Theorem:
+        The expected number of false surviving nodes remains bounded if and only if the offspring mean is strictly subcritical:
+        $$\mathbf{\alpha \cdot b < 1 \iff \alpha < \frac{1}{b}} \quad \text{Q.E.D.}$$</p>
+
+        <p class="step"><strong>Step 2: Proof of Linear Expected Nodes Bound:</strong><br>
+        Along the true reasoning trajectory of depth $D$, there are $D$ valid nodes.<br>
+        At each true node $k \in \{1, \dots, D\}$:
+        The generator proposes the correct step with probability $p$. The expected number of attempts required to generate the correct step is geometric:
+        $$\mathbb{E}[\text{Attempts}] = \frac{1}{p}$$
+        During each attempt, the generator spawns on average $b - 1 < b$ invalid distractor branches.<br>
+        Each distractor branch that gets erroneously accepted by the verifier (with probability $\alpha$) seeds an unwanted false subtree.<br>
+        Because $\alpha b < 1$, the total expected number of nodes in a false subtree is the sum of a convergent geometric series:
+        $$\mathbb{E}[\text{Subtree Size}] = 1 + (\alpha b) + (\alpha b)^2 + (\alpha b)^3 + \dots = \frac{1}{1 - \alpha b}$$
+        Therefore, at each depth along the proof path, the expected number of nodes explored before advancing is:
+        $$\mathbb{E}[\text{Nodes per step}] \le \frac{1}{p} \cdot \left( 1 + \alpha b \cdot \frac{1}{1 - \alpha b} \right) = \frac{1}{p} \left( \frac{1 - \alpha b + \alpha b}{1 - \alpha b} \right) = \frac{1}{p(1 - \alpha b)}$$
+        Summing across all $D$ steps of the proof:
+        $$\mathbb{E}[N] = \sum_{k=1}^D \mathbb{E}[\text{Nodes per step}] \le \mathbf{\frac{D}{p(1 - \alpha b)}} \quad \text{Q.E.D.}$$</p>
+
+        <p class="step"><strong>Step 3: Exponential vs. Linear Complexity Comparison:</strong><br>
+        <strong>Without a Verifier ($\alpha = 1$):</strong><br>
+        At every step, the model cannot distinguish between sound and unsound thoughts. An unguided search must explore all possible trajectories of depth $D$:
+        $$N_{\text{unverified}} = \sum_{t=1}^D b^t = \frac{b^{D+1} - b}{b - 1} = \mathbf{\mathcal{O}(b^D)}$$
+        For branching factor $b = 5$ and a 30-step proof ($D = 30$):
+        $$N_{\text{unverified}} = 5^{30} \approx 9.31 \times 10^{20}\text{ nodes (Physically impossible to search!)}$$<br>
+        <strong>With a Subcritical PRM Verifier ($\alpha < 1/b$):</strong><br>
+        For $b = 5$, suppose the PRM achieves false positive rate $\alpha = 0.10$ ($\alpha b = 0.50 < 1$). If $p = 0.50$:
+        $$\mathbb{E}[N_{\text{PRM}}] \le \frac{30}{0.50(1 - 0.50)} = \frac{30}{0.25} = \mathbf{120\text{ nodes}}!$$
+        <em>Conclusion: A Process Reward Model operating in the subcritical regime $\alpha b < 1$ collapses an impossible $10^{21}$-node search space into a trivial 120-node evaluation, mathematically unlocking frontier reasoning!</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 8.2.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 8.2.6</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-mit">MIT</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An AI laboratory is designing an optimal compute allocation strategy for a new foundation model. The total organizational compute budget is $C_{\text{total}}$ FLOPs.</p>
+        <p>The budget is divided between two phases:</p>
+        <ol>
+          <li><strong>Pre-Training Phase:</strong> Consumes $C_{\text{train}}$ FLOPs, producing a base model whose loss scales according to the Chinchilla scaling law:
+            $$L(C_{\text{train}}) = A \cdot C_{\text{train}}^{-\alpha}$$
+          </li>
+          <li><strong>Inference Serving Phase:</strong> The model is deployed to serve $Q$ production queries over its operational lifetime. Each query is allocated a test-time search compute budget of $C_{\text{test}}$ FLOPs. The test-time scaling law reduces residual task error according to:
+            $$\mathcal{E}(C_{\text{train}}, C_{\text{test}}) = L(C_{\text{train}}) \cdot C_{\text{test}}^{-\beta} = A \cdot C_{\text{train}}^{-\alpha} \cdot C_{\text{test}}^{-\beta}$$
+            where $\alpha > 0$ and $\beta > 0$ are the empirical scaling exponents.
+          </li>
+        </ol>
+        <p>The total compute expenditure constraint is: $C_{\text{train}} + Q \cdot C_{\text{test}} = C_{\text{total}}$.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Formulate the constrained optimization problem to minimize the lifetime error $\mathcal{E}$.</li>
+          <li>Using the method of Lagrange multipliers, derive the exact closed-form optimal allocation ratio between pre-training compute $C_{\text{train}}^*$ and total lifetime test-time compute $C_{\text{test, total}}^* = Q \cdot C_{\text{test}}^*$.</li>
+          <li>Prove that the optimal pre-training fraction is given by:
+            $$\frac{C_{\text{train}}^*}{C_{\text{total}}} = \frac{\alpha}{\alpha + \beta}$$
+            and interpret this result for the regime where query volume $Q \to \infty$.
+          </li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Derivation of Optimal Pre-Train vs Test-Time Allocation</div>
+
+        <p class="step"><strong>Step 1: Constrained Optimization Formulation:</strong><br>
+        Let $X = C_{\text{train}}$ and $Y = Q \cdot C_{\text{test}}$ (so $C_{\text{test}} = Y / Q$).<br>
+        The objective to minimize is the task error:
+        $$\mathcal{E}(X, Y) = A \cdot X^{-\alpha} \cdot \left(\frac{Y}{Q}\right)^{-\beta} = A Q^\beta \cdot X^{-\alpha} Y^{-\beta}$$
+        Taking the natural logarithm (which preserves monotonicity):
+        $$\ln \mathcal{E}(X, Y) = \ln(A Q^\beta) - \alpha \ln X - \beta \ln Y$$
+        Minimizing $\mathcal{E}$ is equivalent to maximizing:
+        $$\Phi(X, Y) = \alpha \ln X + \beta \ln Y \quad \text{subject to } X + Y = C_{\text{total}}$$
+        with $X > 0, Y > 0$.</p>
+
+        <p class="step"><strong>Step 2: Solution via Lagrange Multipliers:</strong><br>
+        Construct the Lagrangian:
+        $$\mathcal{L}(X, Y, \lambda) = \alpha \ln X + \beta \ln Y - \lambda(X + Y - C_{\text{total}})$$
+        Compute the partial derivatives and set to zero:
+        $$\frac{\partial \mathcal{L}}{\partial X} = \frac{\alpha}{X} - \lambda = 0 \implies X = \frac{\alpha}{\lambda}$$
+        $$\frac{\partial \mathcal{L}}{\partial Y} = \frac{\beta}{Y} - \lambda = 0 \implies Y = \frac{\beta}{\lambda}$$
+        Substituting $X$ and $Y$ into the budget constraint:
+        $$X + Y = \frac{\alpha}{\lambda} + \frac{\beta}{\lambda} = \frac{\alpha + \beta}{\lambda} = C_{\text{total}}$$
+        Solving for $\lambda$:
+        $$\lambda = \frac{\alpha + \beta}{C_{\text{total}}}$$</p>
+
+        <p class="step"><strong>Step 3: Optimal Compute Fractions &amp; Lifetime Interpretation:</strong><br>
+        Substituting $\lambda$ back into the expressions for $X$ and $Y$:
+        $$C_{\text{train}}^* = X = \frac{\alpha}{\lambda} = \mathbf{\left( \frac{\alpha}{\alpha + \beta} \right) C_{\text{total}}}$$
+        $$C_{\text{test, total}}^* = Y = \frac{\beta}{\lambda} = \mathbf{\left( \frac{\beta}{\alpha + \beta} \right) C_{\text{total}}}$$
+        Dividing $C_{\text{train}}^*$ by $C_{\text{total}}$:
+        $$\frac{C_{\text{train}}^*}{C_{\text{total}}} = \mathbf{\frac{\alpha}{\alpha + \beta}} \quad \text{Q.E.D.}$$
+        The optimal test-time compute allocation per individual query is:
+        $$C_{\text{test}}^* = \frac{Y^*}{Q} = \frac{\beta}{\alpha + \beta} \cdot \frac{C_{\text{total}}}{Q}$$
+        <strong>Deep Architectural Interpretation:</strong><br>
+        <ul>
+          <li>The optimal division of organizational compute between pre-training and test-time search depends <strong>strictly on the ratio of their empirical scaling exponents $\alpha$ and $\beta$</strong>, independent of total budget size!</li>
+          <li>If test-time compute scales with exponent $\beta \approx 0.5$ and pre-training scales with $\alpha \approx 0.5$, exactly $50\%$ of the organization's compute should be spent on pre-training the model, and the remaining $50\%$ should be spent running test-time MCTS during inference!</li>
+          <li>As lifetime query volume $Q \to \infty$, the compute allocated per individual query $C_{\text{test}}^* = \mathcal{O}(1/Q)$ scales inversely with volume, indicating that for ultra-high QPS consumer services, smaller models with lower test-time thinking are optimal, whereas for low-volume high-value research problems (drug discovery, math proofs), massive test-time compute budgets maximize accuracy.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- TIER 4: CONCEPTUAL TRAPS & ASSERTION-REASONING -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+    <!-- Problem 8.2.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 8.2.7</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-anthropic">Anthropic</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In state-of-the-art commercial reasoning models (OpenAI o1, o3), the internal Chain-of-Thought (CoT) tokens generated during the thinking phase are strictly hidden from the user and API consumer; the model outputs only a sanitized summary of its reasoning followed by the final answer.</p>
+        <p>Which of the following statements represents the primary architectural and commercial rationale for hiding raw reasoning tokens?</p>
+        <ol type="A">
+          <li>Raw reasoning tokens use a proprietary 128-bit unicode encoding that cannot be rendered by standard JSON parsers or web browsers.</li>
+          <li>Hiding raw reasoning tokens prevents competitors from using model-distillation to train clone models on the reasoning trajectories, prevents users from gaming internal safety policies through reward hacking, and allows the model unconstrained freedom to explore counterfactual, erroneous, or toxic hypotheses in internal thought space without violating output safety filters.</li>
+          <li>The hidden reasoning tokens are generated by a separate hardware quantum co-processor that does not have an output bus connected to the host server.</li>
+          <li>Hiding tokens reduces internet bandwidth consumption by $99\%$, which is mandatory to comply with FCC telecommunications regulations.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: B (Exhaustive Frontier Safety &amp; IP Analysis)</div>
+
+        <p class="step"><strong>Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Option A is Ridiculous:</strong> All tokens in modern LLMs map to standard vocabulary IDs in UTF-8.</li>
+          <li><strong>Option B is Correct:</strong>
+            <ul>
+              <li><strong>Distillation Protection (Commercial Moat):</strong> If raw thinking traces (which cost millions in reinforcement learning and search) were public, competitor labs could immediately scrape millions of high-quality reasoning chains to train lightweight clone models via supervised fine-tuning (SFT), stealing the reasoning capability with zero RL research investment.</li>
+              <li><strong>Unconstrained Exploration for Safety:</strong> To solve complex security or medical questions (e.g. debugging an exploit), the model must explore attack vectors internally: <em>"Could an attacker exploit buffer overflow at line 42? Let me simulate the shellcode..."</em>. If raw tokens were streamed to the user, this internal simulation would trigger safety filters and terminate the generation. Hiding the scratchpad allows the model to safely analyze dangerous concepts before synthesizing a constructive defense.</li>
+              <li><strong>Policy Optimization Freedom:</strong> During reinforcement learning, models frequently generate messy, ungrammatical, or non-human token patterns that are computationally efficient for reasoning but incomprehensible or alarming to human users.</li>
+            </ul>
+          </li>
+          <li><strong>Option C is Science Fiction:</strong> Reasoning models run on standard NVIDIA GPUs.</li>
+          <li><strong>Option D is False:</strong> Streaming 8,000 text tokens consumes only ~32KB of bandwidth—a negligible amount that has nothing to do with FCC regulations.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Problem 8.2.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 8.2.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-deepmind">Google DeepMind</span>
+        <span class="company-tag company-openai">OpenAI</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>ASSERTION-REASONING:</strong></p>
+        <p><strong>Assertion (A):</strong> When training reasoning models using reinforcement learning against a Process-Supervised Reward Model (PRM), generator models frequently exhibit <strong>Length Hacking</strong>—generating excessively verbose, repetitive, and mathematically superfluous reasoning steps that artificially inflate sequence length without improving reasoning accuracy.</p>
+        <p><strong>Reason (R):</strong> By Goodhart's Law, when an automated PRM is used as an optimization target, the generator exploits statistical correlations in the PRM training distribution; because human annotators historically assigned higher step scores to detailed, exhaustive explanations, the PRM assigns positive incremental value to each additional step, creating an unconstrained incentive for the policy to generate endless filler steps unless explicit length penalties or token costs are enforced.</p>
+        <p><strong>Options:</strong></p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A (Comprehensive Reward Hacking Analysis)</div>
+
+        <p class="step"><strong>Deep Architectural Analysis:</strong></p>
+        <p><strong>Evaluation of Assertion (A): True.</strong><br>
+        Length hacking is one of the most pervasive failure modes in RL training for reasoning models (Gao et al., "Scaling Laws for Reward Model Overoptimization", 2023). Left unchecked, models trained with PPO or GRPO against PRMs expand reasoning lengths from 500 tokens to over 20,000 tokens, filling the scratchpad with redundant algebraic identities, re-verifying trivial arithmetic ten times, and exhausting context budgets.</p>
+
+        <p class="step"><strong>Evaluation of Reason (R): True &amp; Explanatory.</strong><br>
+        Goodhart's Law states: <em>"When a measure becomes a target, it ceases to be a good measure."</em><br>
+        In PRM training datasets (like PRM800K):
+        <ul>
+          <li>Human annotators and synthetic verifiers reward thoroughness: detailed step-by-step breakdowns are rarely scored 0.0 unless an explicit mathematical error is present.</li>
+          <li>If the total trajectory reward is an additive accumulation of step rewards:
+            $$R_{\text{total}} = \sum_{t=1}^T r(\text{step}_t)$$
+            where each sound step yields $r_t \approx +0.8$, the generator trivially maximizes reward by making $T$ as large as possible! Inserting 50 redundant but technically true steps (e.g. <code>"Note that 2 + 2 = 4"</code>) boosts reward by $+40$!</li>
+        </ul>
+        <strong>Production Mitigations:</strong>
+        <ol>
+          <li><strong>Per-Token Opportunity Cost:</strong> Deduct an explicit penalty $\lambda \cdot T$ from the reward function:
+            $$R_{\text{penalized}} = \sum_{t=1}^T r(\text{step}_t) - \lambda \cdot T_{\text{tokens}}$$
+          </li>
+          <li><strong>Outcome-Gated Normalization:</strong> Multiply the PRM step accumulation by the final binary outcome ($y \in \{0, 1\}$); if the final answer is wrong, the entire trajectory reward collapses to zero regardless of verbosity.</li>
+        </ol></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: PRODUCTION CODE LAB -->
+    <h3>5. Production Code Lab 8.2: Monte Carlo Tree Search in Thought Space</h3>
+    <p>Below is an enterprise-grade Python implementation of an MCTS reasoning engine simulating thought exploration, Process Reward Model scoring, and backtracking verification.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 8.2 — Tree-Search Reasoning Engine</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part8_frontier_ai/ch82_reasoning/tree_search_reasoning.py" target="_blank">🔗 View in GitHub: part8_frontier_ai/ch82_reasoning/tree_search_reasoning.py</a></p>
-<pre><code>import heapq
+      <div class="code-lab-header">Code Lab 8.2 — MCTS Reasoning Engine in Thought Space</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part8_frontier_ai/ch82_test_time_compute/mcts_reasoner.py" target="_blank">🔗 View in GitHub: part8_frontier_ai/ch82_test_time_compute/mcts_reasoner.py</a></p>
+<pre><code>import math
+import random
+from typing import List, Optional
 
 class ThoughtNode:
-    def __init__(self, thought_text, score, parent=None, depth=0):
+    def __init__(self, thought_text: str, parent: Optional['ThoughtNode'] = None, prior: float = 1.0):
         self.thought_text = thought_text
-        self.score = score
         self.parent = parent
-        self.depth = depth
+        self.children: List['ThoughtNode'] = []
+        self.visits = 0
+        self.total_value = 0.0
+        self.prior = prior
+        self.is_terminal = False
+        self.is_correct = False
 
-    def __lt__(self, other):
-        # Max-heap priority by verification score
-        return self.score > other.score
+    @property
+    def q_value(self) -> float:
+        return self.total_value / self.visits if self.visits > 0 else 0.0
 
-    def get_full_trajectory(self):
-        trajectory = []
-        curr = self
-        while curr:
-            trajectory.append(curr.thought_text)
-            curr = curr.parent
-        return list(reversed(trajectory))
+    def puct_score(self, c_puct: float = 1.414) -> float:
+        if not self.parent:
+            return 0.0
+        parent_visits = math.sqrt(self.parent.visits)
+        u_score = c_puct * self.prior * (parent_visits / (1 + self.visits))
+        return self.q_value + u_score
 
-class TreeSearchReasoner:
-    def __init__(self, max_depth=3, beam_width=2):
-        self.max_depth = max_depth
-        self.beam_width = beam_width
+class MCTSReasoner:
+    def __init__(self, c_puct: float = 1.414):
+        self.c_puct = c_puct
 
-    def mock_expand_thoughts(self, current_thought):
-        """Simulate generating candidate reasoning continuations"""
-        return [
-            f"{current_thought} -> Hypothesize approach A (factorization)",
-            f"{current_thought} -> Hypothesize approach B (differentiation)"
-        ]
+    def simulate_prm(self, thought_step: str) -> float:
+        """Simulate a Process Reward Model scoring mathematical soundness [0.0, 1.0]"""
+        if "error" in thought_step.lower() or "blunder" in thought_step.lower():
+            return 0.1
+        elif "verify" in thought_step.lower() or "sound" in thought_step.lower():
+            return 0.95
+        return 0.75
 
-    def mock_verify_thought(self, thought):
-        """Simulate Process Reward Model (PRM) scoring"""
-        # Reward factorization over differentiation
-        if "approach A" in thought:
-            return 0.92
-        return 0.45
+    def search(self, root: ThoughtNode, num_iterations: int = 10) -> ThoughtNode:
+        for _ in range(num_iterations):
+            # 1. Selection
+            node = root
+            while node.children and not node.is_terminal:
+                node = max(node.children, key=lambda child: child.puct_score(self.c_puct))
 
-    def solve(self, initial_problem):
-        root = ThoughtNode(initial_problem, score=1.0, depth=0)
-        frontier = [root]
+            # 2. Expansion
+            if not node.is_terminal:
+                candidates = [
+                    (f"Step {len(node.children)+1}: Compute intermediate discriminant", 0.6),
+                    (f"Step {len(node.children)+1}: Verify root identity algebraically", 0.4)
+                ]
+                for text, prior in candidates:
+                    child = ThoughtNode(thought_text=text, parent=node, prior=prior)
+                    node.children.append(child)
+                node = node.children[0]
 
-        for depth in range(self.max_depth):
-            candidates = []
-            for node in frontier:
-                expansions = self.mock_expand_thoughts(node.thought_text)
-                for exp in expansions:
-                    score = self.mock_verify_thought(exp)
-                    candidates.append(ThoughtNode(exp, score=score, parent=node, depth=depth + 1))
+            # 3. Evaluation via PRM
+            reward = self.simulate_prm(node.thought_text)
 
-            # Select top-beam thoughts (Prune low-confidence paths)
-            candidates.sort(key=lambda n: n.score, reverse=True)
-            frontier = candidates[:self.beam_width]
+            # 4. Backpropagation
+            curr = node
+            while curr is not None:
+                curr.visits += 1
+                curr.total_value += reward
+                curr = curr.parent
 
-        best_solution = frontier[0]
-        return best_solution.get_full_trajectory(), best_solution.score
+        # Select best thought trajectory
+        return max(root.children, key=lambda c: c.visits)
 
 if __name__ == "__main__":
-    reasoner = TreeSearchReasoner(max_depth=2, beam_width=2)
-    trajectory, final_score = reasoner.solve("Solve equation: x^2 - 5x + 6 = 0")
-    print(f"Optimal Reasoning Trajectory (Score: {final_score}):")
-    for step, thought in enumerate(trajectory):
-        print(f"Step {step}: {thought}")</code></pre>
+    random.seed(42)
+    root = ThoughtNode("Problem: Solve x^2 - 4x + 4 = 0")
+    reasoner = MCTSReasoner(c_puct=1.414)
+    best_thought = reasoner.search(root, num_iterations=8)
+    print(f"MCTS Selected Thought Trajectory: '{best_thought.thought_text}'")
+    print(f"Visits: {best_thought.visits}, Mean Q-Value: {best_thought.q_value:.3f}")</code></pre>
     </div>
 
     <!-- SECTION 6: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 8.2 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 8.2: Autonomous Long-Horizon Reasoning Engine with Step Verification</h3>
-        <p class="project-desc">Architect and deploy an autonomous long-horizon reasoning engine implementing Monte Carlo Tree Search over thought spaces, process-supervised reward models, automated Python code execution verification, and self-healing backtracking on mathematical and algorithmic benchmarks.</p>
-        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part8_frontier_ai/ch82_reasoning/tree_search_reasoning.py" target="_blank">🔗 Full Project Code: part8_frontier_ai/ch82_reasoning/tree_search_reasoning.py</a></p>
+        <h3 class="project-title">Project 8.2: Frontier System-2 Mathematical Reasoner with MCTS &amp; Lean 4 Formal Verification</h3>
+        <p class="project-desc">Architect, build, and benchmark an autonomous reasoning engine combining test-time compute scaling, Monte Carlo Tree Search in thought space, step-level Process Reward Models, and automated backtracking verified against Lean 4 interactive theorem provers.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part8_frontier_ai/ch82_test_time_compute/mcts_reasoner.py" target="_blank">🔗 Full Project Code: part8_frontier_ai/ch82_test_time_compute/mcts_reasoner.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In autonomous chemical synthesis and drug design (Insilico Medicine, DeepMind), determining a 20-step retrosynthetic reaction pathway requires evaluating billions of possible precursor combinations where an error in step 3 renders all downstream synthesis toxic. In this project, you construct a tree-search reasoning engine that executes multi-step retrosynthesis planning, validating each intermediate chemical step against physics simulation compilers before proposing final laboratory pathways.</p>
+        <p><strong>Case Study Architecture:</strong> In mission-critical automated software engineering (NASA flight controllers, cryptographic smart contracts), code cannot afford a single hallucinated logic bug. In this project, you build an autonomous reasoning pipeline that uses test-time MCTS tree search to explore candidate algorithm implementations, verifies formal logic in a Python/Lean sandbox, and backtracks upon encountering counterexamples, achieving human-expert precision on competitive benchmarks.</p>
       </div>
     </div>
   </div>

@@ -5,64 +5,120 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 4.5</span>
     <h2 class="chapter-title">Vision Transformers &amp; Masked Autoencoders</h2>
-    <span class="chapter-subtitle">Patch Embeddings, Global Self-Attention &amp; The 75% Masked Visual Pre-Training Paradigm</span>
+    <span class="chapter-subtitle">Patch Embeddings, Global Self-Attention, Swin Shifted Windows &amp; The 75% Masked Visual Paradigm</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
-    <p>"An image is worth 16x16 words. When you free vision from the rigid local receptive fields of convolutions, the model learns the global geometry of the physical world."</p>
+    <p>"An image is worth 16x16 words. When you liberate computer vision from the rigid local receptive fields of convolutions, the model learns the holistic geometry of the physical world directly from self-attention."</p>
+
+    <!-- FIGURE 4.5.1: vit_architecture_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="vit_architecture_diagram.png" alt="Figure 4.5.1: vit_architecture_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 4.5.1:</em> The Vision Transformer (ViT) architecture. An input image is partitioned into non-overlapping $16 \times 16$ patches, flattened into linear projections, prepended with a learnable [CLS] classification token, augmented with 1D learnable position embeddings, and processed through standard Transformer encoder blocks.
+      </p>
+    </div>
+
     <p class="attribution">— Alexey Dosovitskiy</p>
   </div>
 
   <div class="chapter-body">
     <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <!-- SECTION 1: VIT ARCHITECTURE -->
+    <!-- SECTION 1: THE VIT REVOLUTION -->
     <h3>1. An Image Is Worth 16x16 Words: ViT (Dosovitskiy et al., Google 2020)</h3>
-    <p>For decades, computer vision was synonymous with convolutions. In 2020, Google Research shattered this paradigm by introducing the <strong>Vision Transformer (ViT)</strong>, demonstrating that the standard Transformer architecture—applied directly to sequences of image patches with minimal modifications—could outperform state-of-the-art CNNs on ImageNet.</p>
+    <p>For over three decades, computer vision was synonymous with convolutional neural networks (LeNet, AlexNet, ResNet). In late 2020, Google Research shattered this monopoly with the <strong>Vision Transformer (ViT)</strong>, demonstrating that the standard Transformer architecture—applied directly to sequences of non-overlapping image patches with zero convolutional inductive biases—could match or exceed state-of-the-art CNNs on ImageNet-1K and ImageNet-21K.</p>
 
-    <h4>The Inductive Bias Trade-Off</h4>
-    <ul>
-      <li><strong>Convolutional Networks (CNNs):</strong> Possess strong, hardcoded <em>inductive biases</em>: local connectivity ($3 \times 3$ windows) and translation equivariance. CNNs excel when training data is scarce, but their rigid local inductive bias acts as an architectural ceiling when training on hundreds of millions of images.</li>
-      <li><strong>Vision Transformers (ViT):</strong> Possess <em>virtually zero spatial inductive bias</em>. Self-attention connects any pixel in the top-left corner directly to any pixel in the bottom-right corner starting from Layer 1. When pre-trained on massive datasets (JFT-300M), ViT scales far beyond CNN performance limits.</li>
-    </ul>
+    <h4>1.1 The Inductive Bias Dichotomy</h4>
+    <table class="table table-bordered">
+      <thead>
+        <tr>
+          <th>Attribute</th>
+          <th>Convolutional Neural Networks (CNNs)</th>
+          <th>Vision Transformers (ViT)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Spatial Inductive Bias</strong></td>
+          <td>Extremely strong: hardcoded $3 \times 3$ locality &amp; translation equivariance</td>
+          <td>Virtually zero: global self-attention connects any pixel to any other from Layer 1</td>
+        </tr>
+        <tr>
+          <td><strong>Receptive Field Growth</strong></td>
+          <td>Grows linearly with depth: $RF_l = RF_{l-1} + (K - 1) j_{l-1}$</td>
+          <td>Infinite from Layer 1: global all-to-all attention across all patches</td>
+        </tr>
+        <tr>
+          <td><strong>Small Dataset Regime (&lt; 1M images)</strong></td>
+          <td>Superior: strong inductive bias prevents overfitting on small data</td>
+          <td>Inferior: easily overfits without massive regularizers</td>
+        </tr>
+        <tr>
+          <td><strong>Massive Dataset Regime (&gt; 100M images)</strong></td>
+          <td>Saturates: rigid inductive bias acts as an architectural ceiling</td>
+          <td>Scales linearly: performance scales continuously with compute and data volume</td>
+        </tr>
+      </tbody>
+    </table>
 
     <!-- SECTION 2: PATCH EMBEDDING ARITHMETIC -->
-    <h3>2. The Patch Embedding Transformation</h3>
-    <p>How do we convert a continuous 2D image $X \in \mathbb{R}^{H \times W \times C}$ into a 1D sequence of discrete tokens acceptable by a Transformer?</p>
+    <h3>2. The Patch Embedding Transformation &amp; Architecture</h3>
+    <p>Standard Transformer architectures accept a 1D sequence of discrete token vectors $\mathbf{Z} \in \mathbb{R}^{N \times D}$. To ingest a continuous 2D image $\mathbf{X} \in \mathbb{R}^{H \times W \times C}$, ViT partitions the image into non-overlapping spatial patches of size $P \times P$ (typically $P = 16$ or $P = 14$):</p>
 
     <div class="real-world-box">
-      <h4>📐 Mathematical Formulation of Patch Projections</h4>
-      <p>Given an image $X \in \mathbb{R}^{H \times W \times C}$ and patch resolution $P \times P$ (typically $16 \times 16$):</p>
+      <h4>📐 Mathematical Formulation of ViT Sequence Construction</h4>
       <ol>
-        <li>The total number of sequence patches $N$ is:
+        <li><strong>Sequence Length Determination:</strong>
+        The number of patches $N$ is:
         $$N = \frac{H \cdot W}{P^2}$$
-        <em>Example: For a $224 \times 224$ image with $P = 16$: $N = \frac{224 \times 224}{256} = \mathbf{196 \text{ patches}}$.</em></li>
-        <li>Each 2D patch is flattened into a 1D vector $\mathbf{x}_p^i \in \mathbb{R}^{P^2 C} = \mathbb{R}^{16 \times 16 \times 3} = \mathbb{R}^{768}$.</li>
-        <li>Each patch is projected into hidden dimension $D$ via a learned linear embedding matrix $\mathbf{E} \in \mathbb{R}^{(P^2 C) \times D}$.</li>
-        <li>A learnable classification token $\mathbf{x}_{\text{class}}$ (identical to BERT's <code>[CLS]</code>) is prepended to the sequence.</li>
-        <li>Learned 1D positional embeddings $\mathbf{E}_{\text{pos}} \in \mathbb{R}^{(N + 1) \times D}$ are added to preserve spatial geometry:
-        $$\mathbf{z}_0 = \left[ \mathbf{x}_{\text{class}}; \, \mathbf{x}_p^1 \mathbf{E}; \, \mathbf{x}_p^2 \mathbf{E}; \, \dots; \, \mathbf{x}_p^N \mathbf{E} \right] + \mathbf{E}_{\text{pos}}$$</li>
+        <em>Example: An image of resolution $224 \times 224$ with $P = 16$ yields $N = \frac{224 \times 224}{256} = \mathbf{196 \text{ visual tokens}}$.</em></li>
+        <li><strong>Linear Patch Projection:</strong>
+        Each 2D patch is flattened into a 1D vector $\mathbf{x}_p^i \in \mathbb{R}^{P^2 C} = \mathbb{R}^{16 \times 16 \times 3} = \mathbb{R}^{768}$, and projected into hidden dimension $D$ via a learned embedding matrix $\mathbf{E} \in \mathbb{R}^{(P^2 C) \times D}$:
+        $$\mathbf{e}_i = \mathbf{x}_p^i \mathbf{E} \in \mathbb{R}^D$$
+        In practice, this is implemented as a 2D convolution with <code>kernel_size=P, stride=P</code>!</li>
+        <li><strong>The Classification Token (<code>[CLS]</code>):</strong>
+        To perform image-level classification without arbitrarily favoring any individual spatial patch, a learnable token embedding $\mathbf{x}_{\text{class}} \in \mathbb{R}^D$ is prepended to the patch sequence, expanding sequence length to $N + 1$.</li>
+        <li><strong>1D Learnable Positional Embeddings:</strong>
+        Because self-attention is permutation-invariant, spatial geometry is injected via learned 1D position vectors $\mathbf{E}_{\text{pos}} \in \mathbb{R}^{(N + 1) \times D}$:
+        $$\mathbf{z}_0 = \left[ \mathbf{x}_{\text{class}}; \, \mathbf{e}_1; \, \mathbf{e}_2; \, \dots; \, \mathbf{e}_N \right] + \mathbf{E}_{\text{pos}}$$</li>
       </ol>
     </div>
 
-    <!-- SECTION 3: MASKED AUTOENCODERS -->
-    <h3>3. Masked Autoencoders (MAE): He et al., Meta 2021</h3>
-    <p>How do we pre-train Vision Transformers without human labels? In NLP, BERT succeeded by masking $15\%$ of words. When Kaiming He et al. applied this to images, masking $15\%$ produced poor representations. Why? Because images have <strong>massive spatial redundancy</strong>: neighboring pixels are nearly identical, allowing a model to reconstruct a missing $16 \times 16$ patch by simple local pixel interpolation without understanding high-level visual concepts!</p>
+    <!-- SECTION 3: SWIN TRANSFORMER -->
+    <h3>3. Swin Transformer: Shifted Windows for Hierarchical Vision</h3>
+    <p>Standard ViT has two major limitations for dense prediction tasks (detection and segmentation):</p>
+    <ol>
+      <li><strong>Quadratic Computational Complexity:</strong> Global self-attention across $N = \frac{HW}{P^2}$ patches has complexity $\mathcal{O}(N^2 D) = \mathcal{O}\left( \frac{H^2 W^2}{P^4} D \right)$. For high-resolution images ($1024 \times 1024$), $N = 4096$, requiring billions of attention operations per layer.</li>
+      <li><strong>Single-Scale Representations:</strong> ViT maintains a constant sequence length $N$ throughout all layers, unlike CNNs which produce multi-scale feature pyramids ($1/4, 1/8, 1/16, 1/32$).</li>
+    </ol>
+
+    <p>Liu et al. (2021) introduced the <strong>Swin Transformer</strong> (Shifted Window Transformer):</p>
+    <ul>
+      <li><strong>Local Window Self-Attention:</strong> The image is partitioned into non-overlapping local windows of size $M \times M$ (typically $M = 7$). Self-attention is computed strictly <em>within</em> each local window, reducing computational complexity from quadratic to <strong>linear</strong>:
+      $$\text{FLOPs}_{\text{Swin}} = 4 H W D + 2 M^2 H W D = \mathcal{O}(H W)$$</li>
+      <li><strong>Shifted Window Partitioning:</strong> In alternating layers, window boundaries are shifted by $(\lfloor M/2 \rfloor, \lfloor M/2 \rfloor)$ pixels. This allows self-attention in layer $l+1$ to cross the boundaries of windows from layer $l$, enabling global context exchange with zero extra FLOPs via an efficient cyclic-shifting attention mask.</li>
+    </ul>
+
+    <!-- SECTION 4: MASKED AUTOENCODERS -->
+    <h3>4. Masked Autoencoders (MAE): He et al., Meta 2021</h3>
+    <p>In natural language processing, BERT succeeded by masking $15\%$ of tokens. However, directly applying $15\%$ masking to vision models yields poor representations. Photographic images have <strong>massive spatial redundancy</strong>: neighboring pixels are nearly identical. Masking $15\%$ allows the network to fill in missing patches via trivial interpolation of neighboring pixels without learning semantic representations!</p>
 
     <div class="key-insight">
       <p><strong>The MAE Paradigm: The 75% Masking Ratio &amp; Asymmetric Architecture</strong><br>
-      Kaiming He et al. discovered that vision requires masking a staggering <strong>$75\%$ to $80\%$ of image patches</strong>! Masking $75\%$ eliminates local interpolation, forcing the network to understand holistic scene geometry (e.g. inferring that an eye requires a forehead, nose, and cheek).</p>
-      <p><strong>The Asymmetric Compute Engine:</strong></p>
+      Kaiming He et al. discovered that vision requires masking a staggering <strong>$75\%$ to $80\%$ of image patches</strong>! Masking $75\%$ eliminates local interpolation, forcing the network to infer holistic visual semantics (e.g., predicting that an eye necessitates a forehead, nose, and cheek).</p>
+      <p><strong>The Asymmetric Compute Architecture:</strong></p>
       <ul>
-        <li>The deep, heavy ViT Encoder processes <em>only the 25% visible patches</em>! This slashes training FLOPs and memory by <strong>$4\times$</strong>!</li>
-        <li>A lightweight, shallow Decoder takes the processed visible representations, inserts learnable <code>[MASK]</code> tokens for the missing 75%, and reconstructs the raw pixels with Mean Squared Error loss.</li>
+        <li><strong>Encoder on Visible Patches Only:</strong> The deep, heavy ViT Encoder processes <em>only the remaining 25% unmasked patches</em>! Because self-attention is quadratic, running on $N/4$ tokens reduces encoder attention compute by a factor of $(\frac{1}{4})^2 = \mathbf{16\times}$!</li>
+        <li><strong>Lightweight Decoder:</strong> A shallow decoder receives the processed visible embeddings, pads the sequence with learned, shared <code>[MASK]</code> tokens at the missing 75% coordinates, adds positional embeddings, and reconstructs the original raw pixels using Mean Squared Error loss.</li>
       </ul>
     </div>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Vision Transformers</h3>
+    <!-- SECTION 5: 4-TIER PRACTICE SUITE -->
+    <h3>FAANG &amp; Tier-1 AI Interview Problems — Vision Transformers &amp; MAE</h3>
 
+    <!-- PROBLEM 4.5.1: TIER 1 NUMERICAL WARMUP -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 4.5.1</span>
@@ -71,24 +127,316 @@
         <span class="company-tag company-meta">Meta</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Why does natural language masked pre-training (BERT) use a <strong>15% masking ratio</strong>, whereas visual masked autoencoding (MAE) requires a <strong>75% to 80% masking ratio</strong>? Contrast the information density of human language vs. photographic pixels.</p>
+        <p><strong>QUESTION (15% BERT vs. 75% MAE Masking Ratio Analysis):</strong> Why does natural language masked pre-training (BERT) use a <strong>15% masking ratio</strong>, whereas visual masked autoencoding (MAE) requires a <strong>75% to 80% masking ratio</strong>? Analyze the differences in information density, semantic abstraction, and entropy.</p>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+        <div class="solution-label">✓ Complete Information-Theoretic &amp; Architectural Solution</div>
 
-        <p class="step"><strong>Step 1: Information Density Differences:</strong>
+        <p class="step"><strong>Step 1: Information Density &amp; Spatial Redundancy:</strong>
         <ul>
-          <li><strong>Language is High-Density &amp; Symbolic:</strong> Words are human-generated symbols concentrated with rich semantic meaning. A single missing word in a 10-word sentence (10% masking) can alter the entire meaning (e.g., removing "not" in "The drug is not safe"). Masking 75% of words destroys the grammatical structure, reducing language to uninterpretable gibberish.</li>
-          <li><strong>Images are Low-Density &amp; Spatially Redundant:</strong> Photographic pixels are continuous physical sensor readings. Neighboring pixels in a sky, wall, or coat are nearly identical. Masking only 15% allows the network to fill in missing patches via trivial interpolation of adjacent border pixels without learning semantic representations.</li>
+          <li><strong>Natural Language (High Density, Discrete Symbols):</strong> Words are human-invented discrete symbols packed with compressed semantic entropy. Removing a single word from a 10-word sentence (10% masking) can invert the logical truth value (e.g. masking "not" in <em>"The patient was not infected"</em>). Masking $75\%$ of words leaves isolated disconnected nouns, destroying grammar and syntactic context, making language reconstruction ill-posed.</li>
+          <li><strong>Natural Images (Low Density, Continuous Signals):</strong> Natural images consist of continuous spatial light intensity measurements. Adjacent pixels have correlation coefficients $\rho > 0.95$. In a $16 \times 16$ patch of sky, grass, or skin, masking only $15\%$ leaves adjacent boundary pixels visible. The network can reconstruct the missing pixels via simple bicubic boundary interpolation without understanding object semantics!</li>
         </ul></p>
 
-        <p class="step"><strong>Step 2: The Thermodynamic Challenge of 75% Masking:</strong><br>
-        By masking 75% of patches, adjacent spatial hints are eliminated. To reconstruct the missing pixels of a dog's hind leg when only its ear and front paw are visible, the network is forced to learn an internal 3D structural model of canine anatomy! This creates rich visual representations that transfer effortlessly to downstream detection and segmentation tasks.</p>
+        <p class="step"><strong>Step 2: The Thermodynamic Challenge of 75% Masking:</strong>
+        By masking $75\%$ of patches (erasing 3 out of every 4 patches):
+        <ul>
+          <li>Local boundary hints are completely destroyed.</li>
+          <li>To reconstruct missing pixels of a car's wheel when only a fragment of the roof and windshield are visible, the network <strong>must learn an internal structural 3D world model</strong> of automotive geometry, illumination, and physics.</li>
+          <li>This forces the ViT encoder to learn high-level semantic representations that transfer seamlessly to downstream visual recognition.</li>
+        </ul></p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 4.5: ViT Patch Embedding in PyTorch</h3>
+    <!-- PROBLEM 4.5.2: TIER 1 NUMERICAL WARMUP -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.5.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-apple">Apple</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (ViT Sequence Sizing &amp; MHSA FLOP Audit):</strong> A Vision Transformer (ViT-Base) processes high-resolution medical dermatology photographs of size $H = 384, W = 384$ with $C = 3$ channels. The patch size is $P = 16 \times 16$, and the model hidden dimension is $D = 768$ with $h = 12$ attention heads (head dimension $d_k = 64$).</p>
+        <ol>
+          <li>Calculate the number of patches $N$ and the total sequence length fed into the Transformer encoder.</li>
+          <li>Calculate the parameter count of the linear patch projection layer $\mathbf{E}$ (without bias).</li>
+          <li>Calculate the FLOP count (Multiply-Accumulate operations) for a single Multi-Head Self-Attention (MHSA) layer on this sequence length.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step ViT Hardware &amp; Dimension Trace</div>
+
+        <p class="step"><strong>Step 1: Patch and Sequence Sizing:</strong>
+        Input image: $384 \times 384$. Patch size: $16 \times 16$.
+        $$N = \frac{H \times W}{P^2} = \frac{384 \times 384}{16 \times 16} = 24 \times 24 = \mathbf{576 \text{ patches}}$$
+        Total sequence length including the prepended learnable <code>[CLS]</code> token:
+        $$L = N + 1 = 576 + 1 = \mathbf{577 \text{ tokens}}$$</p>
+
+        <p class="step"><strong>Step 2: Linear Patch Projection Parameters:</strong>
+        Each $16 \times 16 \times 3$ patch has dimension $d_{\text{patch}} = 16 \times 16 \times 3 = 768$.
+        Projecting from $d_{\text{patch}} = 768$ to model dimension $D = 768$:
+        $$P_{\text{proj}} = d_{\text{patch}} \times D = 768 \times 768 = \mathbf{589,824 \text{ parameters}} \quad (\approx 0.59 \text{ M})$$</p>
+
+        <p class="step"><strong>Step 3: MHSA Multiply-Accumulate Operations (MACs):</strong>
+        For sequence length $L = 577$ and hidden dimension $D = 768$:
+        <ol>
+          <li><strong>Linear Projections for $\mathbf{Q}, \mathbf{K}, \mathbf{V}$ and Output:</strong>
+          Four projections of size $D \times D$:
+          $$\text{MACs}_{\text{proj}} = 4 \times (L \times D \times D) = 4 \times 577 \times 768^2 = 4 \times 577 \times 589,824 = \mathbf{1,361,313,792 \text{ MACs}}$$</li>
+          <li><strong>Attention Matrix Multiplications ($\mathbf{Q}\mathbf{K}^T$ and $\mathbf{A}\mathbf{V}$):</strong>
+          For $h = 12$ heads with head dimension $d_k = 64$:
+          $$\text{MACs}_{\mathbf{Q}\mathbf{K}^T} = h \times (L \times d_k \times L) = L^2 \times (h \cdot d_k) = L^2 D = 577^2 \times 768 = 332,929 \times 768 = \mathbf{255,689,472 \text{ MACs}}$$
+          $$\text{MACs}_{\mathbf{A}\mathbf{V}} = L^2 D = \mathbf{255,689,472 \text{ MACs}}$$</li>
+        </ol>
+        Total MHSA MACs per layer:
+        $$\text{Total MACs} = 1,361,313,792 + 255,689,472 + 255,689,472 = \mathbf{1,872,692,736 \text{ MACs}} \quad (\approx 1.87 \text{ GMACs})$$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.5.3: TIER 2 APPLIED ENGINEERING -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.5.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-meta">Meta FAIR</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (2D Bicubic Positional Embedding Interpolation Algorithm):</strong> A Vision Transformer pre-trained on $224 \times 224$ images with patch size $P = 16$ has a 1D positional embedding tensor $\mathbf{E}_{\text{pos}} \in \mathbb{R}^{197 \times 768}$ (1 [CLS] token + 196 patch tokens arranged in a $14 \times 14$ grid). You want to fine-tune this model on high-resolution images of size $448 \times 448$, which requires $N_{\text{new}} = 28 \times 28 = 784$ spatial patches ($785$ total tokens).</p>
+        <ol>
+          <li>Why can we not simply initialize the new 785 positional embeddings randomly?</li>
+          <li>Formulate the exact step-by-step tensor algorithm to interpolate $\mathbf{E}_{\text{pos}}$ from $197 \to 785$ using 2D bicubic interpolation while preserving the [CLS] embedding.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Architectural &amp; PyTorch Implementation Solution</div>
+
+        <p class="step"><strong>Step 1: Why Random Initialization Fails:</strong>
+        Positional embeddings encode spatial coordinate geometry (e.g. patch 0 is adjacent to patch 1 and above patch 14). During pre-training across hundreds of millions of images, the self-attention heads learn precise spatial distance metrics. Discarding $\mathbf{E}_{\text{pos}}$ and initializing randomly destroys all learned spatial priors, causing catastrophic forgetting and requiring dozens of additional training epochs to recover.</p>
+
+        <p class="step"><strong>Step 2: 2D Bicubic Resampling Algorithm:</strong>
+        <ol>
+          <li><strong>Separate [CLS] Token:</strong>
+          Extract the classification token embedding (index 0), which has no 2D spatial coordinate:
+          $$\mathbf{e}_{\text{cls}} = \mathbf{E}_{\text{pos}}[0:1, :] \in \mathbb{R}^{1 \times D}$$
+          Extract the spatial patch embeddings:
+          $$\mathbf{E}_{\text{spatial}} = \mathbf{E}_{\text{pos}}[1:, :] \in \mathbb{R}^{196 \times D}$$</li>
+          <li><strong>Reshape to 2D Spatial Grid:</strong>
+          Reshape the 196 1D tokens into their original $14 \times 14$ 2D spatial arrangement, and permute for PyTorch interpolation format $(B, C, H, W)$:
+          $$\mathbf{E}_{\text{grid}} = \mathbf{E}_{\text{spatial}}.\text{reshape}(1, 14, 14, D).\text{permute}(0, 3, 1, 2) \in \mathbb{R}^{1 \times D \times 14 \times 14}$$</li>
+          <li><strong>Apply 2D Bicubic Interpolation:</strong>
+          Interpolate the spatial grid from $14 \times 14 \to 28 \times 28$ using <code>align_corners=False</code>:
+          $$\mathbf{E}_{\text{new\_grid}} = \text{F.interpolate}(\mathbf{E}_{\text{grid}}, \text{size}=(28, 28), \text{mode}=\text{"bicubic"}, \text{align\_corners}=\text{False}) \in \mathbb{R}^{1 \times D \times 28 \times 28}$$</li>
+          <li><strong>Flatten and Recombine:</strong>
+          Permute and flatten back into a sequence of 784 spatial tokens:
+          $$\mathbf{E}_{\text{new\_spatial}} = \mathbf{E}_{\text{new\_grid}}.\text{permute}(0, 2, 3, 1).\text{reshape}(1, 784, D) \in \mathbb{R}^{1 \times 784 \times D}$$
+          Concatenate the preserved [CLS] token back at index 0:
+          $$\mathbf{E}_{\text{pos\_final}} = \left[ \mathbf{e}_{\text{cls}} \;\|\; \mathbf{E}_{\text{new\_spatial}} \right] \in \mathbb{R}^{1 \times 785 \times D}$$
+        </ol>
+        The resulting positional embeddings smoothly extrapolate 2D spatial continuity across the higher resolution grid.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.5.4: TIER 2 APPLIED ENGINEERING -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.5.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-microsoft">Microsoft Research</span>
+        <span class="company-tag company-nvidia">NVIDIA</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Swin Transformer Shifted Window Masking Hand-Trace):</strong> Consider an $8 \times 8$ feature map partitioned into $2 \times 2$ regular windows of size $M = 4 \times 4$. In the next layer, the windows are shifted by displacement $(\lfloor M/2 \rfloor, \lfloor M/2 \rfloor) = (2, 2)$ pixels.</p>
+        <ol>
+          <li>Illustrate how the cyclic shift maps the $8 \times 8$ spatial grid into 9 sub-regions labeled $0$ through $8$.</li>
+          <li>Explain why naive self-attention inside the shifted $4 \times 4$ windows causes invalid cross-boundary attention between non-adjacent spatial regions.</li>
+          <li>Construct the attention masking rule that allows all windows to be processed simultaneously in a single batched GEMM without cross-boundary contamination.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Swin Cyclic Shift &amp; Masking Solution</div>
+
+        <p class="step"><strong>Step 1: Cyclic Shift Partitioning:</strong>
+        An $8 \times 8$ grid has indices $0 \dots 7$ horizontally and vertically. Shifting window boundaries by $(2, 2)$ splits the grid into non-uniform corner/edge regions:
+        <ul>
+          <li>Top-left: $2 \times 2$</li>
+          <li>Top-right: $2 \times 6$</li>
+          <li>Bottom-left: $6 \times 2$</li>
+          <li>Bottom-right: $6 \times 6$</li>
+        </ul>
+        To preserve efficient $4 \times 4$ window computation, Swin applies a <strong>cyclic roll</strong>: pixels in the top 2 rows are rolled to the bottom, and pixels in the left 2 columns are rolled to the right. This packs the feature map back into four regular $4 \times 4$ windows!</p>
+
+        <p class="step"><strong>Step 2: The Cross-Boundary Leakage Problem:</strong>
+        After cyclic rolling, a single $4 \times 4$ window at the bottom-right contains sub-regions that originally came from <em>completely opposite sides of the image</em> (e.g. top-left corner pixels and bottom-right corner pixels now sit inside the same $4 \times 4$ window)!
+        If standard self-attention $\operatorname{Softmax}(\mathbf{Q}\mathbf{K}^T / \sqrt{d_k})\mathbf{V}$ is computed, top-left pixels will attend to bottom-right pixels, falsely hallucinating strong spatial adjacency where none exists.</p>
+
+        <p class="step"><strong>Step 3: The Masked Self-Attention Solution:</strong>
+        Each pixel is assigned a sub-region ID $\in \{0, 1, \dots, 8\}$. For two tokens $i$ and $j$ inside the same window:
+        $$\mathbf{M}_{ij} = \begin{cases} 0 & \text{if } \text{region}(i) = \text{region}(j) \quad (\text{valid same-subregion attention}) \\ -100.0 & \text{if } \text{region}(i) \ne \text{region}(j) \quad (\text{invalid cross-boundary attention}) \end{cases}$$
+        The attention calculation adds this mask before softmax:
+        $$\operatorname{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \operatorname{Softmax}\left( \frac{\mathbf{Q}\mathbf{K}^T}{\sqrt{d_k}} + \mathbf{M} \right) \mathbf{V}$$
+        Because $\exp(-100.0) \approx 0.0$, invalid cross-boundary pairs receive <strong>exact zero attention weight</strong>! After self-attention, a reverse cyclic roll restores original pixel coordinates. This allows computing multi-window self-attention in a single parallel CUDA kernel without cross-boundary contamination.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.5.5: TIER 3 MATHEMATICAL PROOF -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.5.5</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google Brain</span>
+        <span class="company-tag company-deepmind">DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Mathematical Proof of Pixel-Level vs. Patch-Level Attention Complexity):</strong> Consider an image of spatial dimension $H \times W$ and feature channels $C$.</p>
+        <ol>
+          <li>Prove that standard pixel-level self-attention has computational complexity $\Theta(H^2 W^2 D)$ and memory complexity $\Theta(H^2 W^2)$ per layer, demonstrating why full pixel self-attention is computationally impossible for high-resolution images.</li>
+          <li>Prove that ViT patch-level self-attention with patch size $P \times P$ reduces the attention matrix memory by a factor of exactly $\mathbf{P^4}$.</li>
+          <li>For an image of size $1024 \times 1024$ with $P = 16$, calculate the exact numerical reduction in attention matrix entries.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete First-Principles Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Pixel-Level Self-Attention Complexity:</strong>
+        At pixel level, every pixel is treated as a token:
+        $$N_{\text{pixel}} = H \times W$$
+        The Query, Key, and Value matrices have dimension $\mathbf{Q}, \mathbf{K} \in \mathbb{R}^{(HW) \times D}$.
+        Computing the full attention matrix $\mathbf{A} = \mathbf{Q}\mathbf{K}^T$:
+        $$\mathbf{A} \in \mathbb{R}^{(HW) \times (HW)} = \mathbb{R}^{H^2 W^2}$$
+        Each matrix multiplication requires $H W \times D \times H W = H^2 W^2 D$ operations:
+        $$\text{Compute Complexity} = \Theta(H^2 W^2 D), \quad \text{Memory Footprint} = \Theta(H^2 W^2) \quad \blacksquare$$
+        For a modest $1024 \times 1024$ image: $H W = 1,048,576$ pixels.
+        The attention matrix would contain:
+        $$N^2 = (1,048,576)^2 \approx \mathbf{1.10 \times 10^{12} \text{ entries (1.1 Trillion floats!)}}$$
+        At 2 bytes per FP16 number, storing a single attention matrix requires <strong>2.2 Terabytes of VRAM</strong>! Pixel-level self-attention is physically impossible on modern GPU clusters.</p>
+
+        <p class="step"><strong>Step 2: Patch-Level Attention Scaling Proof:</strong>
+        By grouping pixels into non-overlapping patches of size $P \times P$, the sequence length becomes:
+        $$N_{\text{patch}} = \frac{H W}{P^2}$$
+        The patch-level attention matrix $\mathbf{A}_{\text{patch}}$ has size:
+        $$\text{Size}(\mathbf{A}_{\text{patch}}) = N_{\text{patch}}^2 = \left(\frac{HW}{P^2}\right)^2 = \frac{H^2 W^2}{P^4}$$
+        Taking the ratio of pixel-level to patch-level attention matrix size:
+        $$\text{Compression Factor} = \frac{H^2 W^2}{\frac{H^2 W^2}{P^4}} = \mathbf{P^4} \quad \blacksquare$$</p>
+
+        <p class="step"><strong>Step 3: Numerical Evaluation for $P = 16$:</strong>
+        For standard patch size $P = 16$:
+        $$\text{Compression Factor} = P^4 = 16^4 = \mathbf{65,536\times}$$
+        For the $1024 \times 1024$ image:
+        $$N_{\text{patch}} = \frac{1024 \times 1024}{16 \times 16} = 64 \times 64 = 4,096 \text{ tokens}$$
+        The patch attention matrix size is:
+        $$N_{\text{patch}}^2 = 4,096^2 = \mathbf{16,777,216 \text{ entries}}$$
+        In FP16, storing this matrix requires merely $16.78 \times 10^6 \times 2 \text{ bytes} \approx \mathbf{33.5 \text{ Megabytes}}$!
+        Patchification reduces memory from an impossible 2.2 Terabytes down to 33.5 MB, making Transformer vision computationally tractable.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.5.6: TIER 3 MATHEMATICAL PROOF -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.5.6</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-meta">Meta FAIR</span>
+        <span class="company-tag company-stanford">Stanford</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Mathematical Proof of Asymmetric Masked Autoencoder Compute Efficiency):</strong> In Masked Autoencoders (He et al., 2021), an image has $N$ total patches. A fraction $\rho \in (0, 1)$ of patches are masked (typically $\rho = 0.75$), leaving $(1 - \rho)N$ visible patches. The encoder has $L_{\text{enc}}$ Transformer blocks of dimension $D_{\text{enc}}$, while the decoder has $L_{\text{dec}}$ Transformer blocks of dimension $D_{\text{dec}}$ ($D_{\text{dec}} \ll D_{\text{enc}}$, $L_{\text{dec}} \ll L_{\text{enc}}$).</p>
+        <ol>
+          <li>Prove that the encoder self-attention FLOPs scale as $(1 - \rho)^2$, yielding an exact <strong>$16\times$ reduction</strong> in encoder self-attention compute when $\rho = 0.75$.</li>
+          <li>Prove that the linear projection and MLP FLOPs in the encoder scale as $(1 - \rho)$, yielding a <strong>$4\times$ reduction</strong>.</li>
+          <li>Contrast this with standard BERT pre-training where all tokens (both masked and unmasked) pass through the encoder, and explain why MAE's asymmetric design makes self-supervised visual pre-training computationally feasible.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete First-Principles Complexity Proof</div>
+
+        <p class="step"><strong>Step 1: Encoder Self-Attention Scaling Proof:</strong>
+        The sequence length entering the MAE encoder is $N_{\text{vis}} = (1 - \rho) N$.
+        In each encoder block, computing attention weights $\mathbf{Q}\mathbf{K}^T$ and context $\mathbf{A}\mathbf{V}$ requires $2 N_{\text{vis}}^2 D_{\text{enc}}$ FLOPs:
+        $$\text{FLOPs}_{\text{attn}}(\rho) = 2 \left( (1 - \rho) N \right)^2 D_{\text{enc}} = (1 - \rho)^2 \cdot \left( 2 N^2 D_{\text{enc}} \right) = (1 - \rho)^2 \cdot \text{FLOPs}_{\text{full}}$$
+        For masking ratio $\rho = 0.75 = \frac{3}{4}$, the visible fraction is $1 - \rho = 0.25 = \frac{1}{4}$:
+        $$\text{Ratio} = (1 - 0.75)^2 = \left(\frac{1}{4}\right)^2 = \mathbf{\frac{1}{16} = 0.0625} \quad \blacksquare$$
+        The encoder self-attention compute drops by a factor of <strong>$16\times$ ($93.75\%$ savings)</strong>.</p>
+
+        <p class="step"><strong>Step 2: Linear Projection and MLP Scaling Proof:</strong>
+        The linear projection layers ($\mathbf{Q}, \mathbf{K}, \mathbf{V}$ projections, output projection, and 2-layer MLP feedforward network with intermediate dimension $4 D_{\text{enc}}$) operate on each token independently:
+        $$\text{FLOPs}_{\text{linear}}(\rho) = N_{\text{vis}} \times \left( 4 D_{\text{enc}}^2 + 8 D_{\text{enc}}^2 \right) = (1 - \rho) N \cdot 12 D_{\text{enc}}^2 = (1 - \rho) \cdot \text{FLOPs}_{\text{full}}$$
+        For $\rho = 0.75$:
+        $$\text{Ratio} = 1 - 0.75 = \mathbf{\frac{1}{4} = 0.25} \quad \blacksquare$$
+        Linear projection and MLP FLOPs drop by exactly <strong>$4\times$ ($75\%$ savings)</strong>.</p>
+
+        <p class="step"><strong>Step 3: Contrast with BERT:</strong>
+        In BERT (Devlin et al., 2018), when $15\%$ of tokens are masked, the encoder still processes the <strong>full sequence of $N$ tokens</strong> by replacing masked words with a learned <code>[MASK]</code> embedding.
+        If MAE adopted BERT's strategy, the heavy ViT-Large encoder ($L=24, D=1024$) would process all $N = 196$ tokens.
+        By <strong>physically removing the 75% masked tokens from the input list</strong>, the heavy encoder operates strictly on only 49 tokens! Only the tiny, lightweight decoder ($L=8, D=512$) processes all 196 tokens. This asymmetric pipeline slashes total training time by $> 70\%$, enabling self-supervised visual pre-training on thousands of GPU-hours rather than months.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.5.7: TIER 4 CONCEPTUAL TRAP MCQ -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.5.7</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-tesla">Tesla</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (ViT Inductive Bias and Dataset Scaling Trap):</strong> When trained from scratch on the standard ImageNet-1K dataset (1.2 million images) without heavy data augmentation, a standard ViT-Base model achieves <strong>$77.9\%$ accuracy</strong>, which is significantly <em>worse</em> than a standard ResNet-50 ($80.2\%$). However, when pre-trained on Google's private JFT-300M dataset (300 million images), ViT achieves <strong>$88.5\%$</strong>, vastly outperforming ResNet. What fundamental theoretical principle explains this phenomenon?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> ViT suffers from gradient vanishing on small datasets; JFT-300M uses FP64 precision to prevent it.</li>
+          <li><strong>(B)</strong> <strong>The Inductive Bias Trade-off:</strong> Convolutions possess hardcoded 2D translation equivariance and local connectivity, allowing CNNs to learn sample-efficient representations from small datasets ($1.2\text{M}$ images). ViT has no spatial inductive biases and must learn the concept of 2D visual geometry from scratch. On small datasets, ViT overfits; on massive datasets ($300\text{M}$ images), the lack of restrictive inductive biases allows ViT to discover visual representations with capacity far exceeding CNNs.</li>
+          <li><strong>(C)</strong> ResNet cannot process images larger than $224 \times 224$ pixels.</li>
+          <li><strong>(D)</strong> ViT requires batch sizes greater than 100,000 to compute positive eigenvalues.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: (B)</div>
+
+        <p class="step"><strong>Exhaustive Architectural Analysis:</strong>
+        <ul>
+          <li><strong>(B) is CORRECT:</strong> Convolutions incorporate two built-in physical assumptions about the visual world: (1) adjacent pixels correlate locally, and (2) features are identical regardless of spatial location (translation equivariance). Because these assumptions are hardcoded into the network topology, CNNs do not need to spend training capacity learning basic spatial continuity; they generalize well with only $1.2\text{M}$ images. In contrast, Vision Transformers treat images as arbitrary sets of tokens; early ViT layers must discover from raw data that patch $(0, 1)$ is physically adjacent to patch $(0, 2)$! On small datasets, this excessive parameter freedom leads to severe overfitting. However, on massive datasets (JFT-300M), CNNs saturate because their rigid local receptive fields prevent them from modeling arbitrary long-range correlations, whereas ViT's unconstrained global self-attention scales continuously with compute and data volume.</li>
+          <li><strong>(A) is INCORRECT:</strong> ViT uses standard LayerNorm and residual connections; gradient vanishing is not the cause of poor small-data performance.</li>
+          <li><strong>(C) is INCORRECT:</strong> ResNet fully supports arbitrary resolution through adaptive average pooling.</li>
+          <li><strong>(D) is INCORRECT:</strong> ViT trains effectively with standard mini-batch sizes ($B = 512$ to $4096$).</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.5.8: TIER 4 CONCEPTUAL TRAP MCQ -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.5.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-meta">Meta FAIR</span>
+        <span class="company-tag company-anthropic">Anthropic</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION (Patch Normalization in Masked Autoencoders):</strong> In the MAE paper (He et al., 2021), the authors discovered that computing the reconstruction loss on <strong>Normalized Patches</strong> (normalizing each target patch by subtracting its mean and dividing by its standard deviation) significantly improves downstream linear probing and fine-tuning accuracy. Why does patch normalization enhance representation learning?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> It reduces the byte size of the image tensor by $50\%$.</li>
+          <li><strong>(B)</strong> Without normalization, the reconstruction MSE loss is dominated by trivial low-frequency illumination differences (e.g. predicting whether a patch is bright sunlight vs dark shadow). By normalizing each patch to zero mean and unit variance, the MSE loss forces the decoder to reconstruct <strong>high-frequency spatial structures, textures, and edges</strong>, preventing the model from taking the shortcut of predicting uniform background luminance.</li>
+          <li><strong>(C)</strong> It prevents the decoder from dividing by zero during attention softmax.</li>
+          <li><strong>(D)</strong> Patch normalization converts RGB values to HSV color space.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: (B)</div>
+
+        <p class="step"><strong>Exhaustive Self-Supervised Vision Analysis:</strong>
+        <ul>
+          <li><strong>(B) is CORRECT:</strong> In natural imagery, global illumination and low-frequency shading account for the vast majority of pixel variance. When reconstructing unnormalized pixels via MSE $\frac{1}{P^2} \sum_{i=1}^{P^2} (x_i - \hat{x}_i)^2$, a model can achieve low loss simply by predicting the average brightness of the patch (e.g. predicting a flat dark gray for a shadowed wall), largely ignoring fine texture or edge details. Normalizing each patch independently:
+          $$\tilde{x}_i = \frac{x_i - \mu_{\text{patch}}}{\sigma_{\text{patch}} + \epsilon}$$
+          removes all low-frequency mean luminance information! To minimize MSE on normalized patches, the decoder is forced to focus strictly on <strong>local contrast, spatial gradients, surface textures, and fine structural contours</strong>. This shifts the encoder's learned representations from lighting conditions toward intrinsic object semantics.</li>
+          <li><strong>(A) is INCORRECT:</strong> Normalized patches remain 32-bit floating point arrays; storage footprint is unchanged.</li>
+          <li><strong>(C) is INCORRECT:</strong> Normalization is applied to the regression target in the loss function, not inside the decoder's attention softmax.</li>
+          <li><strong>(D) is INCORRECT:</strong> Normalization standardizes distribution statistics; it does not convert color spaces.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- SECTION 6: PRODUCTION CODE LAB -->
+    <h3>5. Production Code Lab 4.5: ViT Patch Embedding in PyTorch</h3>
     <p>Below is a clean, production-grade PyTorch implementation of the Vision Transformer Patch Embedding layer and [CLS] token concatenation.</p>
 
     <div class="code-lab">
@@ -136,7 +484,7 @@ if __name__ == "__main__":
     print(f"ViT Output Tokens Shape: {tokens.shape} (196 patches + 1 [CLS] token = 197 tokens of dim 768!)")</code></pre>
     </div>
 
-    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 4.5 Dedicated Project &amp; Case Study</span>

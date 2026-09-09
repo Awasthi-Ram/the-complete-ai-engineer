@@ -1,11 +1,17 @@
+
+    <div class="diagram-figure">
+        <img src="kmeans_pca_manifold.png" alt="Figure 2.7.1: kmeans pca manifold">
+        <div class="diagram-caption"><strong>Figure 2.7.1:</strong> Unsupervised Learning foundations. Left: K-Means clustering partitions space into convex Voronoi cells bounded by hyperplanes equidistant between cluster centroids $\boldsymbol{\mu}_k$. Right: Principal Component Analysis (PCA) identifies orthogonal eigenvectors maximizing projected variance $\lambda_1 > \lambda_2$.</div>
+    </div>
+
 <!-- ======================================================================
-     CHAPTER 2.7 — UNSUPERVISED LEARNING: K-MEANS++ & PCA
+     CHAPTER 2.7 — UNSUPERVISED LEARNING: K-MEANS++, PCA & MANIFOLD LEARNING
      ====================================================================== -->
 <div class="chapter" id="chapter-2-7">
   <div class="chapter-header">
     <span class="chapter-number">Chapter 2.7</span>
-    <h2 class="chapter-title">Unsupervised Learning: K-Means++ &amp; PCA</h2>
-    <span class="chapter-subtitle">Clustering Inertia, The K-Means++ $D^2$ Theorem &amp; PCA Variance Maximization</span>
+    <h2 class="chapter-title">Unsupervised Learning: K-Means++, PCA &amp; Manifold Learning</h2>
+    <span class="chapter-subtitle">Clustering Inertia, The K-Means++ $D^2$ Theorem, SVD Numerical Stability &amp; t-SNE</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -17,90 +23,512 @@
   <div class="chapter-body">
     <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <!-- SECTION 1: K-MEANS & K-MEANS++ -->
-    <h3>1. K-Means Clustering &amp; The $D^2$ Initialization Theorem</h3>
-    <p>In unsupervised learning, we are given unlabeled data $X = \{\mathbf{x}_1, \dots, \mathbf{x}_N\} \subset \mathbb{R}^d$ and must discover natural groupings or low-dimensional manifolds. <strong>$K$-Means</strong> partitions the dataset into $K$ disjoint clusters $C = \{C_1, \dots, C_K\}$ by minimizing the <strong>Within-Cluster Sum of Squares (Inertia)</strong>:</p>
+    <!-- SECTION 1: K-MEANS & CONVERGENCE -->
+    <h3>1. K-Means Clustering &amp; Monotonic Convergence</h3>
+    <p>In unsupervised learning, we are given an unlabeled dataset $X = \{\mathbf{x}_1, \dots, \mathbf{x}_N\} \subset \mathbb{R}^d$ without target labels $y$. The objective is to discover latent geometric structure, low-dimensional manifolds, or cluster memberships. <strong>$K$-Means</strong> partitions $X$ into $K$ disjoint subsets $C = \{C_1, \dots, C_K\}$ that minimize the <strong>Within-Cluster Sum of Squares (Inertia)</strong>:</p>
     $$J(C, \boldsymbol{\mu}) = \sum_{k=1}^K \sum_{\mathbf{x}_i \in C_k} \|\mathbf{x}_i - \boldsymbol{\mu}_k\|_2^2$$
-    <p>Where $\boldsymbol{\mu}_k = \frac{1}{|C_k|} \sum_{\mathbf{x}_i \in C_k} \mathbf{x}_i$ is the centroid (mean) of cluster $k$.</p>
+    <p>Where $\boldsymbol{\mu}_k \in \mathbb{R}^d$ denotes the prototype centroid of cluster $k$.</p>
 
-    <h4>Lloyd's Alternating Algorithm</h4>
+    <h4>Lloyd's Alternating Minimization Algorithm</h4>
+    <p>The optimization problem $\min_{C, \boldsymbol{\mu}} J(C, \boldsymbol{\mu})$ is NP-hard in general metric spaces. <strong>Lloyd's algorithm</strong> finds a local minimum via coordinate descent over two alternating steps:</p>
     <ol>
-      <li><strong>Assignment Step:</strong> Hold centroids $\boldsymbol{\mu}$ fixed. Assign each point $\mathbf{x}_i$ to its nearest centroid:
-      $$c_i = \arg\min_{k \in \{1,\dots,K\}} \|\mathbf{x}_i - \boldsymbol{\mu}_k\|_2^2$$</li>
-      <li><strong>Update Step:</strong> Hold assignments $c_i$ fixed. Recompute each centroid as the center of mass of its assigned points:
-      $$\boldsymbol{\mu}_k = \frac{1}{|C_k|} \sum_{i: c_i = k} \mathbf{x}_i$$</li>
+      <li><strong>Assignment Step ($C \mid \boldsymbol{\mu}$):</strong> Hold centroids $\boldsymbol{\mu}_1, \dots, \boldsymbol{\mu}_K$ fixed. For each data point $\mathbf{x}_i$, assign it to the closest centroid under Euclidean metric:
+      $$c_i = \arg\min_{k \in \{1,\dots,K\}} \|\mathbf{x}_i - \boldsymbol{\mu}_k\|_2^2 \implies C_k = \{\mathbf{x}_i : c_i = k\}$$</li>
+      <li><strong>Update Step ($\boldsymbol{\mu} \mid C$):</strong> Hold cluster assignments $C$ fixed. Find the optimal centroid $\boldsymbol{\mu}_k$ that minimizes inertia within cluster $C_k$:
+      $$\nabla_{\boldsymbol{\mu}_k} J = \sum_{\mathbf{x}_i \in C_k} 2(\boldsymbol{\mu}_k - \mathbf{x}_i) = \mathbf{0} \implies \boldsymbol{\mu}_k = \frac{1}{|C_k|} \sum_{\mathbf{x}_i \in C_k} \mathbf{x}_i$$</li>
     </ol>
-    <p>Every step strictly decreases the objective $J$, guaranteeing convergence to a local minimum. However, standard random initialization frequently traps the algorithm in terrible local optima.</p>
+    <p>Since both steps strictly decrease or leave unchanged the objective $J$, and there are at most $K^N$ distinct assignments of $N$ points into $K$ clusters, Lloyd's algorithm is guaranteed to converge in a finite number of iterations to a local minimum or saddle point.</p>
+
+    <!-- SECTION 2: K-MEANS++ -->
+    <h3>2. The K-Means++ $D^2$ Initialization Theorem</h3>
+    <p>Standard uniform random initialization suffers from catastrophic local minima traps: if multiple centroids are initialized near the same cluster, Lloyd's algorithm splits that cluster while leaving distant clusters merged together. Arthur &amp; Vassilvitskii (2007) solved this with <strong>$K$-Means++</strong>, introducing a randomized distance-squared seeding mechanism.</p>
 
     <div class="real-world-box">
-      <h4>🏆 The K-Means++ $D^2$ Initialization Theorem (Arthur &amp; Vassilvitskii, 2007)</h4>
-      <p>Standard random initialization produces arbitrarily bad clusterings (unbounded approximation ratio). Arthur and Vassilvitskii proved that initializing centroids using <strong>$D^2$ sampling</strong> guarantees an expected cost within $O(\log K)$ of the optimal clustering!</p>
+      <h4>🏆 The K-Means++ Seeding Algorithm &amp; Approximation Bound</h4>
+      <p>Arthur &amp; Vassilvitskii proved that $K$-Means++ initialization achieves an expected cost within an $O(\log K)$ factor of the global optimal clustering cost $\phi_{\text{opt}}$:</p>
+      $$\mathbb{E}[J_{\text{init}}] \le 8(\ln K + 2) \cdot J_{\text{opt}}$$
+      <p>The exact algorithm proceeds as follows:</p>
       <ol>
         <li>Choose the first centroid $\boldsymbol{\mu}_1$ uniformly at random from dataset $X$.</li>
-        <li>For each point $\mathbf{x}_i$, compute $D(\mathbf{x}_i) = \min_{j} \|\mathbf{x}_i - \boldsymbol{\mu}_j\|_2$, the shortest distance to any already chosen centroid.</li>
-        <li>Choose the next centroid $\boldsymbol{\mu}_k$ from $X$ with probability proportional to the squared distance:
+        <li>For each point $\mathbf{x}_i \in X$, compute its shortest squared Euclidean distance to any already chosen centroid:
+        $$D(\mathbf{x}_i)^2 = \min_{j \in \{1,\dots,m\}} \|\mathbf{x}_i - \boldsymbol{\mu}_j\|_2^2$$</li>
+        <li>Select the next centroid $\boldsymbol{\mu}_{m+1} = \mathbf{x}_i$ with probability proportional to $D(\mathbf{x}_i)^2$:
         $$P(\mathbf{x}_i) = \frac{D(\mathbf{x}_i)^2}{\sum_{j=1}^N D(\mathbf{x}_j)^2}$$</li>
-        <li>Repeat steps 2 and 3 until $K$ centroids are chosen.</li>
+        <li>Repeat Steps 2 and 3 until exactly $K$ centroids have been selected.</li>
       </ol>
-      <p><em>Geometric Intuition:</em> Points that are far away from existing centroids have an exponentially higher probability of being chosen as the next center, naturally spreading centroids across distinct spatial modes!</p>
+      <p><em>Intuition:</em> Points that are already close to an existing centroid have $D(\mathbf{x}) \approx 0$ and have near-zero probability of being selected. Outlying or isolated clusters have massive $D(\mathbf{x})^2$ values, almost guaranteeing that each true cluster receives an initial center!</p>
     </div>
 
-    <!-- SECTION 2: PCA VARIANCE MAXIMIZATION -->
-    <h3>2. Principal Component Analysis (PCA): Maximum Variance</h3>
-    <p>High-dimensional data ($d &gt; 1,000$) suffers from the <strong>Curse of Dimensionality</strong>: points become equidistant, distance metrics lose discriminative power, and compute explodes. <strong>Principal Component Analysis (PCA)</strong> finds an orthogonal linear projection from $\mathbb{R}^d$ to $\mathbb{R}^k$ ($k \ll d$) that preserves the maximum possible variance.</p>
+    <!-- SECTION 3: PCA -->
+    <h3>3. Principal Component Analysis (PCA): Dual Mathematical Formulations</h3>
+    <p>High-dimensional data ($d \gg 100$) suffers from the <strong>Curse of Dimensionality</strong>: pairwise distances concentrate around the mean, volume grows exponentially ($V \propto r^d$), and sample density collapses. <strong>Principal Component Analysis (PCA)</strong> is the optimal linear dimensionality reduction technique. Remarkably, it can be derived from two completely independent geometric perspectives that yield the exact same subspace:</p>
 
-    <h4>Mathematical Derivation via Lagrange Multipliers</h4>
-    <p>Assume data $X \in \mathbb{R}^{N \times d}$ is centered ($\sum_{i=1}^N \mathbf{x}_i = \mathbf{0}$). We seek a unit direction $\mathbf{u}_1 \in \mathbb{R}^d$ ($\|\mathbf{u}_1\|_2 = 1$) such that the variance of the projected data $X \mathbf{u}_1$ is maximized:</p>
-    $$\text{Var}(X \mathbf{u}_1) = \frac{1}{N} (X \mathbf{u}_1)^T (X \mathbf{u}_1) = \mathbf{u}_1^T \left( \frac{1}{N} X^T X \right) \mathbf{u}_1 = \mathbf{u}_1^T \Sigma \mathbf{u}_1$$
-    <p>Where $\Sigma = \frac{1}{N} X^T X$ is the $d \times d$ sample covariance matrix. We formulate the constrained optimization problem:</p>
-    $$\max_{\mathbf{u}_1} \mathbf{u}_1^T \Sigma \mathbf{u}_1 \quad \text{subject to } \mathbf{u}_1^T \mathbf{u}_1 = 1$$
-    <p>Construct the Lagrangian:</p>
-    $$\mathcal{L}(\mathbf{u}_1, \lambda_1) = \mathbf{u}_1^T \Sigma \mathbf{u}_1 - \lambda_1 (\mathbf{u}_1^T \mathbf{u}_1 - 1)$$
-    <p>Setting the gradient to zero:</p>
-    $$\nabla_{\mathbf{u}_1} \mathcal{L} = 2 \Sigma \mathbf{u}_1 - 2 \lambda_1 \mathbf{u}_1 = \mathbf{0} \implies \Sigma \mathbf{u}_1 = \lambda_1 \mathbf{u}_1$$
-    <p>This is the exact definition of an <strong>Eigenvector Equation</strong>! Multiplying by $\mathbf{u}_1^T$ on the left:</p>
-    $$\mathbf{u}_1^T \Sigma \mathbf{u}_1 = \lambda_1 \mathbf{u}_1^T \mathbf{u}_1 = \lambda_1 (1) = \lambda_1$$
-    <p>To maximize variance $\mathbf{u}_1^T \Sigma \mathbf{u}_1$, we must choose $\mathbf{u}_1$ to be the eigenvector corresponding to the <strong>Largest Eigenvalue $\lambda_1 = \lambda_{\max}(\Sigma)$</strong>!</p>
+    <h4>Perspective A: Maximum Projected Variance</h4>
+    <p>Given centered data $X \in \mathbb{R}^{N \times d}$ ($\sum_{i=1}^N \mathbf{x}_i = \mathbf{0}$), we seek a unit projection vector $\mathbf{u} \in \mathbb{R}^d$ ($\|\mathbf{u}\|_2 = 1$) such that the variance of the projected scalar coordinates $z_i = \mathbf{u}^T \mathbf{x}_i$ is maximized:</p>
+    $$\text{Var}(z) = \frac{1}{N} \sum_{i=1}^N (\mathbf{u}^T \mathbf{x}_i)^2 = \mathbf{u}^T \left( \frac{1}{N} X^T X \right) \mathbf{u} = \mathbf{u}^T \Sigma \mathbf{u}$$
+    <p>Where $\Sigma = \frac{1}{N} X^T X$ is the $d \times d$ sample covariance matrix. Using the method of Lagrange multipliers:</p>
+    $$\mathcal{L}(\mathbf{u}, \lambda) = \mathbf{u}^T \Sigma \mathbf{u} - \lambda (\mathbf{u}^T \mathbf{u} - 1)$$
+    $$\nabla_{\mathbf{u}} \mathcal{L} = 2 \Sigma \mathbf{u} - 2 \lambda \mathbf{u} = \mathbf{0} \implies \Sigma \mathbf{u} = \lambda \mathbf{u}$$
+    <p>Thus, $\mathbf{u}$ must be an eigenvector of $\Sigma$. The projected variance is $\mathbf{u}^T \Sigma \mathbf{u} = \lambda \mathbf{u}^T \mathbf{u} = \lambda$. Therefore, to maximize variance, $\mathbf{u}_1$ must be the eigenvector corresponding to the <strong>largest eigenvalue $\lambda_1 = \lambda_{\max}(\Sigma)$</strong>.</p>
 
-    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Unsupervised Learning</h3>
+    <h4>Perspective B: Minimum Reconstruction Error</h4>
+    <p>Alternatively, we seek an orthonormal basis $U_k = [\mathbf{u}_1, \dots, \mathbf{u}_k] \in \mathbb{R}^{d \times k}$ ($U_k^T U_k = I_k$) such that projecting data onto the $k$-dimensional subspace and reconstructing it minimizes the Frobenius reconstruction loss:</p>
+    $$\min_{U_k} \frac{1}{N} \|X - X U_k U_k^T\|_F^2$$
+    <p>By the Eckart-Young-Mirsky theorem, the optimal subspace $U_k$ is spanned by the top-$k$ eigenvectors of $\Sigma$, identical to Perspective A!</p>
 
+    <!-- SECTION 4: SVD VS PCA -->
+    <h3>4. SVD vs. Eigendecomposition: Numerical Stability</h3>
+    <p>In theoretical textbooks, PCA is introduced via the covariance eigendecomposition $\Sigma = \frac{1}{N} X^T X = V \Lambda V^T$. However, in production numerical computing (NumPy, SciPy, LAPACK), <strong>we never explicitly compute $X^T X$</strong>!</p>
+    <div class="key-insight">
+      <p><strong>The Condition Number Catastrophe:</strong><br>
+      The condition number of matrix $A$ is $\kappa(A) = \frac{\sigma_{\max}(A)}{\sigma_{\min}(A)}$. Forming the Gramian matrix $X^T X$ <strong>squares the condition number</strong>:
+      $$\kappa(X^T X) = \kappa(X)^2$$
+      If $X$ has condition number $\kappa(X) = 10^8$ (common in collinear data), then $\kappa(X^T X) = 10^{16}$, exhausting standard IEEE-754 64-bit floating-point precision ($\approx 16$ decimal digits) and causing complete catastrophic cancellation of smaller singular values! Instead, we perform <strong>Singular Value Decomposition (SVD)</strong> directly on centered $X$:</p>
+      $$X = U \Sigma_{\text{svd}} V^T \implies X^T X = V \Sigma_{\text{svd}}^2 V^T$$
+      <p>The right singular vectors $V$ are identical to the principal component loading directions, and the covariance eigenvalues are directly obtained via $\lambda_i = \frac{\sigma_i^2}{N}$ without ever squaring errors.</p>
+    </div>
+
+    <!-- SECTION 5: MANIFOLD LEARNING & t-SNE -->
+    <h3>5. Non-Linear Manifolds &amp; t-SNE (Van der Maaten &amp; Hinton, 2008)</h3>
+    <p>Linear PCA fails completely when data resides on non-linear curved manifolds (e.g., the Swiss Roll or concentric spheres). <strong>t-Distributed Stochastic Neighbor Embedding (t-SNE)</strong> maps high-dimensional points $\mathbf{x}_i \in \mathbb{R}^d$ to low-dimensional coordinates $\mathbf{y}_i \in \mathbb{R}^2$ while preserving local neighborhood probabilities.</p>
+
+    <h4>High-Dimensional Gaussian Affinities</h4>
+    <p>The probability that point $\mathbf{x}_i$ picks $\mathbf{x}_j$ as its neighbor under a Gaussian centered at $\mathbf{x}_i$ is:</p>
+    $$p_{j|i} = \frac{\exp\left(-\frac{\|\mathbf{x}_i - \mathbf{x}_j\|^2}{2\sigma_i^2}\right)}{\sum_{k \neq i} \exp\left(-\frac{\|\mathbf{x}_i - \mathbf{x}_k\|^2}{2\sigma_i^2}\right)}, \quad p_{ii} = 0, \quad p_{ij} = \frac{p_{j|i} + p_{i|j}}{2N}$$
+    <p>Where the variance $\sigma_i^2$ is determined via binary search to match a user-specified <strong>Perplexity</strong>: $\operatorname{Perp}(P_i) = 2^{H(P_i)} = 2^{-\sum_j p_{j|i} \log_2 p_{j|i}}$.</p>
+
+    <h4>Low-Dimensional Student-t Affinities &amp; The Crowding Problem</h4>
+    <p>In high dimensions, the volume of a sphere grows as $r^d$. In 2D, the available volume is vastly smaller. If we used a Gaussian distribution in low dimensions, distant clusters would be forced to collide and overlap at the center—a failure mode known as the <strong>Crowding Problem</strong>. t-SNE solves this by using a heavy-tailed <strong>Student-t distribution with 1 degree of freedom (Cauchy distribution)</strong> for low-dimensional affinities:</p>
+    $$q_{ij} = \frac{(1 + \|\mathbf{y}_i - \mathbf{y}_j\|^2)^{-1}}{\sum_{k \neq l} (1 + \|\mathbf{y}_k - \mathbf{y}_l\|^2)^{-1}}, \quad q_{ii} = 0$$
+    <p>Because the Cauchy distribution decays polynomially ($\propto d^{-2}$) rather than exponentially ($\propto e^{-d^2}$), points that are moderately distant in high dimensions can be placed much further apart in the 2D map without incurring massive probability penalties.</p>
+
+    <h4>The KL Divergence Objective &amp; Gradient</h4>
+    <p>t-SNE minimizes the Kullback-Leibler divergence between joint distributions $P$ and $Q$:</p>
+    $$\mathcal{L}_{\text{t-SNE}} = D_{\text{KL}}(P \parallel Q) = \sum_{i \neq j} p_{ij} \log \frac{p_{ij}}{q_{ij}}$$
+    <p>The analytic gradient with respect to the low-dimensional embedding $\mathbf{y}_i$ is remarkably intuitive:</p>
+    $$\frac{\partial \mathcal{L}}{\partial \mathbf{y}_i} = 4 \sum_j (p_{ij} - q_{ij})(1 + \|\mathbf{y}_i - \mathbf{y}_j\|^2)^{-1} (\mathbf{y}_i - \mathbf{y}_j)$$
+    <p>This acts as a physical system of springs: if $p_{ij} &gt; q_{ij}$, an attractive force pulls points $\mathbf{y}_i$ and $\mathbf{y}_j$ together; if $p_{ij} &lt; q_{ij}$, a repulsive force pushes them apart!</p>
+
+    <!-- SECTION 6: CLUSTERING EVALUATION -->
+    <h3>6. Quantitative Clustering Validation Metrics</h3>
+    <p>Because unsupervised learning lacks ground-truth labels $y$, model evaluation requires internal geometric validation:</p>
+    <ul>
+      <li><strong>Inertia (Elbow Method):</strong> Sum of squared distances to nearest centroids $\sum_{i} \|\mathbf{x}_i - \boldsymbol{\mu}_{c_i}\|^2$. Plotting inertia vs. $K$ reveals an "elbow" where diminishing marginal returns set in.</li>
+      <li><strong>Silhouette Coefficient:</strong> For sample $i$, let $a(i)$ be the mean intra-cluster distance, and $b(i)$ be the mean nearest-cluster distance:
+      $$s(i) = \frac{b(i) - a(i)}{\max(a(i), b(i))} \in [-1, +1]$$
+      A score $s(i) \approx +1$ signifies dense, well-separated clusters; $s(i) \approx 0$ indicates points on decision boundaries; $s(i) &lt; 0$ indicates incorrect cluster assignments.</li>
+      <li><strong>Davies-Bouldin Index:</strong> Measures similarity between each cluster $i$ and its most similar cluster $j$: $R_{ij} = \frac{s_i + s_j}{d(\boldsymbol{\mu}_i, \boldsymbol{\mu}_j)}$. Lower Davies-Bouldin values indicate superior cluster separation.</li>
+    </ul>
+
+    <!-- SECTION 7: 4-TIER PRACTICE SUITE -->
+    <h3>Unsupervised Learning Practice Suite &amp; Complete Worked Solutions</h3>
+
+    <!-- PROBLEM 2.7.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 2.7.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="difficulty difficulty-easy">Level 1 • Direct Numerical Warm-Up Drill</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Consider a 2D dataset with 4 observations: $A = (1, 1)$, $B = (1, 3)$, $C = (5, 5)$, and $D = (7, 5)$. Suppose $K = 2$ and the algorithm is initialized with centroids $\boldsymbol{\mu}_1 = (2, 2)$ and $\boldsymbol{\mu}_2 = (6, 6)$.</p>
+        <ol>
+          <li>Compute the squared Euclidean distance from each data point to both initial centroids.</li>
+          <li>Determine the cluster assignment for each point.</li>
+          <li>Calculate the updated centroid coordinates $\boldsymbol{\mu}_1^{(1)}$ and $\boldsymbol{\mu}_2^{(1)}$ after one iteration of Lloyd's algorithm.</li>
+          <li>Calculate the initial inertia $J^{(0)}$ and the new inertia $J^{(1)}$ after the update step.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
+
+        <p class="step"><strong>Step 1: Compute Squared Euclidean Distances:</strong><br>
+        For any point $\mathbf{x} = (x, y)$ and centroid $\boldsymbol{\mu} = (\mu_x, \mu_y)$, $d^2(\mathbf{x}, \boldsymbol{\mu}) = (x - \mu_x)^2 + (y - \mu_y)^2$:
+        <ul>
+          <li>Point $A(1, 1)$:
+          $$d^2(A, \boldsymbol{\mu}_1) = (1 - 2)^2 + (1 - 2)^2 = (-1)^2 + (-1)^2 = 1 + 1 = 2$$
+          $$d^2(A, \boldsymbol{\mu}_2) = (1 - 6)^2 + (1 - 6)^2 = (-5)^2 + (-5)^2 = 25 + 25 = 50$$</li>
+          <li>Point $B(1, 3)$:
+          $$d^2(B, \boldsymbol{\mu}_1) = (1 - 2)^2 + (3 - 2)^2 = (-1)^2 + 1^2 = 1 + 1 = 2$$
+          $$d^2(B, \boldsymbol{\mu}_2) = (1 - 6)^2 + (3 - 6)^2 = (-5)^2 + (-3)^2 = 25 + 9 = 34$$</li>
+          <li>Point $C(5, 5)$:
+          $$d^2(C, \boldsymbol{\mu}_1) = (5 - 2)^2 + (5 - 2)^2 = 3^2 + 3^2 = 9 + 9 = 18$$
+          $$d^2(C, \boldsymbol{\mu}_2) = (5 - 6)^2 + (5 - 6)^2 = (-1)^2 + (-1)^2 = 1 + 1 = 2$$</li>
+          <li>Point $D(7, 5)$:
+          $$d^2(D, \boldsymbol{\mu}_1) = (7 - 2)^2 + (5 - 2)^2 = 5^2 + 3^2 = 25 + 9 = 34$$
+          $$d^2(D, \boldsymbol{\mu}_2) = (7 - 6)^2 + (5 - 6)^2 = 1^2 + (-1)^2 = 1 + 1 = 2$$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2: Assign Clusters:</strong><br>
+        Comparing distances:
+        <ul>
+          <li>For $A$: $d^2(A, \boldsymbol{\mu}_1) = 2 &lt; 50 \implies A \in C_1$.</li>
+          <li>For $B$: $d^2(B, \boldsymbol{\mu}_1) = 2 &lt; 34 \implies B \in C_1$.</li>
+          <li>For $C$: $d^2(C, \boldsymbol{\mu}_2) = 2 &lt; 18 \implies C \in C_2$.</li>
+          <li>For $D$: $d^2(D, \boldsymbol{\mu}_2) = 2 &lt; 34 \implies D \in C_2$.</li>
+        </ul>
+        Thus, $C_1 = \{A, B\}$ and $C_2 = \{C, D\}$.</p>
+
+        <p class="step"><strong>Step 3: Update Centroids:</strong><br>
+        Compute the sample mean of assigned points:
+        $$\boldsymbol{\mu}_1^{(1)} = \frac{A + B}{2} = \left( \frac{1 + 1}{2}, \frac{1 + 3}{2} \right) = (1.0, 2.0)$$
+        $$\boldsymbol{\mu}_2^{(1)} = \frac{C + D}{2} = \left( \frac{5 + 7}{2}, \frac{5 + 5}{2} \right) = (6.0, 5.0)$$</p>
+
+        <p class="step"><strong>Step 4: Compute Inertias $J^{(0)}$ and $J^{(1)}$:</strong><br>
+        Initial inertia with respect to $\boldsymbol{\mu}^{(0)}$:
+        $$J^{(0)} = d^2(A, \boldsymbol{\mu}_1) + d^2(B, \boldsymbol{\mu}_1) + d^2(C, \boldsymbol{\mu}_2) + d^2(D, \boldsymbol{\mu}_2) = 2 + 2 + 2 + 2 = 8.0$$
+        Updated inertia with respect to $\boldsymbol{\mu}^{(1)}$:
+        <ul>
+          <li>For $A(1, 1)$ to $\boldsymbol{\mu}_1^{(1)}(1, 2)$: $d^2 = (1-1)^2 + (1-2)^2 = 0 + 1 = 1$.</li>
+          <li>For $B(1, 3)$ to $\boldsymbol{\mu}_1^{(1)}(1, 2)$: $d^2 = (1-1)^2 + (3-2)^2 = 0 + 1 = 1$.</li>
+          <li>For $C(5, 5)$ to $\boldsymbol{\mu}_2^{(1)}(6, 5)$: $d^2 = (5-6)^2 + (5-5)^2 = 1 + 0 = 1$.</li>
+          <li>For $D(7, 5)$ to $\boldsymbol{\mu}_2^{(1)}(6, 5)$: $d^2 = (7-6)^2 + (5-5)^2 = 1 + 0 = 1$.</li>
+        </ul>
+        $$J^{(1)} = 1 + 1 + 1 + 1 = 4.0$$
+        The inertia drops from $8.0 \to 4.0$, confirming strict monotonic descent.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 2.7.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.7.2</span>
+        <span class="difficulty difficulty-easy">Level 1 • Direct Formula Drill</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A 2-dimensional centered dataset produces the sample covariance matrix:
+        $$\Sigma = \begin{pmatrix} 5 & 2 \\ 2 & 2 \end{pmatrix}$$</p>
+        <ol>
+          <li>Find the characteristic polynomial and calculate both eigenvalues $\lambda_1, \lambda_2$ (with $\lambda_1 \ge \lambda_2$).</li>
+          <li>Find the normalized principal eigenvector $\mathbf{u}_1$ corresponding to $\lambda_1$.</li>
+          <li>Calculate the proportion of total variance explained by the first principal component.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Eigendecomposition Solution</div>
+
+        <p class="step"><strong>Step 1: Characteristic Equation:</strong><br>
+        Set $\det(\Sigma - \lambda I) = 0$:
+        $$\det \begin{pmatrix} 5 - \lambda & 2 \\ 2 & 2 - \lambda \end{pmatrix} = (5 - \lambda)(2 - \lambda) - (2)(2) = 0$$
+        $$\lambda^2 - 7\lambda + 10 - 4 = 0 \implies \lambda^2 - 7\lambda + 6 = 0$$
+        Factoring the quadratic equation:
+        $$(\lambda - 6)(\lambda - 1) = 0 \implies \lambda_1 = 6, \quad \lambda_2 = 1$$</p>
+
+        <p class="step"><strong>Step 2: Compute Eigenvector for $\lambda_1 = 6$:</strong><br>
+        Solve $(\Sigma - 6I)\mathbf{u}_1 = \mathbf{0}$:
+        $$\begin{pmatrix} 5 - 6 & 2 \\ 2 & 2 - 6 \end{pmatrix} \begin{pmatrix} u_{11} \\ u_{12} \end{pmatrix} = \begin{pmatrix} -1 & 2 \\ 2 & -4 \end{pmatrix} \begin{pmatrix} u_{11} \\ u_{12} \end{pmatrix} = \begin{pmatrix} 0 \\ 0 \end{pmatrix}$$
+        This yields the single independent equation $-u_{11} + 2u_{12} = 0 \implies u_{11} = 2u_{12}$.<br>
+        Setting $u_{12} = 1$, the unnormalized vector is $\mathbf{v} = \begin{pmatrix} 2 \\ 1 \end{pmatrix}$.<br>
+        Normalize to unit Euclidean norm:
+        $$\|\mathbf{v}\|_2 = \sqrt{2^2 + 1^2} = \sqrt{5}$$
+        $$\mathbf{u}_1 = \begin{pmatrix} \frac{2}{\sqrt{5}} \\ \frac{1}{\sqrt{5}} \end{pmatrix} \approx \begin{pmatrix} 0.8944 \\ 0.4472 \end{pmatrix}$$</p>
+
+        <p class="step"><strong>Step 3: Explained Variance Ratio:</strong><br>
+        Total variance is the trace of the covariance matrix:
+        $$\operatorname{Tr}(\Sigma) = 5 + 2 = 7 = \lambda_1 + \lambda_2 = 6 + 1 = 7$$
+        The proportion of total variance captured by the 1st principal component is:
+        $$\text{EVR}_1 = \frac{\lambda_1}{\lambda_1 + \lambda_2} = \frac{6}{6 + 1} = \frac{6}{7} \approx 0.8571 \quad (85.71\%)$$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 2.7.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.7.3</span>
+        <span class="difficulty difficulty-medium">Level 2 • Applied Engineering Trace</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are implementing the $K$-Means++ initialization algorithm on a 1D dataset:
+        $$X = \{1, 3, 7, 15, 25\}$$
+        Suppose the first centroid is chosen at random as $\boldsymbol{\mu}_1 = 1$.</p>
+        <ol>
+          <li>Compute the shortest distance $D(x)$ and squared distance $D(x)^2$ from each point $x \in X$ to the nearest existing centroid.</li>
+          <li>Construct the exact discrete probability distribution $P(x)$ and the cumulative probability intervals used for roulette-wheel selection.</li>
+          <li>If the random number generator returns $r = 0.42 \in [0, 1)$, which point is selected as the second centroid $\boldsymbol{\mu}_2$?</li>
+          <li>With $\boldsymbol{\mu}_1 = 1$ and $\boldsymbol{\mu}_2$ selected from part 3, compute the updated $D(x)^2$ distribution for selecting a third centroid $\boldsymbol{\mu}_3$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Algorithmic Solution</div>
+
+        <p class="step"><strong>Step 1: Compute Distances to $\boldsymbol{\mu}_1 = 1$:</strong><br>
+        For each point $x_i$: $D(x_i) = |x_i - 1|$, so $D(x_i)^2 = (x_i - 1)^2$:
+        <ul>
+          <li>$x_1 = 1$: $D = |1 - 1| = 0 \implies D^2 = 0$</li>
+          <li>$x_2 = 3$: $D = |3 - 1| = 2 \implies D^2 = 4$</li>
+          <li>$x_3 = 7$: $D = |7 - 1| = 6 \implies D^2 = 36$</li>
+          <li>$x_4 = 15$: $D = |15 - 1| = 14 \implies D^2 = 196$</li>
+          <li>$x_5 = 25$: $D = |25 - 1| = 24 \implies D^2 = 576$</li>
+        </ul>
+        Sum of squared distances:
+        $$\sum_{i=1}^5 D(x_i)^2 = 0 + 4 + 36 + 196 + 576 = 812$$</p>
+
+        <p class="step"><strong>Step 2: Probability Distribution and Cumulative Intervals:</strong><br>
+        $P(x_i) = \frac{D(x_i)^2}{812}$:
+        <table>
+          <thead>
+            <tr><th>Point $x_i$</th><th>$D(x_i)^2$</th><th>Probability $P(x_i)$</th><th>Cumulative Interval $[F_{i-1}, F_i)$</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>$1$</td><td>$0$</td><td>$0.0000$</td><td>$[0.0000, 0.0000)$</td></tr>
+            <tr><td>$3$</td><td>$4$</td><td>$\frac{4}{812} \approx 0.0049$</td><td>$[0.0000, 0.0049)$</td></tr>
+            <tr><td>$7$</td><td>$36$</td><td>$\frac{36}{812} \approx 0.0443$</td><td>$[0.0049, 0.0492)$</td></tr>
+            <tr><td>$15$</td><td>$196$</td><td>$\frac{196}{812} \approx 0.2414$</td><td>$[0.0492, 0.2906)$</td></tr>
+            <tr><td>$25$</td><td>$576$</td><td>$\frac{576}{812} \approx 0.7094$</td><td>$[0.2906, 1.0000)$</td></tr>
+          </tbody>
+        </table></p>
+
+        <p class="step"><strong>Step 3: Centroid Selection for $r = 0.42$:</strong><br>
+        Looking up $r = 0.42$ in the cumulative intervals:
+        $$0.2906 \le 0.42 &lt; 1.0000 \implies x_5 = 25 \text{ is selected!}$$
+        Thus, $\boldsymbol{\mu}_2 = 25$. Point $25$ accounted for $70.94\%$ of the total probability mass due to the $D^2$ weighting.</p>
+
+        <p class="step"><strong>Step 4: Update Distance Distribution for Centroid $\boldsymbol{\mu}_3$:</strong><br>
+        With centroids $\boldsymbol{\mu}_1 = 1$ and $\boldsymbol{\mu}_2 = 25$, the new distance is $D(x_i) = \min(|x_i - 1|, |x_i - 25|)$:
+        <ul>
+          <li>$x_1 = 1$: $\min(0, 24) = 0 \implies D^2 = 0$</li>
+          <li>$x_2 = 3$: $\min(2, 22) = 2 \implies D^2 = 4$</li>
+          <li>$x_3 = 7$: $\min(6, 18) = 6 \implies D^2 = 36$</li>
+          <li>$x_4 = 15$: $\min(14, 10) = 10 \implies D^2 = 100$</li>
+          <li>$x_5 = 25$: $\min(24, 0) = 0 \implies D^2 = 0$</li>
+        </ul>
+        New sum: $\sum D(x_i)^2 = 0 + 4 + 36 + 100 + 0 = 140$.<br>
+        Point $15$ now has probability $P(15) = \frac{100}{140} \approx 71.43\%$ of being chosen as $\boldsymbol{\mu}_3$, precisely isolating the intermediate cluster!</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 2.7.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.7.4</span>
+        <span class="difficulty difficulty-medium">Level 2 • Algorithmic Tracing &amp; Projection</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are given a centered 2D dataset of $N = 3$ samples:
+        $$X = \begin{pmatrix} 2 & 1 \\ -2 & -1 \\ 0 & 0 \end{pmatrix}$$</p>
+        <ol>
+          <li>Compute the matrix product $X^T X$ and its eigenvalues $\lambda_1, \lambda_2$ and right singular vectors $\mathbf{v}_1, \mathbf{v}_2$.</li>
+          <li>Project the dataset onto the 1-dimensional subspace spanned by the first principal component: compute coordinates $\mathbf{z} = X \mathbf{v}_1 \in \mathbb{R}^3$.</li>
+          <li>Compute the reconstructed dataset $\hat{X} = \mathbf{z} \mathbf{v}_1^T \in \mathbb{R}^{3 \times 2}$.</li>
+          <li>Compute the Frobenius reconstruction loss $\|X - \hat{X}\|_F^2$ and verify that it equals $\lambda_2$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+
+        <p class="step"><strong>Step 1: Compute $X^T X$ and Singular Vectors:</strong><br>
+        $$X^T X = \begin{pmatrix} 2 & -2 & 0 \\ 1 & -1 & 0 \end{pmatrix} \begin{pmatrix} 2 & 1 \\ -2 & -1 \\ 0 & 0 \end{pmatrix} = \begin{pmatrix} (4+4+0) & (2+2+0) \\ (2+2+0) & (1+1+0) \end{pmatrix} = \begin{pmatrix} 8 & 4 \\ 4 & 2 \end{pmatrix}$$
+        Compute eigenvalues: $\det(X^T X - \lambda I) = (8 - \lambda)(2 - \lambda) - 16 = \lambda^2 - 10\lambda + 16 - 16 = \lambda(\lambda - 10) = 0$.<br>
+        Thus:
+        $$\lambda_1 = 10, \quad \lambda_2 = 0$$
+        Eigenvector for $\lambda_1 = 10$: $(X^T X - 10 I)\mathbf{v}_1 = \begin{pmatrix} -2 & 4 \\ 4 & -8 \end{pmatrix} \begin{pmatrix} v_{11} \\ v_{12} \end{pmatrix} = \mathbf{0} \implies v_{11} = 2 v_{12}$.<br>
+        Normalizing: $\mathbf{v}_1 = \begin{pmatrix} \frac{2}{\sqrt{5}} \\ \frac{1}{\sqrt{5}} \end{pmatrix}$.<br>
+        Eigenvector for $\lambda_2 = 0$: $8 v_{21} + 4 v_{22} = 0 \implies v_{22} = -2 v_{21}$.<br>
+        Normalizing: $\mathbf{v}_2 = \begin{pmatrix} -\frac{1}{\sqrt{5}} \\ \frac{2}{\sqrt{5}} \end{pmatrix}$.</p>
+
+        <p class="step"><strong>Step 2: Compute 1D Projection Coordinates $\mathbf{z}$:</strong><br>
+        $$\mathbf{z} = X \mathbf{v}_1 = \begin{pmatrix} 2 & 1 \\ -2 & -1 \\ 0 & 0 \end{pmatrix} \begin{pmatrix} \frac{2}{\sqrt{5}} \\ \frac{1}{\sqrt{5}} \end{pmatrix} = \begin{pmatrix} \frac{4 + 1}{\sqrt{5}} \\ \frac{-4 - 1}{\sqrt{5}} \\ 0 \end{pmatrix} = \begin{pmatrix} \frac{5}{\sqrt{5}} \\ -\frac{5}{\sqrt{5}} \\ 0 \end{pmatrix} = \begin{pmatrix} \sqrt{5} \\ -\sqrt{5} \\ 0 \end{pmatrix} \approx \begin{pmatrix} 2.236 \\ -2.236 \\ 0 \end{pmatrix}$$</p>
+
+        <p class="step"><strong>Step 3: Compute Reconstructed Matrix $\hat{X}$:</strong><br>
+        $$\hat{X} = \mathbf{z} \mathbf{v}_1^T = \begin{pmatrix} \sqrt{5} \\ -\sqrt{5} \\ 0 \end{pmatrix} \begin{pmatrix} \frac{2}{\sqrt{5}} & \frac{1}{\sqrt{5}} \end{pmatrix} = \begin{pmatrix} \sqrt{5} \cdot \frac{2}{\sqrt{5}} & \sqrt{5} \cdot \frac{1}{\sqrt{5}} \\ -\sqrt{5} \cdot \frac{2}{\sqrt{5}} & -\sqrt{5} \cdot \frac{1}{\sqrt{5}} \\ 0 & 0 \end{pmatrix} = \begin{pmatrix} 2 & 1 \\ -2 & -1 \\ 0 & 0 \end{pmatrix}$$</p>
+
+        <p class="step"><strong>Step 4: Compute Frobenius Reconstruction Loss:</strong><br>
+        Subtract $\hat{X}$ from $X$:
+        $$X - \hat{X} = \begin{pmatrix} 2 & 1 \\ -2 & -1 \\ 0 & 0 \end{pmatrix} - \begin{pmatrix} 2 & 1 \\ -2 & -1 \\ 0 & 0 \end{pmatrix} = \begin{pmatrix} 0 & 0 \\ 0 & 0 \\ 0 & 0 \end{pmatrix}$$
+        $$\|X - \hat{X}\|_F^2 = 0$$
+        Since $\lambda_2 = 0$, the second principal component contains zero variance—all data points lie exactly along the line $y = \frac{1}{2}x$. Thus, the 1D PCA representation reconstructs the original dataset with <strong>zero reconstruction error</strong>, matching $\lambda_2 = 0$ identically.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 2.7.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.7.5</span>
+        <span class="difficulty difficulty-hard">Level 3 • FAANG / Research Lab Proof</span>
         <span class="company-tag company-google">Google</span>
         <span class="company-tag company-meta">Meta</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Prove the mathematical equivalence between Principal Component Analysis (PCA) and Singular Value Decomposition (SVD). Given centered data matrix $X \in \mathbb{R}^{N \times d}$ with SVD $X = U \Sigma V^T$, prove that the right singular vectors $V$ are the exact principal component directions of the covariance matrix, and derive the relationship between singular values $\sigma_i$ and eigenvalues $\lambda_i$.</p>
+        <p><strong>QUESTION:</strong> Prove rigorously from first principles that finding an orthonormal projection direction $\mathbf{u} \in \mathbb{R}^d$ ($\|\mathbf{u}\|_2 = 1$) that maximizes the sample variance of projected centered data is mathematically identical to finding the direction $\mathbf{u}$ that minimizes the mean squared reconstruction error.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete First-Principles Mathematical Proof</div>
+
+        <p class="step"><strong>Step 1: Setup and Geometric Projection:</strong><br>
+        Let $X = [\mathbf{x}_1, \dots, \mathbf{x}_N]^T \in \mathbb{R}^{N \times d}$ be centered, so $\sum_{i=1}^N \mathbf{x}_i = \mathbf{0}$.<br>
+        For any unit vector $\mathbf{u} \in \mathbb{R}^d$ with $\|\mathbf{u}\|_2 = 1$, the scalar orthogonal projection of point $\mathbf{x}_i$ onto $\mathbf{u}$ is $z_i = \mathbf{u}^T \mathbf{x}_i$.<br>
+        The reconstructed point in $\mathbb{R}^d$ is the projection vector $\hat{\mathbf{x}}_i = z_i \mathbf{u} = (\mathbf{u}^T \mathbf{x}_i) \mathbf{u}$.</p>
+
+        <p class="step"><strong>Step 2: Expand the Mean Squared Reconstruction Error:</strong><br>
+        The mean squared reconstruction error is:
+        $$\mathcal{E}(\mathbf{u}) = \frac{1}{N} \sum_{i=1}^N \|\mathbf{x}_i - \hat{\mathbf{x}}_i\|_2^2 = \frac{1}{N} \sum_{i=1}^N \|\mathbf{x}_i - (\mathbf{u}^T \mathbf{x}_i) \mathbf{u}\|_2^2$$
+        Expand the squared Euclidean norm using the vector inner product $\|\mathbf{a} - \mathbf{b}\|_2^2 = \|\mathbf{a}\|_2^2 - 2 \mathbf{a}^T \mathbf{b} + \|\mathbf{b}\|_2^2$:
+        $$\|\mathbf{x}_i - (\mathbf{u}^T \mathbf{x}_i)\mathbf{u}\|_2^2 = \|\mathbf{x}_i\|_2^2 - 2 \mathbf{x}_i^T [(\mathbf{u}^T \mathbf{x}_i)\mathbf{u}] + \|(\mathbf{u}^T \mathbf{x}_i)\mathbf{u}\|_2^2$$
+        Since $\mathbf{u}^T \mathbf{x}_i$ is a scalar:
+        $$\mathbf{x}_i^T [(\mathbf{u}^T \mathbf{x}_i)\mathbf{u}] = (\mathbf{u}^T \mathbf{x}_i)(\mathbf{x}_i^T \mathbf{u}) = (\mathbf{u}^T \mathbf{x}_i)^2$$
+        And because $\|\mathbf{u}\|_2 = 1$:
+        $$\|(\mathbf{u}^T \mathbf{x}_i)\mathbf{u}\|_2^2 = (\mathbf{u}^T \mathbf{x}_i)^2 \|\mathbf{u}\|_2^2 = (\mathbf{u}^T \mathbf{x}_i)^2 \cdot 1 = (\mathbf{u}^T \mathbf{x}_i)^2$$
+        Substitute these into the expansion:
+        $$\|\mathbf{x}_i - \hat{\mathbf{x}}_i\|_2^2 = \|\mathbf{x}_i\|_2^2 - 2(\mathbf{u}^T \mathbf{x}_i)^2 + (\mathbf{u}^T \mathbf{x}_i)^2 = \|\mathbf{x}_i\|_2^2 - (\mathbf{u}^T \mathbf{x}_i)^2$$</p>
+
+        <p class="step"><strong>Step 3: Average Over All $N$ Data Points:</strong><br>
+        $$\mathcal{E}(\mathbf{u}) = \frac{1}{N} \sum_{i=1}^N \|\mathbf{x}_i\|_2^2 - \frac{1}{N} \sum_{i=1}^N (\mathbf{u}^T \mathbf{x}_i)^2$$
+        Notice the two components:
+        <ol>
+          <li>The first term $\frac{1}{N} \sum_{i=1}^N \|\mathbf{x}_i\|_2^2 = \operatorname{Tr}(\Sigma)$ is the <strong>total sample variance</strong> of the original dataset, which is a fixed constant completely independent of $\mathbf{u}$.</li>
+          <li>The second term $\frac{1}{N} \sum_{i=1}^N (\mathbf{u}^T \mathbf{x}_i)^2 = \mathbf{u}^T \left( \frac{1}{N} \sum_{i=1}^N \mathbf{x}_i \mathbf{x}_i^T \right) \mathbf{u} = \mathbf{u}^T \Sigma \mathbf{u}$ is precisely the <strong>projected sample variance $\text{Var}(z)$</strong>!</li>
+        </ol>
+        Therefore:
+        $$\mathcal{E}(\mathbf{u}) = \text{Total Variance} - \mathbf{u}^T \Sigma \mathbf{u}$$</p>
+
+        <p class="step"><strong>Step 4: Establish the Equivalence:</strong><br>
+        Because $\text{Total Variance}$ is constant:
+        $$\arg\min_{\|\mathbf{u}\|_2 = 1} \mathcal{E}(\mathbf{u}) = \arg\min_{\|\mathbf{u}\|_2 = 1} \left( \text{Const} - \mathbf{u}^T \Sigma \mathbf{u} \right) = \arg\max_{\|\mathbf{u}\|_2 = 1} \mathbf{u}^T \Sigma \mathbf{u}$$
+        Thus, minimizing reconstruction error is mathematically identical to maximizing projected variance. Both perspectives lead to the exact same Rayleigh quotient and the exact same leading eigenvector of the sample covariance matrix $\Sigma$. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 2.7.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.7.6</span>
+        <span class="difficulty difficulty-hard">Level 3 • FAANG / Research Lab Proof</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove that Lloyd's alternating algorithm for $K$-Means clustering:
+        <ol>
+          <li>Monotonically decreases the objective function $J(C, \boldsymbol{\mu})$ at every half-step.</li>
+          <li>Is guaranteed to terminate in a finite number of steps, and can never enter an infinite cycle or oscillation.</li>
+        </ol></p>
       </div>
       <div class="solution">
         <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
 
-        <p class="step"><strong>Step 1: Express Sample Covariance Matrix in SVD Terms:</strong><br>
-        The sample covariance matrix of centered data $X$ is:
-        $$C = \frac{1}{N} X^T X$$
-        Substitute the SVD of $X = U \Sigma V^T$:
-        $$C = \frac{1}{N} (U \Sigma V^T)^T (U \Sigma V^T) = \frac{1}{N} (V \Sigma^T U^T) (U \Sigma V^T)$$
-        Since $U \in \mathbb{R}^{N \times N}$ is orthogonal ($U^T U = I_N$):
-        $$C = \frac{1}{N} V (\Sigma^T \Sigma) V^T = V \left( \frac{\Sigma^T \Sigma}{N} \right) V^T$$</p>
+        <p class="step"><strong>Step 1: Monotonicity of the Assignment Step:</strong><br>
+        Let the centroids at iteration $t$ be $\boldsymbol{\mu}^{(t)} = (\boldsymbol{\mu}_1^{(t)}, \dots, \boldsymbol{\mu}_K^{(t)})$.<br>
+        In the assignment step, cluster memberships $C^{(t+1)}$ are assigned according to the rule:
+        $$c_i^{(t+1)} = \arg\min_{k \in \{1,\dots,K\}} \|\mathbf{x}_i - \boldsymbol{\mu}_k^{(t)}\|_2^2$$
+        By definition of the $\arg\min$ operator, for each point $i \in \{1, \dots, N\}$:
+        $$\|\mathbf{x}_i - \boldsymbol{\mu}_{c_i^{(t+1)}}^{(t)}\|_2^2 \le \|\mathbf{x}_i - \boldsymbol{\mu}_{c_i^{(t)}}^{(t)}\|_2^2$$
+        Summing over all $N$ observations:
+        $$J(C^{(t+1)}, \boldsymbol{\mu}^{(t)}) = \sum_{i=1}^N \|\mathbf{x}_i - \boldsymbol{\mu}_{c_i^{(t+1)}}^{(t)}\|_2^2 \le \sum_{i=1}^N \|\mathbf{x}_i - \boldsymbol{\mu}_{c_i^{(t)}}^{(t)}\|_2^2 = J(C^{(t)}, \boldsymbol{\mu}^{(t)})$$
+        Thus, the assignment step cannot increase $J$: $J(C^{(t+1)}, \boldsymbol{\mu}^{(t)}) \le J(C^{(t)}, \boldsymbol{\mu}^{(t)})$.</p>
 
-        <p class="step"><strong>Step 2: Match with the Spectral Eigendecomposition:</strong><br>
-        Recall the Spectral Theorem: any symmetric positive semi-definite matrix $C$ can be decomposed as $C = Q \Lambda Q^T$, where $Q$ contains eigenvectors and $\Lambda$ is a diagonal matrix of eigenvalues.<br>
-        Comparing $C = V \left( \frac{\Sigma^T \Sigma}{N} \right) V^T$ with $C = Q \Lambda Q^T$:
-        <ul>
-          <li>The right singular vectors $V$ are <strong>identical to the eigenvectors $Q$</strong> of the covariance matrix!</li>
-          <li>The eigenvalues of the covariance matrix are related to the singular values by:
-          $$\lambda_i = \frac{\sigma_i^2}{N}$$</li>
-        </ul>
-        <em>Production Value:</em> In software engineering, we <strong>never compute $X^T X$ directly</strong> to perform PCA, because forming $X^T X$ squares the condition number ($\kappa(X^T X) = \kappa(X)^2$), destroying numerical precision! Instead, high-performance libraries compute the SVD of $X$ directly, extracting principal components in $O(N d \min(N, d))$ with double the numerical stability.</p>
+        <p class="step"><strong>Step 2: Monotonicity of the Centroid Update Step:</strong><br>
+        Now fix the cluster assignments $C^{(t+1)}$. The new centroids are updated to $\boldsymbol{\mu}_k^{(t+1)} = \frac{1}{|C_k^{(t+1)}|} \sum_{\mathbf{x}_i \in C_k^{(t+1)}} \mathbf{x}_i$.<br>
+        Consider the cluster cost function $f(\mathbf{m}) = \sum_{\mathbf{x}_i \in C_k^{(t+1)}} \|\mathbf{x}_i - \mathbf{m}\|_2^2$.<br>
+        This is a strictly convex quadratic function of $\mathbf{m} \in \mathbb{R}^d$. Taking the gradient:
+        $$\nabla_{\mathbf{m}} f = \sum_{\mathbf{x}_i \in C_k^{(t+1)}} 2(\mathbf{m} - \mathbf{x}_i) = 2 |C_k^{(t+1)}| \mathbf{m} - 2 \sum_{\mathbf{x}_i \in C_k^{(t+1)}} \mathbf{x}_i = \mathbf{0}$$
+        $$\implies \mathbf{m}^* = \frac{1}{|C_k^{(t+1)}|} \sum_{\mathbf{x}_i \in C_k^{(t+1)}} \mathbf{x}_i = \boldsymbol{\mu}_k^{(t+1)}$$
+        Since the Hessian is $\nabla^2 f = 2 |C_k^{(t+1)}| I \succ 0$, $\boldsymbol{\mu}_k^{(t+1)}$ is the <strong>unique global minimizer</strong> of $f(\mathbf{m})$.<br>
+        Therefore, for any centroid configuration $\boldsymbol{\mu}^{(t)}$:
+        $$J(C^{(t+1)}, \boldsymbol{\mu}^{(t+1)}) \le J(C^{(t+1)}, \boldsymbol{\mu}^{(t)})$$</p>
+
+        <p class="step"><strong>Step 3: Combined Monotonic Descent:</strong><br>
+        Combining both inequalities:
+        $$J(C^{(t+1)}, \boldsymbol{\mu}^{(t+1)}) \le J(C^{(t+1)}, \boldsymbol{\mu}^{(t)}) \le J(C^{(t)}, \boldsymbol{\mu}^{(t)})$$
+        The objective sequence $\{J^{(t)}\}_{t=1}^\infty$ is monotonically non-increasing and bounded below by $0$.</p>
+
+        <p class="step"><strong>Step 4: Finite Termination and No Infinite Cycles:</strong><br>
+        A dataset of $N$ points can be partitioned into $K$ clusters in at most $K^N$ distinct ways (a finite number).<br>
+        If the algorithm does not terminate, it must encounter a repeated partition $C^{(t_2)} = C^{(t_1)}$ for some $t_2 &gt; t_1$.<br>
+        However, if $C^{(t+1)} \neq C^{(t)}$ and there are no degenerate distance ties, the assignment step produces a <strong>strict decrease</strong>: $J(C^{(t+1)}, \boldsymbol{\mu}^{(t)}) &lt; J(C^{(t)}, \boldsymbol{\mu}^{(t)})$.<br>
+        A sequence that strictly decreases at every change can never revisit a previously visited state, because $J(C^{(t_2)}, \boldsymbol{\mu}^{(t_2)}) &lt; J(C^{(t_1)}, \boldsymbol{\mu}^{(t_1)})$.<br>
+        Since the state space of clusterings is finite ($|\mathcal{S}| \le K^N$) and the sequence of objective values strictly decreases, the algorithm <strong>must terminate in a finite number of iterations</strong> when $C^{(t+1)} = C^{(t)}$. $\blacksquare$</p>
       </div>
     </div>
 
-    <!-- SECTION 4: CODE LAB -->
-    <h3>3. Production Code Lab 2.7: SVD-Based PCA from First Principles</h3>
-    <p>Below is a production implementation of SVD-based PCA in pure Python, calculating explained variance ratios without forming the $X^T X$ covariance matrix.</p>
+    <!-- PROBLEM 2.7.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.7.7</span>
+        <span class="difficulty difficulty-medium">Level 4 • Conceptual Trap MCQ</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A data scientist trains a PCA model on real estate data with two features:
+        <ul>
+          <li>Feature 1: Square Footage ($x_1 \in [500, 5000]$ sq ft, variance $\approx 1,000,000$).</li>
+          <li>Feature 2: Number of Bedrooms ($x_2 \in [1, 5]$, variance $\approx 1.2$).</li>
+        </ul>
+        The engineer forgets to apply <code>StandardScaler</code> and directly performs PCA. What will happen to the principal components?</p>
+        <ol type="A">
+          <li>PCA is scale-invariant because eigenvectors are normalized to unit length ($\|\mathbf{u}\| = 1$); the components will correctly weight both features.</li>
+          <li>The first principal component $\mathbf{u}_1$ will align almost perfectly with $[1, 0]^T$ (Square Footage), completely ignoring Bedrooms simply due to the arbitrary measurement units.</li>
+          <li>The second principal component will capture $99.9\%$ of the variance because the smaller numerical range of Bedrooms allows for finer variance resolution.</li>
+          <li>The covariance matrix becomes singular ($\det(\Sigma) = 0$), causing LAPACK SVD solvers to crash with a floating-point division by zero exception.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: B • Comprehensive Distractor Analysis</div>
+
+        <p class="step"><strong>Detailed Analysis:</strong><br>
+        PCA maximizes projected variance $\mathbf{u}^T \Sigma \mathbf{u}$.<br>
+        The sample covariance matrix without standardization is:
+        $$\Sigma = \begin{pmatrix} 1,000,000 & \text{Cov}(x_1, x_2) \\ \text{Cov}(x_1, x_2) & 1.2 \end{pmatrix}$$
+        Because $\operatorname{Var}(x_1) = 1,000,000 \gg \operatorname{Var}(x_2) = 1.2$, the diagonal is dominated by Feature 1 by a factor of almost $1,000,000:1$.<br>
+        The leading eigenvalue $\lambda_1 \approx 1,000,000$, and the corresponding eigenvector $\mathbf{u}_1 \approx \begin{pmatrix} 1.0 \\ 0.0001 \end{pmatrix} \approx \begin{pmatrix} 1 \\ 0 \end{pmatrix}$.<br>
+        The first principal component is simply a carbon copy of Square Footage. If Square Footage had instead been measured in square kilometers ($[0.000046, 0.00046]$ sq km, variance $\approx 10^{-8}$), the exact same physical feature would have had its contribution reduced to $0.00001\%$, and Bedrooms would have completely dominated!<br>
+        <strong>Conclusion: PCA is NOT scale-invariant. Features must always be standardized to zero mean and unit variance ($z = \frac{x - \mu}{\sigma}$) prior to computing PCA.</strong></p>
+
+        <p class="step"><strong>Why Other Options are False:</strong><br>
+        <ul>
+          <li><strong>A is FALSE:</strong> While the eigenvector $\mathbf{u}$ is normalized to unit length ($\|\mathbf{u}\|=1$), the objective being maximized is $\mathbf{u}^T \Sigma \mathbf{u}$. The magnitudes inside $\Sigma$ directly dictate which direction has the highest variance.</li>
+          <li><strong>C is FALSE:</strong> PC1 captures the largest eigenvalue, which is $1,000,000$ ($99.9998\%$ of total variance). PC2 captures the remaining $\approx 1.2$ ($0.0002\%$).</li>
+          <li><strong>D is FALSE:</strong> As long as the two features are not perfectly collinear, $\Sigma$ is symmetric positive definite and non-singular ($\det(\Sigma) &gt; 0$). LAPACK executes without errors, but produces a practically useless projection.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 2.7.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.7.8</span>
+        <span class="difficulty difficulty-hard">Level 4 • Assertion-Reasoning &amp; Voronoi Geometry Trap</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Evaluate the following Assertion and Reason regarding $K$-Means clustering geometry:</p>
+        <p><strong>Assertion (A):</strong> Standard $K$-Means clustering with Euclidean distance will fail to separate two concentric spherical shells of data (an inner dense sphere surrounded by an outer spherical ring), regardless of how many iterations Lloyd's algorithm runs or what initialization is used for $K = 2$.</p>
+        <p><strong>Reason (R):</strong> The assignment step of $K$-Means creates a Voronoi tessellation of the feature space, which restricts all decision boundaries between clusters to be linear hyperplanes, making it mathematically impossible to form closed, non-convex, or nested spherical boundary partitions.</p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct mathematical explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A • Comprehensive Geometric Proof</div>
+
+        <p class="step"><strong>Detailed Analysis:</strong><br>
+        <strong>Analysis of Reason (R):</strong><br>
+        In $K$-Means, a point $\mathbf{x}$ is assigned to cluster 1 over cluster 2 if and only if:
+        $$\|\mathbf{x} - \boldsymbol{\mu}_1\|_2^2 \le \|\mathbf{x} - \boldsymbol{\mu}_2\|_2^2$$
+        Expanding both sides:
+        $$\|\mathbf{x}\|_2^2 - 2 \mathbf{x}^T \boldsymbol{\mu}_1 + \|\boldsymbol{\mu}_1\|_2^2 \le \|\mathbf{x}\|_2^2 - 2 \mathbf{x}^T \boldsymbol{\mu}_2 + \|\boldsymbol{\mu}_2\|_2^2$$
+        The quadratic term $\|\mathbf{x}\|_2^2$ cancels out identically on both sides:
+        $$2(\boldsymbol{\mu}_2 - \boldsymbol{\mu}_1)^T \mathbf{x} + (\|\boldsymbol{\mu}_1\|_2^2 - \|\boldsymbol{\mu}_2\|_2^2) \le 0$$
+        Notice that this is a <strong>linear inequality</strong> in $\mathbf{x}$! The decision boundary between any two clusters is the perpendicular bisector hyperplane $\mathbf{w}^T \mathbf{x} + b = 0$, where $\mathbf{w} = 2(\boldsymbol{\mu}_2 - \boldsymbol{\mu}_1)$ and $b = \|\boldsymbol{\mu}_1\|_2^2 - \|\boldsymbol{\mu}_2\|_2^2$.<br>
+        Each cluster region is the intersection of half-spaces defined by these hyperplanes, forming a <strong>convex Voronoi polyhedron</strong>. A convex set cannot enclose a hole or wrap around another set.<br>
+        Thus, (R) is mathematically true.</p>
+
+        <p class="step"><strong>Analysis of Assertion (A):</strong><br>
+        Separating an inner core from an outer ring requires a quadratic spherical boundary $\|\mathbf{x} - \mathbf{c}\|_2 = r$ (a sphere in $\mathbb{R}^d$), which is non-linear and non-convex. Because $K$-Means can only draw linear bisecting hyperplanes, any plane cutting through the dataset will slice both the inner core and the outer ring into two halves, misclassifying half of each structure.<br>
+        Thus, (A) is true, and (R) provides the exact mathematical reason why $K$-Means fails.<br>
+        <em>Engineering Note:</em> To cluster concentric rings or non-linear manifolds, one must use <strong>Kernel PCA</strong>, <strong>Spectral Clustering</strong> (which uses graph Laplacian eigenvectors), or <strong>DBSCAN</strong> (density-based connectivity).</p>
+      </div>
+    </div>
+
+    <!-- SECTION 8: CODE LAB -->
+    <h3>7. Production Code Lab 2.7: SVD-Based PCA from First Principles</h3>
+    <p>Below is a production implementation of SVD-based PCA in pure Python, calculating explained variance ratios without forming the ill-conditioned $X^T X$ covariance matrix.</p>
 
     <div class="code-lab">
       <div class="code-lab-header">Code Lab 2.7 — High-Stability SVD PCA Engine</div>
@@ -108,6 +536,10 @@
 <pre><code>import numpy as np
 
 class PCAScratch:
+    """
+    High-stability Principal Component Analysis using Singular Value Decomposition.
+    Avoids forming X^T X to prevent squaring the condition number.
+    """
     def __init__(self, n_components=2):
         self.n_components = n_components
         self.components_ = None
@@ -116,11 +548,12 @@ class PCAScratch:
 
     def fit(self, X):
         N = X.shape[0]
-        # 1. Center the data
+        # 1. Center the data (zero-mean)
         self.mean_ = np.mean(X, axis=0)
         X_centered = X - self.mean_
 
-        # 2. SVD: X = U * S * V^T (No X^T X covariance matrix needed!)
+        # 2. Compute SVD: X_centered = U * S * V^T
+        # full_matrices=False computes economy SVD in O(N * d * min(N, d))
         U, S, Vt = np.linalg.svd(X_centered, full_matrices=False)
 
         # 3. Principal components are rows of Vt (columns of V)
@@ -136,18 +569,25 @@ class PCAScratch:
         # Project onto top-k orthogonal components
         return X_centered @ self.components_.T
 
+    def inverse_transform(self, Z):
+        # Reconstruct high-dimensional points from low-dimensional projections
+        return (Z @ self.components_) + self.mean_
+
 if __name__ == "__main__":
     np.random.seed(42)
     X = np.random.randn(200, 10)
     pca = PCAScratch(n_components=3)
     pca.fit(X)
     X_proj = pca.transform(X)
+    X_rec = pca.inverse_transform(X_proj)
+    recon_error = np.mean((X - X_rec) ** 2)
     print(f"Projected Shape               : {X_proj.shape}")
     print(f"Explained Variance Ratios (3) : {np.round(pca.explained_variance_ratio_, 4)}")
-    print(f"Total Variance Captured       : {np.sum(pca.explained_variance_ratio_)*100:.2f}%")</code></pre>
+    print(f"Total Variance Captured       : {np.sum(pca.explained_variance_ratio_)*100:.2f}%")
+    print(f"Mean Squared Reconstruction   : {recon_error:.6f}")</code></pre>
     </div>
 
-    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <!-- SECTION 9: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 2.7 Dedicated Project &amp; Case Study</span>

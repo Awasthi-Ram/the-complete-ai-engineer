@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="hnsw_hierarchical_graph.png" alt="Figure 7.2.1: hnsw hierarchical graph">
+        <div class="diagram-caption"><strong>Figure 7.2.1:</strong> Hierarchical Navigable Small World (HNSW) vector search. The multi-layer proximity graph executes coarse greedy routing across sparse top layers before descending into dense base layers, locating approximate $k$-nearest neighbors in $\mathcal{O}(\log N)$ time with high recall.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 7.2 — DISTRIBUTED VECTOR SEARCH AT SCALE
      ====================================================================== -->
@@ -5,7 +11,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 7.2</span>
     <h2 class="chapter-title">Distributed Vector Search at Scale</h2>
-    <span class="chapter-subtitle">The Exact Search Complexity Wall, HNSW Multi-Layer Graphs, IVF-PQ Compression &amp; Sharding</span>
+    <span class="chapter-subtitle">The Exact Search Complexity Wall, HNSW Multi-Layer Graphs, IVF-PQ Compression, Asymmetric Distance &amp; Sharding</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -27,181 +33,708 @@
 
     <!-- SECTION 2: HNSW MULTI-LAYER GRAPHS -->
     <h3>2. Hierarchical Navigable Small World (HNSW): Malkov &amp; Yashunin, 2018</h3>
-    <p><strong>HNSW</strong> is the gold standard graph-based ANN algorithm, deployed in Pinecone, Milvus, and Qdrant. Inspired by the 1D Skip List, HNSW constructs a multi-layer geometric proximity graph:</p>
+    <p><strong>HNSW</strong> is the gold standard graph-based ANN algorithm, deployed in Pinecone, Milvus, Qdrant, and Weaviate. Inspired by the 1D Skip List, HNSW constructs a multi-layer geometric proximity graph:</p>
 
     <div class="real-world-box">
       <h4>🌐 The Multi-Layer Proximity Graph Architecture</h4>
       <ul>
-        <li><strong>Top Layers ($l_{\max}$):</strong> Contain a sparse subset of vectors connected by long-range geometric links. Queries take massive "high-speed jumps" across the global coordinate space.</li>
-        <li><strong>Bottom Layer (Layer 0):</strong> Contains all $N$ vectors connected by dense, short-range local links.</li>
+        <li><strong>Top Layers ($l_{\max}$):</strong> Contain a sparse subset of vectors connected by long-range geometric links. Queries take massive "high-speed jumps" across the global coordinate space. Layer assignment follows an exponential decay:
+          $$l = \lfloor -\ln(\text{uniform}(0, 1)) \cdot m_L \rfloor, \quad \text{where } m_L = \frac{1}{\ln M}$$
+        </li>
+        <li><strong>Bottom Layer (Layer 0):</strong> Contains all $N$ vectors connected by dense, short-range local links ($2M$ maximum edges).</li>
       </ul>
       <p><strong>The Query Routing Algorithm:</strong></p>
       <ol>
-        <li>Start at the designated entry point at top layer $l_{\max}$.</li>
-        <li>Perform greedy local routing: move to the neighbor closest to the query vector.</li>
+        <li>Start at the designated global entry point at top layer $l_{\max}$.</li>
+        <li>Perform greedy local routing: evaluate distance to all neighbors of the current node; hop to the neighbor closest to the query vector $\mathbf{q}$.</li>
         <li>When a local minimum is reached on layer $l$, drop vertically to the same node on layer $l-1$.</li>
-        <li>Repeat greedy routing until reaching Layer 0, where a bounded beam search discovers the top-$k$ nearest neighbors!</li>
+        <li>Repeat greedy routing until reaching Layer 0, where a bounded beam search of width <code>efSearch</code> discovers the top-$k$ nearest neighbors!</li>
       </ol>
       <p><em>Search Complexity:</em> Reduces search time from linear $O(N)$ down to <strong>logarithmic $O(\log N)$</strong>! However, storing graph edge lists requires significant auxiliary RAM ($1.5\times$ to $2\times$ raw vector size).</p>
     </div>
 
     <!-- SECTION 3: IVF-PQ COMPRESSION -->
     <h3>3. Inverted File with Product Quantization (IVF-PQ)</h3>
-    <p>When dataset scale reaches billions of vectors, even storing vectors in RAM becomes economically unfeasible. <strong>Product Quantization (PQ - Jégou et al., 2011)</strong> solves this via lossy vector compression:</p>
+    <p>When dataset scale reaches billions of vectors, even storing raw vectors in RAM becomes economically unfeasible. <strong>Product Quantization (PQ - Jégou et al., 2011)</strong> solves this via lossy vector compression:</p>
 
     <div class="key-insight">
       <p><strong>The Mechanics of Product Quantization (PQ):</strong></p>
       <ol>
-        <li>A $d$-dimensional vector is split into $m$ distinct sub-vectors of length $d/m$ (e.g. A 768-dim vector is split into $m = 64$ sub-vectors of dimension 12).</li>
+        <li>A $d$-dimensional vector is split into $m$ distinct sub-vectors of length $d^* = d/m$ (e.g. A 768-dim vector is split into $m = 64$ sub-vectors of dimension 12).</li>
         <li>For each sub-vector space, K-Means clusters the training data into $K = 256$ centroids.</li>
         <li>Because $256 = 2^8$, each centroid index fits into exactly <strong>1 single byte (uint8)</strong>!</li>
         <li>Each sub-vector is replaced by the 1-byte index of its nearest centroid.</li>
       </ol>
       <p><em>The Compression Miracle:</em> A 768-dimensional float32 vector ($3,072 \text{ bytes}$) is compressed into $m = 64$ bytes: <strong>a staggering $48\times$ memory reduction!</strong></p>
+      <p><strong>Asymmetric Distance Computation (ADC):</strong> At query time, the query vector $\mathbf{q}$ is NOT quantized. The server computes the distance between $\mathbf{q}$'s sub-vectors and the $256$ codebook centroids once, building a tiny lookup table. Evaluating the distance to a database vector requires only <strong>$m$ table lookups and additions—with zero floating-point multiplications!</strong></p>
     </div>
 
-    <h4>Asymmetric Distance Computation (ADC)</h4>
-    <p>During a query, does the engine decompress the quantized vectors back into floats? <strong>No!</strong> Using <strong>Asymmetric Distance Computation (ADC)</strong>:</p>
-    <ul>
-      <li>The uncompressed query vector computes its exact Euclidean distance to all $256$ centroids in each of the $m$ sub-spaces, storing them in a small $m \times 256$ lookup table ($16\text{ KB}$, fitting entirely inside CPU L1 cache!).</li>
-      <li>Evaluating the distance to any of the 1 billion database vectors reduces to summing $m$ values from the lookup table via fast CPU table lookups:
-      $$d(\mathbf{q}, \mathbf{x}) \approx \sum_{j=1}^m \text{LookupTable}[j, \text{index}_j(\mathbf{x})]$$</li>
-    </ul>
+    <!-- ======================================================================
+         SECTION 4: 4-TIER GRADED PRACTICE SUITE
+         ====================================================================== -->
+    <h3>4-Tier Graded Practice Suite — Distributed Vector Search at Scale</h3>
+    <p>Eight comprehensive problems spanning hardware cluster sizing, ADC lookup tables, HNSW layer-drop routing traces, IVF-PQ inverted list execution, logarithmic complexity proofs, sub-quantizer error proofs, MIPS non-metric traps, and scatter-gather tail latency amplification.</p>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Distributed Vector Search</h3>
+    <!-- TIER 1: NUMERICAL DRILLS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
 
+    <!-- Problem 7.2.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 7.2.1</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-pinecone">Pinecone</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are architecting a vector database to index $N = 1,000,000,000$ text embeddings ($d = 768$, IEEE 32-bit floating point, 4 bytes/scalar). You must evaluate two indexing architectures:</p>
+        <ul>
+          <li><strong>Architecture A (In-Memory HNSW):</strong> Raw vectors stored in FP32. Layer 0 maintains $2M = 64$ outgoing edges per node; upper layers maintain $M = 32$ edges per node. Graph connections are stored as 4-byte node ID integers. Vector metadata and reverse ID mapping require an additional 16 bytes per vector.</li>
+          <li><strong>Architecture B (IVF-PQ Index):</strong> Coarse quantizer partitions vectors into $K_{\text{coarse}} = 65,536$ Voronoi cells. Product Quantization divides the 768 dimensions into $m = 64$ sub-vectors, each quantized to $K = 256$ centroids (1 byte per sub-vector). Inverted lists store 4-byte document IDs alongside the 64-byte compressed codes.</li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the exact raw vector data size in Terabytes.</li>
+          <li>Calculate the total memory footprint of Architecture A (HNSW) in Terabytes, and determine the number of AWS <code>r6i.16xlarge</code> instances (512 GB RAM, 80% usable = 409.6 GB usable) required to host it.</li>
+          <li>Calculate the total memory footprint of Architecture B (IVF-PQ) in Gigabytes, and determine the number of instances required.</li>
+          <li>Compute the compression ratio of IVF-PQ relative to raw vectors and calculate the annual cloud infrastructure cost difference assuming each 512 GB instance costs &dollar;5.04 per hour.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Cluster Memory Sizing Solution</div>
+
+        <p class="step"><strong>Step 1: Raw Vector Data Size:</strong><br>
+        Memory per raw vector:
+        $$S_{\text{vec}} = d \times 4\text{ bytes} = 768 \times 4\text{ bytes} = 3,072\text{ bytes} = 3.0\text{ KB}$$
+        For $N = 1,000,000,000$ vectors:
+        $$M_{\text{raw}} = 10^9 \times 3,072\text{ bytes} = 3,072,000,000,000\text{ bytes} = \mathbf{3.072\text{ TB (3,072 GB)}}$$</p>
+
+        <p class="step"><strong>Step 2: Architecture A (HNSW) Memory Footprint:</strong><br>
+        Raw vector storage: $3,072\text{ GB}$.<br>
+        Layer 0 graph edges ($2M = 64$ connections per node, 4 bytes/link):
+        $$M_{\text{layer0}} = 10^9 \times 64 \times 4\text{ bytes} = 256,000,000,000\text{ bytes} = 256\text{ GB}$$
+        Upper layers graph edges: Average links across upper layers adds approximately $M / M \approx 16\text{ GB}$ across the sparse hierarchy.<br>
+        Vector ID metadata:
+        $$M_{\text{meta}} = 10^9 \times 16\text{ bytes} = 16\text{ GB}$$
+        Total HNSW memory footprint:
+        $$M_{\text{HNSW}} = 3,072\text{ GB} + 256\text{ GB} + 16\text{ GB} + 16\text{ GB} = \mathbf{3,360\text{ GB (3.36 TB)}}$$
+        With 409.6 GB usable RAM per instance:
+        $$N_{\text{instances, HNSW}} = \left\lceil \frac{3,360\text{ GB}}{409.6\text{ GB}} \right\rceil = \lceil 8.203 \rceil = \mathbf{9\text{ instances (512 GB RAM each)}}$$</p>
+
+        <p class="step"><strong>Step 3: Architecture B (IVF-PQ) Memory Footprint:</strong><br>
+        Compressed PQ code: $m = 64\text{ bytes per vector}$.
+        $$M_{\text{codes}} = 10^9 \times 64\text{ bytes} = 64\text{ GB}$$
+        Inverted list posting IDs (4 bytes per vector):
+        $$M_{\text{postings}} = 10^9 \times 4\text{ bytes} = 4\text{ GB}$$
+        Codebook centroids memory ($m \times 256 \times (d/m) \times 4\text{ bytes} = 64 \times 256 \times 12 \times 4\text{ bytes} \approx 786\text{ KB}$, negligible).<br>
+        Total IVF-PQ memory footprint:
+        $$M_{\text{IVF-PQ}} = 64\text{ GB} + 4\text{ GB} = \mathbf{68\text{ GB (0.068 TB)}}$$
+        Instance requirement:
+        $$N_{\text{instances, IVF-PQ}} = \mathbf{1\text{ instance (Comfortably fits in a single 128 GB machine!)}}$$</p>
+
+        <p class="step"><strong>Step 4: Compression Ratio &amp; Financial Cost Audit:</strong><br>
+        Compression ratio:
+        $$\text{Ratio} = \frac{M_{\text{raw}}}{M_{\text{IVF-PQ}}} = \frac{3,072\text{ GB}}{68\text{ GB}} \approx \mathbf{45.18\times\text{ Compression!}}$$
+        Annual Cloud Hosting Cost (HNSW vs IVF-PQ):
+        <ul>
+          <li>HNSW (9 instances $\times$ &dollar;5.04/hr): $9 \times 5.04 \times 8,760 \text{ hrs/yr} = \mathbf{\text{USD } 397,353.60 / \text{year}}$</li>
+          <li>IVF-PQ (1 smaller 128 GB instance @ &dollar;1.26/hr): $1 \times 1.26 \times 8,760 \text{ hrs/yr} = \mathbf{\text{USD } 11,037.60 / \text{year}}$</li>
+        </ul>
+        $$\mathbf{\text{Annual Infrastructure Savings: USD } 397,353.60 - \text{USD } 11,037.60 = \text{USD } 386,316.00 / \text{year (97.2\% Savings!)}}$$
+        <em>Trade-off Summary: HNSW delivers 98% recall at 2ms latency for $400k/yr. IVF-PQ delivers 93% recall at 8ms latency for $11k/yr!</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 7.2.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-uber">Uber</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Product Quantization (PQ), distance evaluation between an unquantized query vector and quantized database vectors is accelerated via <strong>Asymmetric Distance Computation (ADC)</strong>.</p>
+        <p>Consider an 8-dimensional space ($d = 8$) divided into $m = 2$ sub-vectors of dimension $d^* = 4$. The query vector is:
+        $$\mathbf{q} = [1.0, \; 2.0, \; -1.0, \; 0.5, \quad 0.0, \; 1.5, \; 2.0, \; -0.5]$$
+        The trained codebook has $K = 2$ centroids per subspace ($c \in \{0, 1\}$):</p>
+        <ul>
+          <li><strong>Subspace 1 Centroids:</strong> $\mathbf{c}_{1, 0} = [0.0, 1.0, 0.0, 0.0]$, $\mathbf{c}_{1, 1} = [1.0, 2.0, -1.0, 1.0]$</li>
+          <li><strong>Subspace 2 Centroids:</strong> $\mathbf{c}_{2, 0} = [0.0, 1.0, 1.0, 0.0]$, $\mathbf{c}_{2, 1} = [0.0, 2.0, 2.0, -1.0]$</li>
+        </ul>
+        <p>A compressed database vector $\mathbf{x}$ is represented by the 2-byte code $[1, 0]$ (meaning sub-vector 1 is quantized to centroid 1, and sub-vector 2 is quantized to centroid 0).</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Construct the full $2 \times 2$ pre-computed squared Euclidean distance lookup table $D_{\text{table}}[j, c]$ for $j \in \{1, 2\}$ and $c \in \{0, 1\}$.</li>
+          <li>Compute the exact ADC squared Euclidean distance and Euclidean distance $d_{\text{ADC}}(\mathbf{q}, \mathbf{x})$ using the lookup table.</li>
+          <li>Compute the exact uncompressed Euclidean distance between $\mathbf{q}$ and the reconstructed vector $\hat{\mathbf{x}} = [\mathbf{c}_{1, 1} \Vert \mathbf{c}_{2, 0}]$ to verify mathematical identity.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step ADC Lookup Table Arithmetic</div>
+
+        <p class="step"><strong>Step 1: Construction of Distance Lookup Table:</strong><br>
+        Partition the query vector into two 4-dimensional sub-vectors:
+        $$\mathbf{q}_1 = [1.0, 2.0, -1.0, 0.5], \quad \mathbf{q}_2 = [0.0, 1.5, 2.0, -0.5]$$
+        <strong>Subspace 1 Distances ($j = 1$):</strong>
+        To centroid $\mathbf{c}_{1, 0} = [0, 1, 0, 0]$:
+        $$D_{\text{table}}[1, 0] = (1-0)^2 + (2-1)^2 + (-1-0)^2 + (0.5-0)^2 = 1.0 + 1.0 + 1.0 + 0.25 = \mathbf{3.25}$$
+        To centroid $\mathbf{c}_{1, 1} = [1, 2, -1, 1]$:
+        $$D_{\text{table}}[1, 1] = (1-1)^2 + (2-2)^2 + (-1 - (-1))^2 + (0.5-1)^2 = 0 + 0 + 0 + (-0.5)^2 = \mathbf{0.25}$$<br>
+
+        <strong>Subspace 2 Distances ($j = 2$):</strong>
+        To centroid $\mathbf{c}_{2, 0} = [0, 1, 1, 0]$:
+        $$D_{\text{table}}[2, 0] = (0-0)^2 + (1.5-1)^2 + (2-1)^2 + (-0.5-0)^2 = 0 + 0.25 + 1.0 + 0.25 = \mathbf{1.50}$$
+        To centroid $\mathbf{c}_{2, 1} = [0, 2, 2, -1]$:
+        $$D_{\text{table}}[2, 1] = (0-0)^2 + (1.5-2)^2 + (2-2)^2 + (-0.5 - (-1))^2 = 0 + 0.25 + 0 + 0.25 = \mathbf{0.50}$$<br>
+        <strong>Lookup Table Matrix $D_{\text{table}}$:</strong>
+        $$D_{\text{table}} = \begin{bmatrix}
+        3.25 & 0.25 \\
+        1.50 & 0.50
+        \end{bmatrix}$$</p>
+
+        <p class="step"><strong>Step 2: Distance Evaluation via Table Lookups:</strong><br>
+        The database vector is encoded as code $C = [1, 0]$.<br>
+        Evaluating squared distance requires summing the corresponding table entries:
+        $$d_{\text{ADC}}^2(\mathbf{q}, \mathbf{x}) = D_{\text{table}}[1, C[1]] + D_{\text{table}}[2, C[2]] = D_{\text{table}}[1, 1] + D_{\text{table}}[2, 0]$$
+        $$d_{\text{ADC}}^2(\mathbf{q}, \mathbf{x}) = 0.25 + 1.50 = \mathbf{1.75}$$
+        Taking the square root:
+        $$d_{\text{ADC}}(\mathbf{q}, \mathbf{x}) = \sqrt{1.75} \approx \mathbf{1.32288}$$
+        <em>Notice: Evaluating distance to this vector required exactly 2 memory reads and 1 addition—zero floating-point multiplications!</em></p>
+
+        <p class="step"><strong>Step 3: Direct Verification against Reconstructed Vector:</strong><br>
+        The quantized vector reconstructed from centroids is:
+        $$\hat{\mathbf{x}} = [\mathbf{c}_{1, 1} \Vert \mathbf{c}_{2, 0}] = [1.0, 2.0, -1.0, 1.0, \quad 0.0, 1.0, 1.0, 0.0]$$
+        Compute direct squared Euclidean distance between $\mathbf{q}$ and $\hat{\mathbf{x}}$:
+        $$\|\mathbf{q} - \hat{\mathbf{x}}\|^2 = (1-1)^2 + (2-2)^2 + (-1 - (-1))^2 + (0.5-1)^2 + (0-0)^2 + (1.5-1)^2 + (2-1)^2 + (-0.5-0)^2$$
+        $$= 0 + 0 + 0 + 0.25 + 0 + 0.25 + 1.0 + 0.25 = \mathbf{1.75}$$
+        $$\|\mathbf{q} - \hat{\mathbf{x}}\| = \sqrt{1.75} \approx \mathbf{1.32288}$$
+        <em>Identity verified: ADC distance computed via lookups matches exact mathematical distance with 100% precision.</em></p>
+      </div>
+    </div>
+
+    <!-- TIER 2: APPLIED ENGINEERING TRACES -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+    <!-- Problem 7.2.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.3</span>
         <span class="difficulty difficulty-hard">Hard</span>
         <span class="company-tag company-google">Google</span>
         <span class="company-tag company-pinecone">Pinecone</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> You are designing a distributed vector search cluster for <strong>$1,000,000,000$ (1 Billion) vectors</strong> of dimension $d = 768$. Calculate the exact RAM required for:</p>
-        <ol>
-          <li>Uncompressed raw vectors in FP32.</li>
-          <li>HNSW Index with graph edges ($M = 32$ links per node).</li>
-          <li>IVF-PQ64 compressed index.</li>
-        </ol>
-        <p>Design a horizontal sharding cluster to serve 10,000 QPS with a p99 latency SLA of $<15\text{ ms}$.</p>
+        <p><strong>QUESTION:</strong> An engineer executes a vector search query $\mathbf{q}$ on an HNSW index consisting of 3 layers ($l \in \{2, 1, 0\}$). The search parameter is <code>efSearch = 1</code> (pure greedy routing).</p>
+        <p>The graph topology and Euclidean distances from query $\mathbf{q}$ to nodes are defined as:</p>
+        <ul>
+          <li><strong>Layer 2 (Top Layer):</strong> Global entry point is Node $A$ ($d(\mathbf{q}, A) = 4.2$). Node $A$ has one neighbor: Node $B$ ($d(\mathbf{q}, B) = 3.1$). Node $B$ has no other neighbors on Layer 2.</li>
+          <li><strong>Layer 1 (Middle Layer):</strong> Node $B$ has neighbors: Node $C$ ($d(\mathbf{q}, C) = 2.4$) and Node $D$ ($d(\mathbf{q}, D) = 3.5$). Node $C$ has neighbor: Node $E$ ($d(\mathbf{q}, E) = 1.8$). Node $E$ has neighbor: Node $F$ ($d(\mathbf{q}, F) = 2.0$).</li>
+          <li><strong>Layer 0 (Base Layer):</strong> Node $E$ drops to Layer 0. Node $E$ has neighbors: Node $G$ ($d(\mathbf{q}, G) = 1.1$) and Node $H$ ($d(\mathbf{q}, H) = 1.9$). Node $G$ has neighbor: Node $I$ ($d(\mathbf{q}, I) = 0.85$). Node $I$ has neighbor: Node $J$ ($d(\mathbf{q}, J) = 0.92$).</li>
+        </ul>
+        <p>Construct a comprehensive algorithmic trace table documenting the step-by-step path of the search algorithm from entry to termination, recording: Step, Current Layer, Current Node, Candidate Neighbors Inspected, Distances Computed, Routing Decision (Hop vs Drop Layer), and the Final Nearest Neighbor discovered.</p>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Hardware Sizing Audit</div>
+        <div class="solution-label">✓ Algorithmic HNSW Greedy Routing Trace Table</div>
 
-        <p class="step"><strong>Step 1: Uncompressed Raw FP32 Vector Footprint:</strong>
-        $$\text{Memory} = 10^9 \times 768 \times 4 \text{ bytes} = 3,072,000,000,000 \text{ bytes} \approx \mathbf{3.072 \text{ Terabytes of RAM}}!$$</p>
-
-        <p class="step"><strong>Step 2: HNSW Graph Index Footprint:</strong><br>
-        HNSW stores raw vectors ($3.07\text{ TB}$) plus graph adjacency lists. Each node has on average $M = 32$ integer neighbor pointers (4 bytes each) across layers:
-        $$\text{Graph Overhead} = 10^9 \times 32 \times 4 \text{ bytes} \approx 128 \text{ GB}$$
-        Adding allocator padding and node structures brings total HNSW memory to approximately <strong>$4.5 \text{ Terabytes of RAM}$</strong>!</p>
-
-        <p class="step"><strong>Step 3: IVF-PQ64 Compressed Index Footprint:</strong><br>
-        With $m = 64$ sub-vectors, each vector is encoded into exactly $64$ bytes:
-        $$\text{Vector Memory} = 10^9 \times 64 \text{ bytes} = \mathbf{64 \text{ Gigabytes}}!$$
-        Adding inverted lists and 64-bit document ID mappings ($8 \text{ bytes} \times 10^9 = 8 \text{ GB}$):
-        $$\text{Total IVF-PQ64 Memory} = 64 + 8 = \mathbf{72 \text{ Gigabytes of RAM}}!$$
-        <strong>Result: IVF-PQ reduces the cluster RAM requirement from 4,500 GB down to 72 GB (a 98.4% memory reduction)!</strong></p>
-
-        <p class="step"><strong>Step 4: Distributed Sharding Cluster Architecture:</strong><br>
-        To serve 10,000 QPS with sub-15ms latency, we deploy <strong>16 Shards with 3 Replicas</strong> (48 total worker nodes):
-        <ul>
-          <li>Each shard holds $10^9 / 16 = 62,500,000$ vectors ($4.5\text{ GB}$ per node).</li>
-          <li>Query routers scatter queries concurrently across all 16 shards, each returning top-100 candidates.</li>
-          <li>The router executes a reciprocal rank merge and returns the top 10 results in <strong>$8\text{ ms}$</strong>!</li>
-        </ul></p>
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Step</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Current Layer ($l$)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Current Node</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Neighbors Evaluated</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Distances Computed</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Algorithmic Routing Decision</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 2</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$A$ (Entry Point)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$B$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, B) = 3.1 < d(\mathbf{q}, A) = 4.2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>HOP TO $B$</strong> (Closer to query).</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 2</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$B$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">None (No neighbors)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Local minimum on Layer 2 reached.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>DROP TO LAYER 1</strong> with entry point $B$.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$B$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C, D$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, C) = 2.4$, $d(\mathbf{q}, D) = 3.5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>HOP TO $C$</strong> ($2.4 < 3.1$).</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>4</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$E$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, E) = 1.8 < d(\mathbf{q}, C) = 2.4$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>HOP TO $E$</strong> ($1.8 < 2.4$).</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>5</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$E$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$F$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, F) = 2.0 > d(\mathbf{q}, E) = 1.8$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Local minimum on Layer 1 reached. <strong>DROP TO LAYER 0</strong> with entry point $E$.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>6</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 0</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$E$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$G, H$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, G) = 1.1$, $d(\mathbf{q}, H) = 1.9$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>HOP TO $G$</strong> ($1.1 < 1.8$).</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>7</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 0</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$G$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$I$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, I) = 0.85 < d(\mathbf{q}, G) = 1.1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>HOP TO $I$</strong> ($0.85 < 1.1$).</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>8</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 0</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$I$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$J$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, J) = 0.92 > d(\mathbf{q}, I) = 0.85$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>TERMINATE:</strong> Global minimum reached. <strong>Return Node $I$ ($d = 0.85$) as 1-NN!</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p><em>Notice: Across a 10-node graph space, HNSW located the exact nearest neighbor using only 7 distance evaluations!</em></p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 7.2: Product Quantization &amp; Asymmetric Distance Computation</h3>
-    <p>Below is an educational implementation of Product Quantization (PQ) and Asymmetric Distance Computation (ADC) from scratch in pure NumPy.</p>
+    <!-- Problem 7.2.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are profiling an IVF-PQ vector search engine handling a query $\mathbf{q}$. The index configuration is: <code>nlist = 4</code> (Voronoi centroids), <code>nprobe = 2</code> (cells scanned), $m = 2$ sub-vectors, and top-$k = 2$ nearest neighbors requested.</p>
+        <p><strong>Index State:</strong></p>
+        <ul>
+          <li>Coarse Centroid Distances: $d(\mathbf{q}, C_0) = 1.2$, $d(\mathbf{q}, C_1) = 0.6$, $d(\mathbf{q}, C_2) = 2.1$, $d(\mathbf{q}, C_3) = 0.8$.</li>
+          <li>Inverted List for $C_1$: Doc 101 with code $[0, 1]$, Doc 102 with code $[1, 1]$.</li>
+          <li>Inverted List for $C_3$: Doc 201 with code $[1, 0]$, Doc 202 with code $[0, 0]$.</li>
+          <li>Precomputed ADC Distance Table $D_{\text{table}}[j, c]$ for query $\mathbf{q}$:
+            $$D_{\text{table}} = \begin{bmatrix}
+            \text{Subspace 1 (}c=0\text{): } 0.10 & \text{Subspace 1 (}c=1\text{): } 0.70 \\
+            \text{Subspace 2 (}c=0\text{): } 0.30 & \text{Subspace 2 (}c=1\text{): } 0.40
+            \end{bmatrix}$$
+          </li>
+        </ul>
+        <p>Trace the step-by-step execution: (a) Selection of Voronoi cells via <code>nprobe</code>, (b) Inverted list scanning, (c) Max-heap state transitions (tracking heap contents of size $k = 2$), and (d) Final top-2 nearest documents returned.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Algorithmic IVF-PQ Execution &amp; Max-Heap Trace</div>
+
+        <p class="step"><strong>Step 1: Coarse Voronoi Cell Selection (nprobe = 2):</strong><br>
+        Distances to the 4 coarse centroids:
+        $$d(\mathbf{q}, C_1) = 0.6\ (\text{Rank 1}), \quad d(\mathbf{q}, C_3) = 0.8\ (\text{Rank 2}), \quad d(\mathbf{q}, C_0) = 1.2\ (\text{Rank 3}), \quad d(\mathbf{q}, C_2) = 2.1\ (\text{Rank 4})$$
+        With <code>nprobe = 2</code>, the engine prunes cells $C_0$ and $C_2$, scanning strictly inverted lists $C_1$ and $C_3$.</p>
+
+        <p class="step"><strong>Step 2 &amp; 3: Inverted List Scanning &amp; Heap Transitions:</strong><br>
+        A max-heap of capacity $k = 2$ maintains the current best matches (storing pairs <code>(distance, doc_id)</code>, ordered by highest distance at root).</p>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Doc ID</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Cell</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">PQ Code</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">ADC Lookup Computation</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">$d^2$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Max-Heap State (Capacity 2)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>101</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C_1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[0, 1]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$D[1, 0] + D[2, 1] = 0.10 + 0.40$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.50$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>[(0.50, 101)]</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Insert (Heap size 1).</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>102</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C_1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[1, 1]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$D[1, 1] + D[2, 1] = 0.70 + 0.40$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1.10$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>[(1.10, 102), (0.50, 101)]</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Insert (Heap size 2, root is 102).</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>201</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C_3$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[1, 0]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$D[1, 1] + D[2, 0] = 0.70 + 0.30$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1.00$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>[(1.00, 201), (0.50, 101)]</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1.00 < 1.10 \implies$ <strong>Evict Doc 102, Push Doc 201</strong>.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>202</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C_3$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[0, 0]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$D[1, 0] + D[2, 0] = 0.10 + 0.30$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.40$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>[(0.50, 101), (0.40, 202)]</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.40 < 1.00 \implies$ <strong>Evict Doc 201, Push Doc 202</strong>.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="step"><strong>Step 4: Final Nearest Neighbors Returned:</strong><br>
+        Extracting elements from the heap in ascending order of distance:
+        <ol>
+          <li><strong>Rank 1:</strong> Document <strong>202</strong> with squared distance $d^2 = 0.40$ ($\text{distance} \approx 0.6325$).</li>
+          <li><strong>Rank 2:</strong> Document <strong>101</strong> with squared distance $d^2 = 0.50$ ($\text{distance} \approx 0.7071$).</li>
+        </ol></p>
+      </div>
+    </div>
+
+    <!-- TIER 3: MATHEMATICAL PROOFS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 3: FAANG Tier-1 / Research Lab Mathematical Proofs</h4>
+
+    <!-- Problem 7.2.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.5</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-princeton">Princeton</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Hierarchical Navigable Small World (HNSW) graphs, node insertion assigns an element $v$ to a maximum layer $l_v \in \mathbb{N}_0$ according to the probability distribution:</p>
+        $$l_v = \left\lfloor -\ln(\xi) \cdot m_L \right\rfloor$$
+        <p>where $\xi \sim \text{Uniform}(0, 1)$ and $m_L = \frac{1}{\ln M}$ is the normalization parameter ($M \ge 2$).</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Prove that the probability a node belongs to layer $l$ is given by $P(l_v \ge l) = M^{-l}$.</li>
+          <li>Derive the expected maximum layer $\mathbb{E}[l_{\max}]$ across a graph containing $N$ vectors, and prove that $\mathbb{E}[l_{\max}] = \mathcal{O}(\log_M N)$.</li>
+          <li>Assuming that on each layer $l$, greedy local routing requires at most a constant expected number of hops $C > 0$ to reach the local minimum before dropping to layer $l-1$, prove that the overall search complexity is strictly logarithmic: $\mathbb{E}[T_{\text{search}}] = \mathcal{O}(\log N)$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Proof of Logarithmic HNSW Complexity</div>
+
+        <p class="step"><strong>Step 1: Proof of Layer Assignment Probability:</strong><br>
+        Let $\xi \sim \text{Uniform}(0, 1)$. The maximum layer assigned is $l_v = \lfloor -\ln(\xi) \cdot m_L \rfloor$.<br>
+        For any integer $l \ge 0$:
+        $$l_v \ge l \iff -\ln(\xi) \cdot m_L \ge l \iff -\ln(\xi) \ge \frac{l}{m_L} \iff \ln(\xi) \le -\frac{l}{m_L}$$
+        Exponentiating both sides:
+        $$\xi \le \exp\left(-\frac{l}{m_L}\right)$$
+        Since $\xi \sim \text{Uniform}(0, 1)$, $P(\xi \le z) = z$ for $z \in [0, 1]$. Therefore:
+        $$P(l_v \ge l) = \exp\left(-\frac{l}{m_L}\right)$$
+        Substituting $m_L = \frac{1}{\ln M}$:
+        $$P(l_v \ge l) = \exp\left(-l \ln M\right) = \exp\left(\ln M^{-l}\right) = \mathbf{M^{-l}}$$
+        <em>Q.E.D. The probability of surviving to layer $l$ decays exponentially as $1 / M^l$, perfectly mirroring a geometric distribution with parameter $p = 1 - 1/M$.</em></p>
+
+        <p class="step"><strong>Step 2: Expected Maximum Layer $\mathbb{E}[l_{\max}]$:</strong><br>
+        Let $N$ nodes be independently assigned layers $l_1, \dots, l_N$. The maximum layer is $l_{\max} = \max_{1 \le i \le N} l_i$.<br>
+        The cumulative distribution function of $l_{\max}$ is:
+        $$P(l_{\max} < l) = \prod_{i=1}^N P(l_i < l) = \big(1 - P(l_i \ge l)\big)^N = \left(1 - M^{-l}\right)^N$$
+        Using the expectation formula for non-negative discrete random variables:
+        $$\mathbb{E}[l_{\max}] = \sum_{l=1}^\infty P(l_{\max} \ge l) = \sum_{l=1}^\infty \left[ 1 - \left(1 - M^{-l}\right)^N \right]$$
+        For large $N$, using the approximation $(1 - x)^N \approx e^{-Nx}$:
+        $$1 - \left(1 - M^{-l}\right)^N \approx 1 - e^{-N M^{-l}}$$
+        Notice that when $M^l \ll N$, $e^{-N M^{-l}} \approx 0 \implies \text{term } \approx 1$.<br>
+        When $M^l \gg N$, $e^{-N M^{-l}} \approx 1 - N M^{-l} \implies \text{term } \approx N M^{-l}$.<br>
+        The transition point occurs when $M^l \approx N \implies l \approx \log_M N$.<br>
+        Evaluating the summation rigorously yields:
+        $$\mathbb{E}[l_{\max}] = \log_M N + \frac{\gamma}{\ln M} + \frac{1}{2} + o(1) = \mathbf{\mathcal{O}(\log_M N)}$$
+        where $\gamma \approx 0.5772$ is the Euler-Mascheroni constant. <em>Q.E.D.</em></p>
+
+        <p class="step"><strong>Step 3: Proof of Logarithmic Overall Search Complexity:</strong><br>
+        The greedy search starts at the global entry point on layer $l_{\max}$.<br>
+        On each layer $l \in \{l_{\max}, l_{\max}-1, \dots, 1\}$, greedy routing moves along geometric links until discovering the node closest to $\mathbf{q}$ within that layer.<br>
+        Because each layer is a Delaunay graph approximation (Navigable Small World) with bounded degree $\le M$, Kleinberg's small-world navigation theorem guarantees that the expected number of hops on each layer is bounded by a constant $C(M)$ independent of $N$.<br>
+        Total expected hops across all upper layers down to Layer 0 is:
+        $$\mathbb{E}[T_{\text{routing}}] \le \sum_{l=1}^{\mathbb{E}[l_{\max}]} C(M) = C(M) \cdot \mathbb{E}[l_{\max}] = C(M) \cdot \mathcal{O}\left(\frac{\ln N}{\ln M}\right) = \mathbf{\mathcal{O}(\log N)}$$
+        At Layer 0, a bounded beam search of size <code>efSearch</code> evaluates at most $2M \cdot \text{efSearch} = \mathcal{O}(1)$ additional candidates.<br>
+        Summing all stages:
+        $$\mathbb{E}[T_{\text{search}}] = \mathcal{O}(\log N) + \mathcal{O}(1) = \mathbf{\mathcal{O}(\log N)}$$
+        <em>Q.E.D. HNSW reduces search across billions of vectors from linear to logarithmic time complexity!</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 7.2.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.6</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-inria">INRIA</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Product Quantization (Jégou et al., 2011), a vector $\mathbf{x} \in \mathbb{R}^d$ is decomposed into $m$ orthogonal sub-vectors $\mathbf{x} = [\mathbf{x}_1, \dots, \mathbf{x}_m]$, where each $\mathbf{x}_j \in \mathbb{R}^{d^*}$ ($d^* = d/m$).</p>
+        <p>Each sub-vector is independently quantized using a sub-quantizer $q_j: \mathbb{R}^{d^*} \to \mathcal{C}_j$, where $\mathcal{C}_j = \{\mathbf{c}_{j, 1}, \dots, \mathbf{c}_{j, K}\}$ is a codebook of $K$ centroids trained via K-Means. The global product quantizer is $q(\mathbf{x}) = [q_1(\mathbf{x}_1), \dots, q_m(\mathbf{x}_m)]$.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Prove that the Mean Squared Quantization Error (MSE) of the product quantizer decomposes exactly into the sum of the MSE of its constituent sub-quantizers:
+            $$\mathbb{E}\left[ \|\mathbf{x} - q(\mathbf{x})\|^2 \right] = \sum_{j=1}^m \mathbb{E}\left[ \|\mathbf{x}_j - q_j(\mathbf{x}_j)\|^2 \right]$$
+          </li>
+          <li>Assuming the sub-vectors are independent and identically distributed isotropic Gaussians $\mathbf{x}_j \sim \mathcal{N}(\mathbf{0}, \sigma^2 I_{d^*})$, apply Gersho's asymptotic high-rate quantization theory to derive the scaling behavior of the total MSE as a function of $m$, $d^*$, and $K$.</li>
+          <li>Contrast Product Quantization with standard vector quantization (VQ with $K^m$ centroids), and prove why PQ eliminates the curse of dimensionality in memory and training complexity.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Proof of Product Quantizer Error Decomposition</div>
+
+        <p class="step"><strong>Step 1: Proof of Additive Error Decomposition:</strong><br>
+        Let $\mathbf{x} = [\mathbf{x}_1^\top, \dots, \mathbf{x}_m^\top]^\top \in \mathbb{R}^d$ and $q(\mathbf{x}) = [q_1(\mathbf{x}_1)^\top, \dots, q_m(\mathbf{x}_m)^\top]^\top \in \mathbb{R}^d$.<br>
+        The squared Euclidean error is:
+        $$\|\mathbf{x} - q(\mathbf{x})\|^2 = \sum_{i=1}^d \big(x_i - q(\mathbf{x})_i\big)^2$$
+        Group the coordinate indices according to the $m$ orthogonal subspaces $S_1, \dots, S_m$, where each subspace contains $d^* = d/m$ coordinates:
+        $$\|\mathbf{x} - q(\mathbf{x})\|^2 = \sum_{j=1}^m \sum_{k \in S_j} \big(x_k - q_j(\mathbf{x}_j)_k\big)^2 = \sum_{j=1}^m \|\mathbf{x}_j - q_j(\mathbf{x}_j)\|^2$$
+        Taking expectations on both sides with respect to the probability distribution $p(\mathbf{x})$:
+        $$\mathbb{E}\left[ \|\mathbf{x} - q(\mathbf{x})\|^2 \right] = \mathbb{E}\left[ \sum_{j=1}^m \|\mathbf{x}_j - q_j(\mathbf{x}_j)\|^2 \right]$$
+        By linearity of expectation:
+        $$\mathbb{E}\left[ \|\mathbf{x} - q(\mathbf{x})\|^2 \right] = \sum_{j=1}^m \mathbb{E}\left[ \|\mathbf{x}_j - q_j(\mathbf{x}_j)\|^2 \right] \quad \text{Q.E.D.}$$</p>
+
+        <p class="step"><strong>Step 2: Gersho's Asymptotic High-Rate Distortion Scaling:</strong><br>
+        According to Gersho's conjecture for optimal vector quantization in $\mathbb{R}^{d^*}$, for a codebook of size $K$, the mean squared error per subspace scales asymptotically as:
+        $$\mathbb{E}\left[ \|\mathbf{x}_j - q_j(\mathbf{x}_j)\|^2 \right] \approx C(d^*) \cdot d^* \cdot K^{-2/d^*} \cdot \|\mathbf{x}_j\|_{L_{d^*/(d^*+2)}}$$
+        where $C(d^*)$ is the inertial profile constant of the optimal Voronoi tessellation in dimension $d^*$.<br>
+        Summing over all $m$ identical sub-quantizers:
+        $$\text{MSE}_{\text{total}} = \sum_{j=1}^m C(d^*) d^* K^{-2/d^*} \sigma^2 = m \cdot C(d^*) d^* K^{-2/d^*} \sigma^2 = \mathbf{d \cdot C(d^*) \cdot \sigma^2 \cdot K^{-2m/d}}$$
+        <em>Key Insight: As the number of centroids $K$ increases, the distortion decreases exponentially at rate $K^{-2/d^*}$. To minimize distortion for a fixed bit budget $B_{\text{total}} = m \log_2 K$, the sub-vector dimension $d^*$ should be chosen to balance codebook capacity with quantization fidelity.</em></p>
+
+        <p class="step"><strong>Step 3: Elimination of the Curse of Dimensionality:</strong><br>
+        Consider quantizing a 128-dimensional vector using a 64-bit budget ($2^{64}$ possible reconstruction values):
+        <ul>
+          <li><strong>Standard Vector Quantization (VQ):</strong> Requires training a single codebook with $K_{\text{global}} = 2^{64} \approx 1.84 \times 10^{19}$ centroids! Storing this codebook requires $1.84 \times 10^{19} \times 128 \times 4\text{ bytes} \approx 9.4 \times 10^{21}\text{ bytes} \approx 9.4\text{ Zettabytes}$—more storage than the entire global internet! Training it via K-Means would take billions of years.</li>
+          <li><strong>Product Quantization (PQ):</strong> Decomposes the space into $m = 8$ sub-vectors of dimension $d^* = 16$. Each sub-quantizer trains $K = 256$ centroids ($2^8$). The product space still contains $256^8 = 2^{64}$ effective centroids!
+            $$\text{Total Codebook Storage} = 8 \times 256 \times 16 \times 4\text{ bytes} = \mathbf{131,072\text{ bytes (128 KB)}}!$$
+          </li>
+        </ul>
+        <em>Conclusion: Product Quantization provides an effective codebook of $2^{64}$ centroids using only 128 Kilobytes of memory and minutes of training time, completely breaking the curse of dimensionality!</em></p>
+      </div>
+    </div>
+
+    <!-- TIER 4: CONCEPTUAL TRAPS & ASSERTION-REASONING -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+    <!-- Problem 7.2.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.7</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-pinecone">Pinecone</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An engineer attempts to index unnormalized embedding vectors into an Approximate Nearest Neighbor graph using Maximum Inner Product Search (MIPS): $\arg\max_i \langle \mathbf{q}, \mathbf{x}_i \rangle$. The engineer uses standard Euclidean distance ($L_2$) HNSW without normalizing vectors to unit length ($\|\mathbf{x}\|_2 \neq 1$).</p>
+        <p>Which of the following statements correctly identifies why metric trees and spatial proximity graphs fail under unnormalized MIPS, and how the Neyshabur-Srebro transformation mathematically resolves it?</p>
+        <ol type="A">
+          <li>Inner product fails because cosine similarity cannot be negative; the solution is adding $+1.0$ to all dot products.</li>
+          <li>Inner product is not a valid mathematical metric: it does not satisfy non-negativity ($d(x, x) = 0$) or the <strong>Triangle Inequality</strong> ($d(x, z) \le d(x, y) + d(y, z)$). A vector with massive norm can have high inner product with distant vectors, breaking spatial pruning. The Neyshabur-Srebro transformation augments each vector with an extra dimension $\sqrt{U^2 - \|\mathbf{x}\|^2}$, converting MIPS into exact Euclidean distance on a $(d+1)$-dimensional hypersphere.</li>
+          <li>MIPS fails because GPUs cannot compute dot products in parallel; the solution is switching to Manhattan ($L_1$) distance.</li>
+          <li>MIPS works identically to $L_2$ distance regardless of vector norms because dot product is an affine transformation of Euclidean distance.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: B (Exhaustive Metric Analysis)</div>
+
+        <p class="step"><strong>Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Option A is False:</strong> Inner products can be negative (orthogonal vectors have 0, anti-parallel vectors have negative dot product). Adding $+1.0$ does not restore the triangle inequality.</li>
+          <li><strong>Option B is Correct:</strong>
+            <ul>
+              <li>Geometric pruning algorithms (KD-trees, Ball-trees, VP-trees, HNSW) rely fundamentally on the <strong>Triangle Inequality</strong>: $d(x, z) \le d(x, y) + d(y, z)$. This property guarantees that if a node's center is far from query $\mathbf{q}$, none of its children can be close, allowing entire subtrees to be pruned safely.</li>
+              <li>The inner product $\langle \mathbf{q}, \mathbf{x} \rangle$ is a similarity measure, not a metric. Crucially:
+                $$\|\mathbf{q} - \mathbf{x}\|^2 = \|\mathbf{q}\|^2 + \|\mathbf{x}\|^2 - 2\langle \mathbf{q}, \mathbf{x} \rangle$$
+                When $\|\mathbf{x}\|$ is constant (unit norm vectors), maximizing $\langle \mathbf{q}, \mathbf{x} \rangle$ is identical to minimizing $\|\mathbf{q} - \mathbf{x}\|$.</li>
+              <li>However, if vectors have variable norms, a vector with huge norm $\|\mathbf{x}\| = 1000$ can achieve a high inner product even if its angular alignment is poor! Metric pruning fails completely.</li>
+              <li><strong>The Neyshabur-Srebro Transformation (2015):</strong> Let $U = \max_i \|\mathbf{x}_i\|$. Map each $d$-dimensional database vector to $d+1$ dimensions:
+                $$\tilde{\mathbf{x}}_i = \left[ \mathbf{x}_i, \; \sqrt{U^2 - \|\mathbf{x}_i\|^2} \right] \implies \|\tilde{\mathbf{x}}_i\|^2 = U^2\text{ (Constant norm!)}$$
+                Augment query as $\tilde{\mathbf{q}} = [\mathbf{q}, 0]$. Then:
+                $$\|\tilde{\mathbf{q}} - \tilde{\mathbf{x}}_i\|^2 = \|\mathbf{q}\|^2 + U^2 - 2\langle \mathbf{q}, \mathbf{x}_i \rangle$$
+                Minimizing $(d+1)$-dimensional $L_2$ distance is now rigorously identical to maximizing $d$-dimensional MIPS!</li>
+            </ul>
+          </li>
+          <li><strong>Option C is Ridiculous:</strong> GPUs are massively optimized for dot products (GEMM).</li>
+          <li><strong>Option D is False:</strong> Dot product is equivalent to $L_2$ distance <em>only when all vectors have identical norm</em>.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Problem 7.2.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-amazon">Amazon</span>
+        <span class="company-tag company-pinecone">Pinecone</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>ASSERTION-REASONING:</strong></p>
+        <p><strong>Assertion (A):</strong> In a distributed vector database sharded horizontally across $S = 100$ independent worker nodes using document-partitioned sharding, a scatter-gather query architecture experiences severe <strong>Tail Latency Amplification</strong>, where an individual worker node SLA of $\text{p99} \le 10\text{ ms}$ results in a cluster-wide query p99 latency that routinely exceeds $30\text{ ms}$.</p>
+        <p><strong>Reason (R):</strong> In document-partitioned scatter-gather routing, a client query must be broadcast to all $S$ shards simultaneously, and the aggregator cannot complete the response until the single slowest shard returns its local top-$k$ candidates; assuming independent worker latency distributions, the probability that a cluster query breaches the node-level p99 threshold is:
+        $$P(\text{Cluster Latency} > T_{\text{p99}}) = 1 - (1 - 0.01)^{100} \approx 63.4\%$$</p>
+        <p><strong>Options:</strong></p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A (Comprehensive Distributed Systems Analysis)</div>
+
+        <p class="step"><strong>Deep Architectural Analysis:</strong></p>
+        <p><strong>Evaluation of Assertion (A): True.</strong><br>
+        Scatter-gather fan-out across dozens or hundreds of shards is one of the most notorious performance killers in distributed database engineering (Google Dean &amp; Barroso, "The Tail at Scale", CACM 2013). Even though 99% of individual worker queries finish in $<10\text{ ms}$, overall user queries routinely wait for straggler nodes suffering from garbage collection pauses, noisy neighbor network contention, or CPU scheduling delays.</p>
+
+        <p class="step"><strong>Evaluation of Reason (R): True &amp; Explanatory.</strong><br>
+        Let $X_i$ be the latency of worker node $i \in \{1, \dots, S\}$. The overall query latency is governed by the order statistic:
+        $$T_{\text{cluster}} = \max(X_1, X_2, \dots, X_S)$$
+        For the cluster query to complete within $T_{\text{p99}}$, <em>every single one of the $S = 100$ nodes</em> must finish within $T_{\text{p99}}$.<br>
+        Under independence:
+        $$P(T_{\text{cluster}} \le T_{\text{p99}}) = \prod_{i=1}^{100} P(X_i \le T_{\text{p99}}) = (0.99)^{100} \approx 0.3660 \quad (36.6\%)$$
+        The probability of at least one straggler node exceeding the p99 threshold is the complement:
+        $$P(T_{\text{cluster}} > T_{\text{p99}}) = 1 - 0.3660 = \mathbf{0.6340 \quad (63.4\%!)!}$$
+        <em>Nearly two-thirds of all queries suffer tail latency degradation!</em><br>
+        <strong>Production Mitigations:</strong>
+        <ol>
+          <li><strong>Two-Level Hierarchical Routing:</strong> Use a coarse IVF clustering on the gateway node to route queries strictly to the top $P \ll S$ relevant shards (e.g. routing to only 4 shards instead of broadcasting to 100).</li>
+          <li><strong>Hedged Requests:</strong> If a shard has not responded within the 95th percentile duration ($7\text{ ms}$), dispatch a duplicate hedged request to a replica node and take whichever response arrives first.</li>
+        </ol></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: PRODUCTION CODE LAB -->
+    <h3>5. Production Code Lab 7.2: High-Performance Product Quantizer from Scratch</h3>
+    <p>Below is an enterprise-grade Python implementation of Product Quantization and Asymmetric Distance Computation (ADC) using NumPy, illustrating codebook training and table-driven vector search.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 7.2 — Product Quantization &amp; ADC Engine</div>
+      <div class="code-lab-header">Code Lab 7.2 — Product Quantization &amp; ADC Engine from Scratch</div>
       <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch72_vector_search/product_quantizer.py" target="_blank">🔗 View in GitHub: part7_system_design/ch72_vector_search/product_quantizer.py</a></p>
 <pre><code>import numpy as np
 
 class ProductQuantizer:
-    def __init__(self, d=64, m=8, k=256):
-        self.d = d # Total dimension
-        self.m = m # Number of sub-vectors
-        self.d_sub = d // m # Dimension per sub-vector
-        self.k = k # Number of centroids (256 fits in uint8)
-        self.centroids = None # (m, k, d_sub)
+    def __init__(self, d: int, m: int, k_sub: int = 256):
+        assert d % m == 0, "Embedding dimension d must be divisible by sub-vector count m"
+        self.d = d
+        self.m = m
+        self.d_sub = d // m
+        self.k_sub = k_sub
+        # Codebooks shape: (m, k_sub, d_sub)
+        self.codebooks = np.zeros((m, k_sub, self.d_sub), dtype=np.float32)
 
-    def fit(self, X_train):
-        N = X_train.shape[0]
-        self.centroids = np.zeros((self.m, self.k, self.d_sub))
-        
-        # Train K-Means independently for each sub-space
+    def fit(self, training_data: np.ndarray, num_iterations: int = 20):
+        """Train k-means centroids for each orthogonal sub-vector space"""
+        N = training_data.shape[0]
         for j in range(self.m):
-            sub_X = X_train[:, j * self.d_sub : (j + 1) * self.d_sub]
-            # Fast random initialization for demonstration
-            random_idx = np.random.choice(N, self.k, replace=False)
-            self.centroids[j] = sub_X[random_idx]
+            sub_data = training_data[:, j * self.d_sub : (j + 1) * self.d_sub]
+            # Initialize centroids randomly from data samples
+            indices = np.random.choice(N, size=self.k_sub, replace=False)
+            centroids = sub_data[indices].copy()
 
-    def encode(self, X):
-        """Compress float32 vectors into uint8 byte codes"""
-        N = X.shape[0]
+            for _ in range(num_iterations):
+                # Compute squared distances between samples and centroids: (N, k_sub)
+                diff = sub_data[:, np.newaxis, :] - centroids[np.newaxis, :, :]
+                dists = np.sum(diff ** 2, axis=-1)
+                labels = np.argmin(dists, axis=1)
+
+                # Update centroids
+                for c in range(self.k_sub):
+                    members = sub_data[labels == c]
+                    if len(members) > 0:
+                        centroids[c] = members.mean(axis=0)
+
+            self.codebooks[j] = centroids
+
+    def encode(self, vectors: np.ndarray) -> np.ndarray:
+        """Compress float32 vectors into m uint8 bytes"""
+        N = vectors.shape[0]
         codes = np.zeros((N, self.m), dtype=np.uint8)
-
         for j in range(self.m):
-            sub_X = X[:, j * self.d_sub : (j + 1) * self.d_sub]
-            # Compute distance to all 256 centroids: (N, 256)
-            c = self.centroids[j]
-            dists = np.sum((sub_X[:, np.newaxis, :] - c[np.newaxis, :, :]) ** 2, axis=-1)
-            codes[:, j] = np.argmin(dists, axis=1)
-
+            sub_data = vectors[:, j * self.d_sub : (j + 1) * self.d_sub]
+            diff = sub_data[:, np.newaxis, :] - self.codebooks[j][np.newaxis, :, :]
+            dists = np.sum(diff ** 2, axis=-1)
+            codes[:, j] = np.argmin(dists, axis=1).astype(np.uint8)
         return codes
 
-    def compute_asymmetric_distances(self, query, codes):
-        """ADC: Query is uncompressed float32, database is compressed uint8 bytes!"""
-        # 1. Pre-compute query-to-centroid distance lookup table: (m, 256)
-        lookup_table = np.zeros((self.m, self.k))
+    def compute_distance_table(self, query: np.ndarray) -> np.ndarray:
+        """Pre-compute squared Euclidean distances between query sub-vectors and all centroids"""
+        # Shape: (m, k_sub)
+        distance_table = np.zeros((self.m, self.k_sub), dtype=np.float32)
         for j in range(self.m):
-            sub_q = query[j * self.d_sub : (j + 1) * self.d_sub]
-            lookup_table[j] = np.sum((self.centroids[j] - sub_q) ** 2, axis=-1)
+            q_sub = query[j * self.d_sub : (j + 1) * self.d_sub]
+            diff = self.codebooks[j] - q_sub[np.newaxis, :]
+            distance_table[j] = np.sum(diff ** 2, axis=-1)
+        return distance_table
 
-        # 2. Fast lookup: sum distances across sub-spaces
-        N = codes.shape[0]
-        distances = np.zeros(N)
+    def search_adc(self, query: np.ndarray, compressed_codes: np.ndarray, top_k: int = 5) -> tuple[np.ndarray, np.ndarray]:
+        """Asymmetric Distance Computation (ADC) via lookup table"""
+        dist_table = self.compute_distance_table(query) # (m, k_sub)
+        
+        # Accumulate distances using fast table lookups
+        # compressed_codes has shape (N, m)
+        N = compressed_codes.shape[0]
+        scores = np.zeros(N, dtype=np.float32)
         for j in range(self.m):
-            distances += lookup_table[j, codes[:, j]]
+            scores += dist_table[j, compressed_codes[:, j]]
 
-        return distances
+        top_k_indices = np.argpartition(scores, top_k)[:top_k]
+        top_k_indices = top_k_indices[np.argsort(scores[top_k_indices])]
+        return top_k_indices, scores[top_k_indices]
 
 if __name__ == "__main__":
     np.random.seed(42)
-    # 10,000 vectors of dimension 64
-    X = np.random.randn(10000, 64).astype(np.float32)
-    pq = ProductQuantizer(d=64, m=8, k=256)
-    pq.fit(X)
+    N = 10000
+    d = 128
+    m = 16 # 16 sub-vectors of dimension 8 -> 16 bytes per vector (8x compression)
+    data = np.random.randn(N, d).astype(np.float32)
 
-    # Encode database
-    compressed_codes = pq.encode(X)
-    print(f"Original Vector Size  : {X.nbytes / 1024:.1f} KB")
-    print(f"Compressed Codes Size : {compressed_codes.nbytes / 1024:.1f} KB (8x Memory Savings!)")
+    pq = ProductQuantizer(d=d, m=m, k_sub=256)
+    pq.fit(data[:2000]) # Train on 2000 vectors
+    codes = pq.encode(data)
+    print(f"Compressed {N} vectors from {data.nbytes / 1e6:.2f} MB to {codes.nbytes / 1e6:.2f} MB ({data.nbytes / codes.nbytes:.1f}x compression)!")
 
-    # Search with uncompressed query
-    query = np.random.randn(64).astype(np.float32)
-    approx_dists = pq.compute_asymmetric_distances(query, compressed_codes)
-    top_k = np.argsort(approx_dists)[:5]
-    print("Top 5 Nearest Neighbor Indices via ADC:", top_k)</code></pre>
+    query = np.random.randn(d).astype(np.float32)
+    top_indices, top_dists = pq.search_adc(query, codes, top_k=3)
+    print(f"ADC Top-3 Neighbor IDs: {top_indices}, Squared Distances: {np.round(top_dists, 3)}")</code></pre>
     </div>
 
     <!-- SECTION 6: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 7.2 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 7.2: Distributed Vector Search Engine with IVF-PQ</h3>
-        <p class="project-desc">Architect and deploy a distributed vector database engine featuring multi-threaded Product Quantization, Inverted File (IVF) centroid partitioning, and consistent hash routing across a multi-node cluster.</p>
+        <h3 class="project-title">Project 7.2: Billion-Scale Distributed Vector Search Engine with HNSW &amp; IVF-PQ</h3>
+        <p class="project-desc">Architect, benchmark, and deploy a distributed vector search cluster indexing 100,000,000 dense embeddings across sharded nodes, comparing HNSW graph traversal against IVF-PQ asymmetric distance lookup across QPS, p99 latency, and recall@10.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch72_vector_search/product_quantizer.py" target="_blank">🔗 Full Project Code: part7_system_design/ch72_vector_search/product_quantizer.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In massive multimodal search engines (Pinterest, Shopify), visual image catalogs contain over 500 million product embeddings. Storing uncompressed vectors in RAM requires tens of thousands of dollars in cloud infrastructure per month. In this project, you build an industrial IVF-PQ vector search service that indexes 10 million vectors in under 2GB of RAM, serving sub-10ms queries with 94% recall parity.</p>
+        <p><strong>Case Study Architecture:</strong> In massive-scale visual search (Pinterest, Google Lens), systems must search through a catalog of 2 billion images in under 15 milliseconds. In this project, you construct a tiered vector search architecture: deploying an in-memory IVF-PQ index on GPU/CPU worker shards, building a gateway scatter-gather aggregator with hedged request straggler mitigation, and evaluating recall trade-offs against exact brute-force baselines.</p>
       </div>
     </div>
   </div>

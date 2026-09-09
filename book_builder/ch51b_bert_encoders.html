@@ -1,0 +1,743 @@
+<!-- ======================================================================
+     CHAPTER 5.1B — BERT, ENCODER TRANSFORMERS & SENTENCE EMBEDDINGS
+     ====================================================================== -->
+<div class="chapter" id="chapter-5-1b">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 5.1B</span>
+    <h2 class="chapter-title">BERT, Encoder Transformers &amp; Sentence Embeddings</h2>
+    <span class="chapter-subtitle">Bidirectional Self-Attention, Masked Language Modeling, RoBERTa, DeBERTa, SBERT &amp; Bi-Encoder vs Cross-Encoder Search</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"Bidirectional representations are fundamentally more expressive for understanding than unidirectional ones."</p>
+    <p class="attribution">— Jacob Devlin et al., Google AI Language (BERT, 2018)</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-production">Production • Core Pillar</span>
+
+    <!-- SECTION 1: THE ENCODER VS DECODER PARADIGM -->
+    <h3>1. The Transformer Trinity: Encoders, Decoders &amp; Seq2Seq</h3>
+    <p>In Chapter 5.1, we analyzed the autoregressive decoder architecture that powers generative Large Language Models like GPT-4, LLaMA-3, and Claude. However, the generative decoder is only one branch of the modern Transformer family tree. The original Transformer (Vaswani et al., 2017) was an <strong>Encoder-Decoder</strong> architecture designed for machine translation. The AI revolution fractured this unified architecture into three distinct paradigms:</p>
+
+    <!-- DIAGRAM: BERT VS GPT ARCHITECTURE COMPARISON -->
+    <div style="text-align: center; margin: 1.8em 0;">
+      <img src="bert_vs_gpt_diagram.jpg" alt="BERT Bidirectional Encoder vs GPT Causal Auto-regressive Decoder" style="max-width: 100%; border-radius: 8px; border: 2px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+      <p style="font-size: 0.9em; color: #555; margin-top: 10px;"><em>Figure 5.1B.1:</em> <strong>Left:</strong> BERT Encoder uses unrestricted bidirectional attention where token $i$ can attend to all past and future tokens $j$. <strong>Right:</strong> GPT Decoder uses causal masking where token $i$ can only attend to past tokens $j \le i$.</p>
+    </div>
+
+    <!-- COMPARISON TABLE -->
+    <div class="table-container" style="overflow-x: auto; margin: 1.5em 0;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em;">
+        <thead>
+          <tr style="background-color: #1b4965; color: #ffffff;">
+            <th style="padding: 10px; border: 1px solid #ccc;">Architecture</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Attention Mask</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Pretraining Objective</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Optimal Downstream Tasks</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Canonical Models</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Encoder-Only</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Bidirectional (All-to-All)</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Masked Language Modeling (MLM)</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Classification, NER, Semantic Search, Extractive QA, Re-ranking</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">BERT, RoBERTa, DeBERTa, SBERT</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Decoder-Only</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Causal Lower-Triangular</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Autoregressive Next-Token Prediction</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Text Generation, Code Synthesis, Reasoning, Conversational Agents</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">GPT-4, LLaMA-3, Mistral, Claude</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Encoder-Decoder</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Bidirectional (Enc) + Causal Cross (Dec)</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Span Corruption / Denoising</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Translation, Abstractive Summarization, Sequence-to-Sequence transformation</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">T5, BART, mT5</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>While decoders dominate headlines for open-ended text generation, <strong>encoder models remain the undisputed workhorses of enterprise search, information retrieval (RAG), embeddings, and classification</strong>. Every production vector database (Chapter 7.2) and neural search engine relies on encoder representations.</p>
+
+    <!-- SECTION 2: BERT ARCHITECTURE -->
+    <h3>2. BERT: Bidirectional Encoder Representations from Transformers</h3>
+    <p>Introduced by Jacob Devlin and colleagues at Google in late 2018, <strong>BERT</strong> demonstrated that deep bidirectional conditioning produces far richer representations than left-to-right unidirectional models.</p>
+
+    <h4>2.1 Input Representation &amp; Special Tokens</h4>
+    <p>BERT tokenizes input sequences using WordPiece. Every sequence is augmented with distinct architectural tokens:</p>
+    <ul>
+      <li><code>[CLS]</code> (Classification Token): Pre-pended as the very first token of every sequence. In the final encoder layer, the hidden state $\mathbf{h}_{[\text{CLS}]} \in \mathbb{R}^d$ aggregates sentence-level context and is fed into classification heads.</li>
+      <li><code>[SEP]</code> (Separator Token): Appended at the boundary between sentence pairs $(A, B)$ or at the end of a single sequence.</li>
+      <li><code>[MASK]</code>: Represents masked tokens during pre-training.</li>
+    </ul>
+
+    <p>The input embedding for token $i$ is the element-wise sum of three independent embedding lookups:</p>
+    $$\mathbf{x}_i = \mathbf{E}_{\text{token}}(t_i) + \mathbf{E}_{\text{position}}(i) + \mathbf{E}_{\text{segment}}(s_i)$$
+    <p>where $\mathbf{E}_{\text{segment}}$ indicates whether the token belongs to Sentence $A$ or Sentence $B$.</p>
+
+    <h4>2.2 Pre-training Objective 1: Masked Language Modeling (MLM)</h4>
+    <p>Standard language models cannot train bidirectionally using next-token prediction, because in a multi-layer bidirectional Transformer, each word could trivially "see itself" in future layers, creating trivial identity shortcuts. To prevent this, BERT introduced the <strong>Cloze task (Masked Language Modeling)</strong>:</p>
+
+    <ol>
+      <li>$15\%$ of all WordPiece tokens in a sequence are randomly selected for masking.</li>
+      <li>To prevent a mismatch between pre-training (where <code>[MASK]</code> exists) and fine-tuning (where <code>[MASK]</code> never appears), the $15\%$ chosen tokens are treated as follows:
+        <ul>
+          <li><strong>$80\%$ of the time:</strong> Replaced with the special <code>[MASK]</code> token (e.g., <em>"my dog is [MASK]"</em>).</li>
+          <li><strong>$10\%$ of the time:</strong> Replaced with a random vocabulary token (e.g., <em>"my dog is apple"</em>). This forces the encoder to maintain contextual representations for every token, since it cannot know whether a token was corrupted.</li>
+          <li><strong>$10\%$ of the time:</strong> Kept unchanged (e.g., <em>"my dog is hairy"</em>). This biases the representation toward the actual observed token.</li>
+        </ul>
+      </li>
+    </ol>
+
+    <p>Let $\mathcal{M}$ be the set of masked indices. The MLM loss is the standard cross-entropy over the vocabulary computed <em>only</em> on the masked positions:</p>
+    $$\mathcal{L}_{\text{MLM}}(\theta) = -\sum_{i \in \mathcal{M}} \log P(t_i = w_i^* | \mathbf{h}_i)$$
+    <p>where $\mathbf{h}_i \in \mathbb{R}^d$ is the output of the final Transformer layer at position $i$, and $P(t_i | \mathbf{h}_i) = \text{Softmax}(W_{\text{vocab}} \mathbf{h}_i + \mathbf{b})$.</p>
+
+    <h4>2.3 Pre-training Objective 2: Next Sentence Prediction (NSP)</h4>
+    <p>To train the model to understand multi-sentence discourse (crucial for Question Answering and Natural Language Inference), BERT used a binary auxiliary loss. For training pairs $(A, B)$:</p>
+    <ul>
+      <li>$50\%$ of the time, $B$ is the actual next sentence following $A$ in the corpus (labeled <code>IsNext</code>).</li>
+      <li>$50\%$ of the time, $B$ is a random sentence sampled from elsewhere in the corpus (labeled <code>NotNext</code>).</li>
+    </ul>
+    $$\mathcal{L}_{\text{NSP}} = -y \log \sigma(\mathbf{w}_{\text{NSP}}^\top \mathbf{h}_{[\text{CLS}]}) - (1-y) \log(1 - \sigma(\mathbf{w}_{\text{NSP}}^\top \mathbf{h}_{[\text{CLS}]}))$$
+
+    <!-- SECTION 3: EVOLUTION OF ENCODERS -->
+    <h3>3. Evolution of Encoders: RoBERTa and DeBERTa</h3>
+    
+    <h4>3.1 RoBERTa: A Robustly Optimized BERT Pretraining Approach (Liu et al., 2019)</h4>
+    <p>Meta AI researchers conducted a rigorous ablation study of BERT's hyperparameters and discovered that the original BERT was severely <strong>undertrained</strong>. They introduced <strong>RoBERTa</strong> with four critical architectural and training changes:</p>
+    <ul>
+      <li><strong>Removal of NSP:</strong> Ablation proved that the Next Sentence Prediction task actually <em>degraded</em> downstream performance on sentence pairs when sequences were simply packed with contiguous text chunks. Removing NSP improved performance across GLUE and SQuAD.</li>
+      <li><strong>Dynamic Masking:</strong> BERT generated a static masking pattern once during data preprocessing, meaning the model saw the exact same masked tokens across epochs. RoBERTa generated new masking patterns dynamically on the fly whenever a sequence was fed to the model.</li>
+      <li><strong>Larger Mini-Batches:</strong> Scaled batch sizes from $256$ sequences up to $8,192$ sequences using distributed data parallelism, which stabilized optimization and sped up training.</li>
+      <li><strong>Byte-Pair Encoding (BPE):</strong> Replaced BERT's $30,000$-token character-level WordPiece with a $50,000$-token byte-level BPE vocabulary (similar to GPT-2), removing out-of-vocabulary artifacts.</li>
+    </ul>
+
+    <h4>3.2 DeBERTa: Disentangled Attention &amp; Enhanced Mask Decoder (He et al., 2020)</h4>
+    <p>Microsoft's <strong>DeBERTa</strong> represents the pinnacle of encoder Transformer design, surpassing human baselines on SuperGLUE. DeBERTa introduces <strong>Disentangled Attention</strong>:</p>
+    <p>In standard BERT, each token is represented by a single vector summing content and absolute position: $\mathbf{x}_i = \mathbf{c}_i + \mathbf{p}_i$. DeBERTa represents each token with two separate vectors: content vector $\mathbf{c}_i$ and relative position vector $\mathbf{p}_{i|j}$. The attention score between token $i$ and token $j$ decomposes into four disentangled matrices:</p>
+    $$A_{i,j} = \underbrace{\mathbf{c}_i^\top W_{q,c}^\top W_{k,c} \mathbf{c}_j}_{\text{content-to-content}} + \underbrace{\mathbf{c}_i^\top W_{q,c}^\top W_{k,r} \mathbf{p}_{i|j}}_{\text{content-to-position}} + \underbrace{\mathbf{p}_{j|i}^\top W_{q,r}^\top W_{k,c} \mathbf{c}_j}_{\text{position-to-content}} + \underbrace{\mathbf{p}_{j|i}^\top W_{q,r}^\top W_{k,r} \mathbf{p}_{i|j}}_{\text{position-to-position (approx 0)}}$$
+    <p>This allows the model to capture how the semantic meaning of a word depends on its relative distance from grammatical modifiers with extreme precision.</p>
+
+    <!-- SECTION 4: SENTENCE-BERT & RETRIEVAL DYNAMICS -->
+    <h3>4. Sentence-BERT (SBERT): Bi-Encoders vs Cross-Encoders</h3>
+    <p>How do we use an encoder to find semantically similar documents in a database of $N = 10,000,000$ texts?</p>
+
+    <h4>The $\mathcal{O}(N^2)$ Cross-Encoder Bottleneck</h4>
+    <p>The naive approach uses BERT as a <strong>Cross-Encoder</strong>: concatenate the query $q$ and document $d$ into a single sequence <code>[CLS] q [SEP] d [SEP]</code>, feed it through 12 Transformer layers, and predict similarity via $\mathbf{h}_{[\text{CLS}]}$.</p>
+    <p>While the Cross-Encoder is exceptionally accurate because every token in the query attends to every token in the document via all-to-all cross-attention, its computational cost is catastrophic for retrieval:</p>
+    <ul>
+      <li>To find the most similar document for a single query across $N = 10,000$ documents requires $10,000$ separate BERT forward passes ($\sim 10$ seconds on an A100).</li>
+      <li>To perform pairwise deduplication over $10,000$ sentences requires $\frac{10,000 \times 9,999}{2} \approx 50,000,000$ inference passes ($\approx 65$ hours of GPU compute!). For $10^7$ enterprise documents, this is mathematically impossible.</li>
+    </ul>
+
+    <h4>The Bi-Encoder Solution (Reimers &amp; Gurevych, 2019)</h4>
+    <p><strong>Sentence-BERT (SBERT)</strong> resolves this via a <strong>Siamese Bi-Encoder network</strong>. SBERT passes query $u$ and document $v$ through identical (or shared) encoders separately, applies mean pooling over all token output vectors to obtain fixed-size sentence vectors $\mathbf{u}, \mathbf{v} \in \mathbb{R}^d$, and computes semantic similarity via cosine distance:</p>
+    $$\text{sim}(u, v) = \cos(\mathbf{u}, \mathbf{v}) = \frac{\mathbf{u}^\top \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2}$$
+
+    <div class="key-insight">
+      <p><strong>The Two-Stage Enterprise Retrieval Architecture:</strong><br>
+      Production RAG systems (Chapter 5.3) resolve the precision vs speed trade-off using a <strong>two-stage cascade</strong>:
+      <ol>
+        <li><strong>Stage 1 (Bi-Encoder Retrieval / MIPS):</strong> Pre-compute embeddings for all $10^8$ documents offline and index them in HNSW or FAISS. At query time, embed the query in $5$ ms and retrieve the top-$100$ candidate documents via Maximum Inner Product Search (MIPS) in sub-millisecond time.</li>
+        <li><strong>Stage 2 (Cross-Encoder Re-Ranking):</strong> Pass only the top-$100$ retrieved candidates through a heavy Cross-Encoder (e.g., <code>bge-reranker-large</code>), allowing full token-level cross-attention to re-order the candidates with 99th-percentile precision for the LLM context window.</li>
+      </ol>
+      </p>
+    </div>
+
+    <!-- SECTION 5: FAANG INTERVIEW PROBLEM -->
+    <h3>5. Silicon Valley / FAANG Interview Challenge</h3>
+    <div class="interview-question">
+      <p><strong>Google / Amazon Systems Interview:</strong><br>
+      <em>"Design a production semantic search system that serves 10,000 queries per second over 500 million documents with p99 latency &lt; 50ms. Explain why a Cross-Encoder cannot be used for first-stage retrieval, how Mean Pooling mathematically differs from [CLS] pooling in SBERT, and implement a custom PyTorch Bi-Encoder with Multiple Negatives Ranking Loss (MNRL)."</em></p>
+    </div>
+
+    <!-- SECTION 6: PRODUCTION CODE LAB -->
+    <h3>6. Production Code Lab: Bi-Encoder with Multiple Negatives Ranking Loss (MNRL)</h3>
+    <p>Below is a clean, production-grade PyTorch implementation of a Siamese Bi-Encoder trained with <strong>Multiple Negatives Ranking Loss (MNRL)</strong> — the gold-standard contrastive loss used to train models like OpenAI <code>text-embedding-3</code>, Cohere Embed, and BGE.</p>
+
+    <pre><code class="language-python">import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class MeanPooling(nn.Module):
+    """Mean Pooling: aggregates token embeddings while strictly respecting the attention mask."""
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, token_embeddings: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        # Expand attention mask from (batch_size, seq_len) to (batch_size, seq_len, hidden_dim)
+        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+        
+        # Sum token embeddings over sequence length
+        sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, dim=1)
+        # Sum mask weights to get valid token count per sequence (clamped to avoid div-by-zero)
+        sum_mask = torch.clamp(input_mask_expanded.sum(dim=1), min=1e-9)
+        
+        return sum_embeddings / sum_mask
+
+
+class MultipleNegativesRankingLoss(nn.Module):
+    """
+    Multiple Negatives Ranking Loss (MNRL).
+    For a batch of (query_i, pos_doc_i) pairs, all other pos_docs j != i in the batch
+    serve as in-batch negative samples. Scales contrastive training effortlessly!
+    """
+    def __init__(self, scale: float = 20.0):
+        super().__init__()
+        self.scale = scale  # Temperature parameter (1 / tau)
+        self.cross_entropy = nn.CrossEntropyLoss()
+
+    def forward(self, query_embeddings: torch.Tensor, doc_embeddings: torch.Tensor) -> torch.Tensor:
+        # Normalize embeddings to unit hypersphere
+        q_norm = F.normalize(query_embeddings, p=2, dim=1)
+        d_norm = F.normalize(doc_embeddings, p=2, dim=1)
+        
+        # Compute cosine similarity matrix: (batch_size, batch_size)
+        # S[i, j] = cos(q_i, d_j) * scale
+        similarity_matrix = torch.matmul(q_norm, d_norm.T) * self.scale
+        
+        # Ground truth labels: query_i corresponds to doc_i (diagonal entries)
+        labels = torch.arange(query_embeddings.size(0), device=query_embeddings.device)
+        
+        # Cross entropy treats all off-diagonals as negative classes!
+        loss = self.cross_entropy(similarity_matrix, labels)
+        return loss
+
+
+class ProductionBiEncoder(nn.Module):
+    """Production Siamese Bi-Encoder for Dense Retrieval."""
+    def __init__(self, encoder_backbone: nn.Module, embedding_dim: int = 768, proj_dim: int = 256):
+        super().__init__()
+        self.backbone = encoder_backbone
+        self.pooler = MeanPooling()
+        self.proj = nn.Linear(embedding_dim, proj_dim, bias=False)
+
+    def encode(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        # Backbone forward (e.g. HuggingFace Transformer)
+        outputs = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
+        # Extract last hidden state: (batch_size, seq_len, hidden_dim)
+        last_hidden = outputs.last_hidden_state if hasattr(outputs, 'last_hidden_state') else outputs[0]
+        
+        # Mean pool and project
+        pooled = self.pooler(last_hidden, attention_mask)
+        projected = self.proj(pooled)
+        return F.normalize(projected, p=2, dim=1)
+
+    def forward(self, q_ids, q_mask, d_ids, d_mask):
+        q_emb = self.encode(q_ids, q_mask)
+        d_emb = self.encode(d_ids, d_mask)
+        return q_emb, d_emb
+
+
+# --- Unit Test & Contrastive Loss Verification ---
+if __name__ == "__main__":
+    torch.manual_seed(42)
+    batch_size = 8
+    seq_len = 32
+    hidden_dim = 128
+    proj_dim = 64
+    
+    # Mock Transformer backbone for unit test
+    class MockTransformer(nn.Module):
+        def __init__(self, h_dim):
+            super().__init__()
+            self.linear = nn.Linear(h_dim, h_dim)
+        def forward(self, input_ids, attention_mask):
+            # Return dummy hidden states of correct shape
+            bs, sl = input_ids.shape
+            return torch.randn(bs, sl, hidden_dim)
+
+    backbone = MockTransformer(hidden_dim)
+    bi_encoder = ProductionBiEncoder(backbone, embedding_dim=hidden_dim, proj_dim=proj_dim)
+    mnrl_loss = MultipleNegativesRankingLoss(scale=20.0)
+    
+    # Dummy inputs
+    q_ids = torch.randint(0, 1000, (batch_size, seq_len))
+    q_mask = torch.ones((batch_size, seq_len))
+    d_ids = torch.randint(0, 1000, (batch_size, seq_len))
+    d_mask = torch.ones((batch_size, seq_len))
+    
+    q_emb, d_emb = bi_encoder(q_ids, q_mask, d_ids, d_mask)
+    loss = mnrl_loss(q_emb, d_emb)
+    
+    print(f"[Bi-Encoder MNRL Unit Test] Loss: {loss.item():.4f}")
+    assert q_emb.shape == (batch_size, proj_dim)
+    assert not torch.isnan(loss)
+    print("[SUCCESS] Production Bi-Encoder & In-Batch Contrastive Loss Verified.")
+</code></pre>
+
+    <!-- SECTION 7: CAPSTONE LAB -->
+    <h3>7. Capstone: Cross-Encoder Neural Re-Ranking Pipeline</h3>
+    <div class="project-box">
+      <p><strong>Hands-on Capstone: Building a Cross-Encoder Re-ranker</strong><br>
+      Below is the production re-ranking pipeline that ingests top-$K$ candidates returned by a vector database and re-scores them via full cross-attention:</p>
+
+      <pre><code class="language-python">class CrossEncoderReranker(nn.Module):
+    """
+    Cross-Encoder scoring module.
+    Takes concatenated [CLS] query [SEP] document [SEP] pairs and predicts relevance score.
+    """
+    def __init__(self, encoder_backbone: nn.Module, hidden_dim: int = 768):
+        super().__init__()
+        self.backbone = encoder_backbone
+        self.classifier = nn.Linear(hidden_dim, 1)
+
+    def forward(self, pair_input_ids: torch.Tensor, pair_attention_mask: torch.Tensor) -> torch.Tensor:
+        # Full bidirectional cross-attention across query and doc tokens
+        outputs = self.backbone(input_ids=pair_input_ids, attention_mask=pair_attention_mask)
+        # Extract [CLS] representation at position 0
+        cls_hidden = outputs.last_hidden_state[:, 0, :] if hasattr(outputs, 'last_hidden_state') else outputs[0][:, 0, :]
+        
+        # Output raw scalar relevance logit
+        logits = self.classifier(cls_hidden).squeeze(-1)
+        return logits
+
+def rerank_candidates(query: str, retrieved_docs: list, reranker_fn, top_k: int = 5) -> list:
+    """Re-ranks retrieved candidates by descending cross-encoder relevance score."""
+    scores = reranker_fn(query, retrieved_docs)
+    ranked_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+    return [(retrieved_docs[i], scores[i]) for i in ranked_indices[:top_k]]
+</code></pre>
+    </div>
+
+    <!-- ======================================================================
+         SECTION 8: GRADED PRACTICE SUITE (8 PROBLEMS: 5.1B.1 TO 5.1B.8)
+         ====================================================================== -->
+    <h3>8. Graded Practice Suite: BERT, Encoders &amp; Dense Retrieval</h3>
+    <p>Achieving mastery in encoder representations requires rigorous mathematical competence in Masked Language Modeling loss functions, attention-mask-aware sentence pooling, contrastive in-batch learning, and multi-stage information retrieval engineering.</p>
+
+    <!-- PROBLEM 5.1B.1 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1B.1</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Masked Language Model (MLM) Cross-Entropy Loss &amp; Gradient Step-by-Step:</strong></p>
+        <p>Suppose an encoder model with hidden dimension $d = 3$ is pre-trained on a toy vocabulary of size $|V| = 5$:</p>
+        $$V = \{0: \text{"London"}, \; 1: \text{"France"}, \; 2: \text{"Berlin"}, \; 3: \text{"Paris"}, \; 4: \text{"Rome"}\}$$
+        <p>For the input sentence <code>"The capital of France is Paris"</code>, the token at index 3 (ground truth word <code>"France"</code>, class index $y = 1$) is masked with <code>[MASK]</code>. At this masked position, the final layer output vector is:</p>
+        $$\mathbf{h}_3 = [1.2, -0.5, 0.8]^\top$$
+        <p>The vocabulary projection weight matrix $W \in \mathbb{R}^{5 \times 3}$ and bias vector $\mathbf{b} \in \mathbb{R}^5$ are:</p>
+        $$W = \begin{bmatrix} 0.5 & 1.0 & -0.2 \\ 1.0 & -1.0 & 0.5 \\ 0.2 & 0.0 & 1.0 \\ 0.8 & -0.4 & 0.2 \\ -0.5 & 0.5 & 0.5 \end{bmatrix}, \quad \mathbf{b} = \begin{bmatrix} 0.1 \\ 0.2 \\ -0.3 \\ 0.0 \\ -0.1 \end{bmatrix}$$
+        <ol>
+          <li>Calculate the unnormalized vocabulary logit vector $\mathbf{z} = W \mathbf{h}_3 + \mathbf{b} \in \mathbb{R}^5$.</li>
+          <li>Compute the Softmax probability distribution $\mathbf{p} = \text{softmax}(\mathbf{z})$.</li>
+          <li>Calculate the Masked Language Modeling cross-entropy loss $\mathcal{L}_{\text{MLM}} = -\ln(p_1)$.</li>
+          <li>Compute the exact gradient vector of the loss with respect to the logit vector: $\nabla_{\mathbf{z}} \mathcal{L}_{\text{MLM}} = \mathbf{p} - \mathbf{y}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: Unnormalized Logit Computation</strong></p>
+        <p>Compute row-by-row inner products with $\mathbf{h}_3 = [1.2, -0.5, 0.8]^\top$ plus bias:</p>
+        <ul>
+          <li>$z_0 = (0.5)(1.2) + (1.0)(-0.5) + (-0.2)(0.8) + 0.1 = 0.60 - 0.50 - 0.16 + 0.10 = \mathbf{0.04}$</li>
+          <li>$z_1 = (1.0)(1.2) + (-1.0)(-0.5) + (0.5)(0.8) + 0.2 = 1.20 + 0.50 + 0.40 + 0.20 = \mathbf{2.30}$</li>
+          <li>$z_2 = (0.2)(1.2) + (0.0)(-0.5) + (1.0)(0.8) - 0.3 = 0.24 + 0.00 + 0.80 - 0.30 = \mathbf{0.74}$</li>
+          <li>$z_3 = (0.8)(1.2) + (-0.4)(-0.5) + (0.2)(0.8) + 0.0 = 0.96 + 0.20 + 0.16 + 0.00 = \mathbf{1.32}$</li>
+          <li>$z_4 = (-0.5)(1.2) + (0.5)(-0.5) + (0.5)(0.8) - 0.1 = -0.60 - 0.25 + 0.40 - 0.10 = \mathbf{-0.55}$</li>
+        </ul>
+        $$\mathbf{z} = [0.04, \; 2.30, \; 0.74, \; 1.32, \; -0.55]^\top$$
+
+        <p class="step"><strong>Step 2: Softmax Probabilities</strong></p>
+        <p>Compute the exponentials:</p>
+        $$e^{0.04} \approx 1.04081, \quad e^{2.30} \approx 9.97418, \quad e^{0.74} \approx 2.09594, \quad e^{1.32} \approx 3.74342, \quad e^{-0.55} \approx 0.57695$$
+        <p>The normalizer sum is:</p>
+        $$\Sigma = 1.04081 + 9.97418 + 2.09594 + 3.74342 + 0.57695 = 17.43130$$
+        <p>Dividing each exponential by $\Sigma$:</p>
+        $$p_0 = \frac{1.04081}{17.43130} \approx \mathbf{0.0597}$$
+        $$p_1 = \frac{9.97418}{17.43130} \approx \mathbf{0.5722}$$
+        $$p_2 = \frac{2.09594}{17.43130} \approx \mathbf{0.1202}$$
+        $$p_3 = \frac{3.74342}{17.43130} \approx \mathbf{0.2148}$$
+        $$p_4 = \frac{0.57695}{17.43130} \approx \mathbf{0.0331}$$
+        <p>Probability check: $0.0597 + 0.5722 + 0.1202 + 0.2148 + 0.0331 = 1.0000$.</p>
+
+        <p class="step"><strong>Step 3: MLM Cross-Entropy Loss</strong></p>
+        <p>The ground-truth target is class $y = 1$ (<code>"France"</code>):</p>
+        $$\mathcal{L}_{\text{MLM}} = -\ln(p_1) = -\ln(0.5722) \approx \mathbf{0.5583}$$
+
+        <p class="step"><strong>Step 4: Analytical Gradient $\nabla_{\mathbf{z}} \mathcal{L}_{\text{MLM}}$</strong></p>
+        <p>The ground truth one-hot target is $\mathbf{y} = [0, 1, 0, 0, 0]^\top$.</p>
+        $$\nabla_{\mathbf{z}} \mathcal{L}_{\text{MLM}} = \mathbf{p} - \mathbf{y} = \begin{bmatrix} 0.0597 - 0 \\ 0.5722 - 1 \\ 0.1202 - 0 \\ 0.2148 - 0 \\ 0.0331 - 0 \end{bmatrix} = \begin{bmatrix} \mathbf{0.0597} \\ \mathbf{-0.4278} \\ \mathbf{0.1202} \\ \mathbf{0.2148} \\ \mathbf{0.0331} \end{bmatrix}$$
+        <p>The negative gradient on logit 1 pulls its prediction higher toward 1, while positive gradients push all other distractors down toward zero.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1B.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1B.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>SBERT Mask-Aware Mean Pooling &amp; The Padding Corruption Trap:</strong></p>
+        <p>Consider a mini-batch of text fed into a 3-dimensional encoder. For Sentence $A$, the sequence length padded to $T = 4$ has attention mask vector $\mathbf{m} = [1, 1, 1, 0]^\top$ (where the 4th token is zero-padded <code>[PAD]</code>). The final layer token embedding matrix $H \in \mathbb{R}^{4 \times 3}$ is:</p>
+        $$\mathbf{h}_1 = [1.0, 2.0, 0.0]^\top, \quad \mathbf{h}_2 = [0.0, 1.0, 2.0]^\top, \quad \mathbf{h}_3 = [2.0, 0.0, 1.0]^\top, \quad \mathbf{h}_4 = [-99.0, 50.0, 12.0]^\top$$
+        <ol>
+          <li>Calculate the true mask-aware Mean Pooled sentence embedding vector $\mathbf{u} = \frac{\sum_{t=1}^4 m_t \mathbf{h}_t}{\sum_{t=1}^4 m_t}$.</li>
+          <li>Calculate the corrupted sentence vector $\mathbf{u}_{\text{naive}}$ if a software engineer mistakenly uses PyTorch's native <code>torch.mean(H, dim=0)</code> without masking.</li>
+          <li>Suppose a pre-computed target query vector is $\mathbf{v} = [1.0, 1.0, 1.0]^\top$. Calculate the exact cosine similarity $\cos(\mathbf{u}, \mathbf{v})$ under true mask-aware pooling versus $\cos(\mathbf{u}_{\text{naive}}, \mathbf{v})$ under naive unmasked pooling.</li>
+          <li>State the percentage distortion in semantic similarity caused by the padding artifact.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: Mask-Aware Mean Pooling</strong></p>
+        <p>Using the binary attention mask $\mathbf{m} = [1, 1, 1, 0]^\top$, token 4 is completely zeroed out:</p>
+        $$\sum_{t=1}^4 m_t \mathbf{h}_t = 1 \cdot \begin{bmatrix} 1.0 \\ 2.0 \\ 0.0 \end{bmatrix} + 1 \cdot \begin{bmatrix} 0.0 \\ 1.0 \\ 2.0 \end{bmatrix} + 1 \cdot \begin{bmatrix} 2.0 \\ 0.0 \\ 1.0 \end{bmatrix} + 0 \cdot \mathbf{h}_4 = \begin{bmatrix} 3.0 \\ 3.0 \\ 3.0 \end{bmatrix}$$
+        <p>The number of valid non-padding tokens is $\sum_{t=1}^4 m_t = 1 + 1 + 1 + 0 = 3$.</p>
+        $$\mathbf{u} = \frac{1}{3} \begin{bmatrix} 3.0 \\ 3.0 \\ 3.0 \end{bmatrix} = \begin{bmatrix} \mathbf{1.0} \\ \mathbf{1.0} \\ \mathbf{1.0} \end{bmatrix}$$
+
+        <p class="step"><strong>Step 2: Naive Unmasked Mean Pooling</strong></p>
+        <p>Summing all 4 vectors including the garbage padding vector $\mathbf{h}_4$:</p>
+        $$\sum_{t=1}^4 \mathbf{h}_t = \begin{bmatrix} 3.0 - 99.0 \\ 3.0 + 50.0 \\ 3.0 + 12.0 \end{bmatrix} = \begin{bmatrix} -96.0 \\ 53.0 \\ 15.0 \end{bmatrix}$$
+        <p>Dividing by $T = 4$:</p>
+        $$\mathbf{u}_{\text{naive}} = \frac{1}{4} \begin{bmatrix} -96.0 \\ 53.0 \\ 15.0 \end{bmatrix} = \begin{bmatrix} \mathbf{-24.00} \\ \mathbf{13.25} \\ \mathbf{3.75} \end{bmatrix}$$
+
+        <p class="step"><strong>Step 3: Cosine Similarity Comparison</strong></p>
+        <p>Target vector is $\mathbf{v} = [1.0, 1.0, 1.0]^\top$.</p>
+        <p>1. <strong>True Mask-Aware Vector $\mathbf{u} = [1, 1, 1]^\top$:</strong></p>
+        $$\cos(\mathbf{u}, \mathbf{v}) = \frac{\mathbf{u} \cdot \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2} = \frac{1(1) + 1(1) + 1(1)}{\sqrt{1^2+1^2+1^2} \sqrt{1^2+1^2+1^2}} = \frac{3}{\sqrt{3}\sqrt{3}} = \frac{3}{3} = \mathbf{1.0000}$$
+        <p>The sentence has perfect semantic alignment with the query ($\cos = 1.0$).</p>
+        <p>2. <strong>Corrupted Vector $\mathbf{u}_{\text{naive}} = [-24.0, 13.25, 3.75]^\top$:</strong></p>
+        $$\mathbf{u}_{\text{naive}} \cdot \mathbf{v} = -24.0(1) + 13.25(1) + 3.75(1) = -24.0 + 17.0 = -7.0$$
+        $$\|\mathbf{u}_{\text{naive}}\|_2 = \sqrt{(-24)^2 + 13.25^2 + 3.75^2} = \sqrt{576 + 175.5625 + 14.0625} = \sqrt{765.625} \approx 27.670$$
+        $$\|\mathbf{v}\|_2 = \sqrt{3} \approx 1.73205$$
+        $$\cos(\mathbf{u}_{\text{naive}}, \mathbf{v}) = \frac{-7.0}{27.670 \times 1.73205} = \frac{-7.0}{47.926} \approx \mathbf{-0.1461}$$
+
+        <p class="step"><strong>Step 4: Percentage Distortion &amp; Impact</strong></p>
+        <p>A query that has <strong>identical meaning</strong> ($\cos = 1.000$) is transformed into a <strong>negatively correlated vector</strong> ($\cos = -0.146$) solely because padding tokens were included in the average! This proves why masking in pooling layers is non-negotiable in production SBERT implementations.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1B.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1B.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+        <span class="company-tag company-elastic">Elastic</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Two-Stage Neural Retrieval Latency &amp; Memory Sizing Audit:</strong></p>
+        <p>An enterprise knowledge base contains $N = 1,000,000$ internal documentation articles. Average query length is $L_q = 32$ tokens, and average document chunk length is $L_d = 256$ tokens. You must evaluate two search architectures on an NVIDIA A100 GPU cluster:</p>
+        <ul>
+          <li><strong>Architecture 1 (Pure Cross-Encoder):</strong> Concatenates query and document into a single sequence of length $L = L_q + L_d + 3 = 291$ tokens. Each cross-encoder forward pass takes $t_{\text{CE}} = 1.2 \text{ ms}$.</li>
+          <li><strong>Architecture 2 (Two-Stage Cascade):</strong>
+            <ul>
+              <li><em>Stage 1 (Bi-Encoder + HNSW Index):</em> Document embeddings are pre-computed offline. Query encoding takes $t_{\text{embed}} = 4.0 \text{ ms}$. Approximate Nearest Neighbor search over the $1\text{M}$ vectors in HNSW retrieves the top $K = 100$ candidate document IDs in $t_{\text{MIPS}} = 1.5 \text{ ms}$.</li>
+              <li><em>Stage 2 (Cross-Encoder Re-ranker):</em> Re-ranks the $K = 100$ candidate pairs using batched Cross-Encoder inference with total time $t_{\text{rerank}} = 15.0 \text{ ms}$.</li>
+            </ul>
+          </li>
+        </ul>
+        <ol>
+          <li>Calculate the total latency required to serve a single query across the $1\text{M}$ documents using pure Cross-Encoder inference on a single GPU.</li>
+          <li>Calculate the total latency of the Two-Stage Cascade on a single GPU.</li>
+          <li>Compute the exact latency speedup factor of Architecture 2 over Architecture 1.</li>
+          <li>For an embedding dimension $d = 768$, calculate the exact memory required to store the $1,000,000$ document vectors in RAM under FP32, FP16, and INT8 scalar quantization.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: Pure Cross-Encoder Latency</strong></p>
+        <p>To rank $1,000,000$ documents, the cross-encoder must execute $10^6$ forward passes:</p>
+        $$\text{Total Time}_{\text{CE}} = 1,000,000 \times 1.2 \text{ ms} = 1,200,000 \text{ ms} = 1,200 \text{ seconds} = \mathbf{20.0 \text{ minutes per query!}}$$
+        <p>Even across a cluster of 64 A100 GPUs, latency is $\frac{1200 \text{ s}}{64} = 18.75 \text{ seconds}$, completely violating the $\le 100 \text{ ms}$ real-time SLA.</p>
+
+        <p class="step"><strong>Step 2: Two-Stage Cascade Latency</strong></p>
+        <p>The two-stage pipeline computes:</p>
+        $$\text{Total Time}_{\text{Cascade}} = t_{\text{embed}} + t_{\text{MIPS}} + t_{\text{rerank}} = 4.0 \text{ ms} + 1.5 \text{ ms} + 15.0 \text{ ms} = \mathbf{20.5 \text{ ms}}$$
+        <p>Total query latency is well within production real-time interactive thresholds ($< 50 \text{ ms}$).</p>
+
+        <p class="step"><strong>Step 3: Speedup Factor</strong></p>
+        $$\text{Speedup} = \frac{1,200,000 \text{ ms}}{20.5 \text{ ms}} \approx \mathbf{58,536\times \text{ faster!}}$$
+        <p>The two-stage pipeline delivers an almost <strong>60,000-fold speedup</strong> with negligible loss in retrieval recall.</p>
+
+        <p class="step"><strong>Step 4: Vector Index Memory Sizing</strong></p>
+        <p>Total number of floats for $10^6$ vectors of dimension $768$ is:</p>
+        $$\text{Total Elements} = 1,000,000 \times 768 = 768,000,000 \text{ values}$$
+        <ul>
+          <li><strong>FP32 (4 bytes/param):</strong>
+          $$\text{Bytes} = 768 \times 10^6 \times 4 = 3,072,000,000 \text{ bytes} \approx \mathbf{3.072 \text{ GB}} \quad (2.86 \text{ GiB})$$</li>
+          <li><strong>FP16 (2 bytes/param):</strong>
+          $$\text{Bytes} = 768 \times 10^6 \times 2 = 1,536,000,000 \text{ bytes} \approx \mathbf{1.536 \text{ GB}} \quad (1.43 \text{ GiB})$$</li>
+          <li><strong>INT8 Quantized (1 byte/param):</strong>
+          $$\text{Bytes} = 768 \times 10^6 \times 1 = 768,000,000 \text{ bytes} \approx \mathbf{0.768 \text{ GB}} \quad (732.4 \text{ MiB})$$</li>
+        </ul>
+        <p>Using INT8 quantization allows the entire 1-million vector index to reside comfortably in under 800 MB of RAM.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1B.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1B.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-cohere">Cohere</span>
+        <span class="company-tag company-bytedance">ByteDance</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Multiple Negatives Ranking Loss (MNRL) In-Batch Matrix Trace:</strong></p>
+        <p>In-batch contrastive learning treats all other $(B-1)$ documents in a mini-batch as negative samples for each query. Consider a mini-batch of $B = 3$ pairs with normalized 2D embeddings:</p>
+        <p>Queries: $\mathbf{q}_1 = [1.0, 0.0]^\top$, $\mathbf{q}_2 = [0.0, 1.0]^\top$, $\mathbf{q}_3 = [0.6, 0.8]^\top$.</p>
+        <p>Documents: $\mathbf{d}_1 = [0.8, 0.6]^\top$, $\mathbf{d}_2 = [-0.6, 0.8]^\top$, $\mathbf{d}_3 = [0.0, 1.0]^\top$.</p>
+        <p>Temperature scale parameter is $s = 1.0$ (i.e. $\tau = 1.0$).</p>
+        <ol>
+          <li>Construct the full $3 \times 3$ cosine similarity matrix $S = Q D^\top$, where $S_{ij} = \mathbf{q}_i^\top \mathbf{d}_j$.</li>
+          <li>Compute the row-wise Softmax probability matrix $P \in \mathbb{R}^{3 \times 3}$, where $P_{ij} = \frac{e^{S_{ij}}}{\sum_{k=1}^3 e^{S_{ik}}}$.</li>
+          <li>Calculate the in-batch MNRL scalar loss: $\mathcal{L}_{\text{MNRL}} = -\frac{1}{3} \sum_{i=1}^3 \ln(P_{ii})$.</li>
+          <li>Evaluate the loss gradient $\frac{\partial \mathcal{L}}{\partial S_{1j}}$ across the first row, and identify which negative document receives the largest repulsive gradient pushing it away from query $\mathbf{q}_1$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: Similarity Matrix $S = Q D^\top$</strong></p>
+        <p>Evaluate inner products for each cell:</p>
+        <ul>
+          <li>Row 1 ($\mathbf{q}_1 = [1.0, 0.0]$):
+          $$S_{11} = (1.0)(0.8) + (0.0)(0.6) = \mathbf{0.80}$$
+          $$S_{12} = (1.0)(-0.6) + (0.0)(0.8) = \mathbf{-0.60}$$
+          $$S_{13} = (1.0)(0.0) + (0.0)(1.0) = \mathbf{0.00}$$</li>
+          <li>Row 2 ($\mathbf{q}_2 = [0.0, 1.0]$):
+          $$S_{21} = (0.0)(0.8) + (1.0)(0.6) = \mathbf{0.60}$$
+          $$S_{22} = (0.0)(-0.6) + (1.0)(0.8) = \mathbf{0.80}$$
+          $$S_{23} = (0.0)(0.0) + (1.0)(1.0) = \mathbf{1.00}$$</li>
+          <li>Row 3 ($\mathbf{q}_3 = [0.6, 0.8]$):
+          $$S_{31} = (0.6)(0.8) + (0.8)(0.6) = 0.48 + 0.48 = \mathbf{0.96}$$
+          $$S_{32} = (0.6)(-0.6) + (0.8)(0.8) = -0.36 + 0.64 = \mathbf{0.28}$$
+          $$S_{33} = (0.6)(0.0) + (0.8)(1.0) = 0.00 + 0.80 = \mathbf{0.80}$$</li>
+        </ul>
+        $$S = \begin{bmatrix} 0.80 & -0.60 & 0.00 \\ 0.60 & 0.80 & 1.00 \\ 0.96 & 0.28 & 0.80 \end{bmatrix}$$
+
+        <p class="step"><strong>Step 2: Row-wise Softmax Probability Matrix $P$</strong></p>
+        <ul>
+          <li><strong>Row 1:</strong> Exponentials: $e^{0.80} \approx 2.22554$, $e^{-0.60} \approx 0.54881$, $e^{0.00} = 1.00000$.
+          Sum $\Sigma_1 = 3.77435$.
+          $$P_{11} = \frac{2.22554}{3.77435} \approx \mathbf{0.5896}, \quad P_{12} = \frac{0.54881}{3.77435} \approx \mathbf{0.1454}, \quad P_{13} = \frac{1.00000}{3.77435} \approx \mathbf{0.2650}$$</li>
+          <li><strong>Row 2:</strong> Exponentials: $e^{0.60} \approx 1.82212$, $e^{0.80} \approx 2.22554$, $e^{1.00} \approx 2.71828$.
+          Sum $\Sigma_2 = 6.76594$.
+          $$P_{21} = \frac{1.82212}{6.76594} \approx \mathbf{0.2693}, \quad P_{22} = \frac{2.22554}{6.76594} \approx \mathbf{0.3290}, \quad P_{23} = \frac{2.71828}{6.76594} \approx \mathbf{0.4018}$$</li>
+          <li><strong>Row 3:</strong> Exponentials: $e^{0.96} \approx 2.61170$, $e^{0.28} \approx 1.32313$, $e^{0.80} \approx 2.22554$.
+          Sum $\Sigma_3 = 6.16037$.
+          $$P_{31} = \frac{2.61170}{6.16037} \approx \mathbf{0.4240}, \quad P_{32} = \frac{1.32313}{6.16037} \approx \mathbf{0.2148}, \quad P_{33} = \frac{2.22554}{6.16037} \approx \mathbf{0.3613}$$</li>
+        </ul>
+        $$P = \begin{bmatrix} 0.5896 & 0.1454 & 0.2650 \\ 0.2693 & 0.3290 & 0.4018 \\ 0.4240 & 0.2148 & 0.3613 \end{bmatrix}$$
+
+        <p class="step"><strong>Step 3: In-Batch MNRL Scalar Loss</strong></p>
+        <p>The objective maximizes the diagonal elements $P_{11}, P_{22}, P_{33}$:</p>
+        $$\mathcal{L} = -\frac{1}{3} \left[ \ln(0.5896) + \ln(0.3290) + \ln(0.3613) \right]$$
+        $$\ln(0.5896) \approx -0.5283, \quad \ln(0.3290) \approx -1.1117, \quad \ln(0.3613) \approx -1.0180$$
+        $$\text{Sum} = -0.5283 - 1.1117 - 1.0180 = -2.6580$$
+        $$\mathcal{L}_{\text{MNRL}} = -\frac{1}{3} (-2.6580) = \mathbf{0.8860}$$
+
+        <p class="step"><strong>Step 4: Gradient Trace on First Row</strong></p>
+        <p>Using the standard Softmax Cross-Entropy derivative $\frac{\partial \mathcal{L}}{\partial S_{ij}} = \frac{1}{B}(P_{ij} - \delta_{ij})$:</p>
+        $$\frac{\partial \mathcal{L}}{\partial S_{11}} = \frac{1}{3}(0.5896 - 1.0) = \mathbf{-0.1368} \quad (\text{attractive force on true positive pair})$$
+        $$\frac{\partial \mathcal{L}}{\partial S_{12}} = \frac{1}{3}(0.1454 - 0.0) = \mathbf{+0.0485} \quad (\text{repulsive force})$$
+        $$\frac{\partial \mathcal{L}}{\partial S_{13}} = \frac{1}{3}(0.2650 - 0.0) = \mathbf{+0.0883} \quad (\text{repulsive force})$$
+        <p>Because $\frac{\partial \mathcal{L}}{\partial S_{13}} = +0.0883 > +0.0485$, <strong>document $\mathbf{d}_3$ receives nearly double the repulsive gradient force</strong> compared to document $\mathbf{d}_2$, because it is closer in angle to query 1 ($S_{13} = 0.0 > S_{12} = -0.6$). MNRL automatically focuses gradient pressure on the hardest in-batch negative!</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1B.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1B.5</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google AI</span>
+        <span class="company-tag company-deepmind">DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Mathematical Proof that BERT MLM Maximizes the Lower Bound on Contextual Mutual Information:</strong></p>
+        <p>Let $\mathbf{W} = (W_1, \dots, W_N)$ be a sequence of random variables representing words in a sentence drawn from language distribution $P(\mathbf{W})$.</p>
+        <ol>
+          <li>Show why the standard autoregressive decomposition $P(\mathbf{W}) = \prod_{t=1}^N P(W_t | W_{<t})$ imposes an asymmetric causal ordering constraint.</li>
+          <li>In Masked Language Modeling, a token index $i \in \{1, \dots, N\}$ is uniformly chosen and masked. Write the MLM objective $\mathcal{J}_{\text{MLM}}$ as the expected log-likelihood of predicting the masked token $W_i$ conditioned on all remaining words $\mathbf{W}_{\setminus \{i\}}$.</li>
+          <li>Define the Mutual Information $I(W_i; \mathbf{W}_{\setminus \{i\}})$ between token $W_i$ and its bidirectional context.</li>
+          <li>Prove that maximizing the Masked Language Modeling objective directly maximizes a variational lower bound on the average mutual information between each token and its surrounding bidirectional sentence:
+          $$\mathcal{J}_{\text{MLM}} \ge \frac{1}{N} \sum_{i=1}^N I(W_i; \mathbf{W}_{\setminus \{i\}}) - H(W_i)$$</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Proof:</div>
+        <p class="step"><strong>Step 1: The Asymmetry of Autoregressive Modeling</strong></p>
+        <p>By the chain rule of probability, any joint distribution can be factorized along an arbitrary permutation $\pi$:</p>
+        $$P(\mathbf{W}) = \prod_{t=1}^N P(W_{\pi(t)} | W_{\pi(<t)})$$
+        <p>Standard left-to-right causal models select the canonical order $\pi(t) = t$. While exact for generative sampling, for sentence understanding it artificially forces token $W_t$ to be conditionally independent of future tokens $W_{t+1}, \dots, W_N$ given the past, preventing the model from resolving syntactic ambiguities where the semantic disambiguator appears at the end of the sentence (e.g., <em>"The bank was flooded with water"</em> vs <em>"The bank approved the loan"</em>).</p>
+
+        <p class="step"><strong>Step 2: The Masked Language Modeling Objective</strong></p>
+        <p>Let $i \sim \text{Uniform}(1, \dots, N)$. The MLM training objective parameterized by network weights $\theta$ is:</p>
+        $$\mathcal{J}_{\text{MLM}}(\theta) = \frac{1}{N} \sum_{i=1}^N \mathbb{E}_{P(W_i, \mathbf{W}_{\setminus \{i\}})} \left[ \log Q_\theta(W_i | \mathbf{W}_{\setminus \{i\}}) \right]$$
+        <p>where $Q_\theta(W_i | \mathbf{W}_{\setminus \{i\}})$ is the model's Softmax output over vocabulary $V$.</p>
+
+        <p class="step"><strong>Step 3: Definition of Contextual Mutual Information</strong></p>
+        <p>The Mutual Information between the masked token $W_i$ and its surrounding context $\mathbf{W}_{\setminus \{i\}}$ is:</p>
+        $$I(W_i; \mathbf{W}_{\setminus \{i\}}) = H(W_i) - H(W_i | \mathbf{W}_{\setminus \{i\}})$$
+        <p>where $H(W_i) = -\sum_{w} P(W_i = w) \log P(W_i = w)$ is the marginal entropy of token $W_i$, and $H(W_i | \mathbf{W}_{\setminus \{i\}})$ is the conditional entropy:</p>
+        $$H(W_i | \mathbf{W}_{\setminus \{i\}}) = -\mathbb{E}_{P(W_i, \mathbf{W}_{\setminus \{i\}})} \left[ \log P(W_i | \mathbf{W}_{\setminus \{i\}}) \right]$$
+
+        <p class="step"><strong>Step 4: Deriving the Variational Lower Bound</strong></p>
+        <p>Consider the Kullback-Leibler (KL) divergence between the true posterior $P(W_i | \mathbf{W}_{\setminus \{i\}})$ and the model distribution $Q_\theta(W_i | \mathbf{W}_{\setminus \{i\}})$:</p>
+        $$D_{\text{KL}}\left( P(W_i | \mathbf{W}_{\setminus \{i\}}) \parallel Q_\theta(W_i | \mathbf{W}_{\setminus \{i\}}) \right) \ge 0$$
+        <p>Expanding the KL divergence:</p>
+        $$\mathbb{E}_{P} \left[ \log \frac{P(W_i | \mathbf{W}_{\setminus \{i\}})}{Q_\theta(W_i | \mathbf{W}_{\setminus \{i\}})} \right] \ge 0$$
+        $$\mathbb{E}_{P} \left[ \log P(W_i | \mathbf{W}_{\setminus \{i\}}) \right] - \mathbb{E}_{P} \left[ \log Q_\theta(W_i | \mathbf{W}_{\setminus \{i\}}) \right] \ge 0$$
+        $$-H(W_i | \mathbf{W}_{\setminus \{i\}}) - \mathbb{E}_{P} \left[ \log Q_\theta(W_i | \mathbf{W}_{\setminus \{i\}}) \right] \ge 0$$
+        <p>Rearranging terms:</p>
+        $$\mathbb{E}_{P} \left[ \log Q_\theta(W_i | \mathbf{W}_{\setminus \{i\}}) \right] \le -H(W_i | \mathbf{W}_{\setminus \{i\}})$$
+        <p>Substitute $H(W_i | \mathbf{W}_{\setminus \{i\}}) = H(W_i) - I(W_i; \mathbf{W}_{\setminus \{i\}})$:</p>
+        $$\mathbb{E}_{P} \left[ \log Q_\theta(W_i | \mathbf{W}_{\setminus \{i\}}) \right] \le I(W_i; \mathbf{W}_{\setminus \{i\}}) - H(W_i)$$
+        <p>Averaging over all positions $i \in \{1, \dots, N\}$, we find that the negative cross-entropy loss satisfies:</p>
+        $$\mathcal{J}_{\text{MLM}}(\theta) = -\mathcal{L}_{\text{MLM}}(\theta) \ge \frac{1}{N} \sum_{i=1}^N I(W_i; \mathbf{W}_{\setminus \{i\}}) - H(W_i) \quad \blacksquare$$
+        <p>Maximizing the MLM objective directly tightens the variational lower bound, forcing the Transformer's internal bidirectional attention weights to capture the maximum possible statistical dependency between each word and its surrounding sentence.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1B.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1B.6</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-microsoft">Microsoft Research</span>
+        <span class="company-tag company-cmu">CMU</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>First-Principles Mathematical Derivation of DeBERTa Disentangled Attention:</strong></p>
+        <p>In standard BERT, the input representation of token $i$ is the direct sum of content embedding $\mathbf{c}_i$ and absolute position embedding $\mathbf{p}_i$: $\mathbf{x}_i = \mathbf{c}_i + \mathbf{p}_i$.</p>
+        <ol>
+          <li>Express the unscaled attention score $A_{i,j} = \mathbf{x}_i W_Q W_K^\top \mathbf{x}_j^\top$ and expand it into four separate bilinear matrix products.</li>
+          <li>Identify why the fourth term ($\mathbf{p}_i W_Q W_K^\top \mathbf{p}_j^\top$) provides virtually zero semantic signal in natural language.</li>
+          <li>In DeBERTa (He et al., 2020), content and relative positions are completely disentangled. Let $\mathbf{p}_{i|j}$ denote the relative distance vector from token $i$ to token $j$. Show how DeBERTa uses four independent projection matrices $W_{q,c}, W_{k,c}, W_{q,r}, W_{k,r}$ to construct the 3-term disentangled attention score:
+          $$A_{i,j} = \mathbf{c}_i W_{q,c} W_{k,c}^\top \mathbf{c}_j^\top + \mathbf{c}_i W_{q,c} W_{k,r}^\top \mathbf{p}_{i|j}^\top + \mathbf{p}_{j|i} W_{q,r} W_{k,c}^\top \mathbf{c}_j^\top$$</li>
+          <li>Explain the linguistic meaning of the "content-to-position" vs "position-to-content" terms.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Derivation:</div>
+        <p class="step"><strong>Step 1: Expansion of Standard BERT Attention</strong></p>
+        <p>Substituting $\mathbf{x}_i = \mathbf{c}_i + \mathbf{p}_i$ and $\mathbf{x}_j = \mathbf{c}_j + \mathbf{p}_j$ into the bilinear attention product:</p>
+        $$A_{i,j} = (\mathbf{c}_i + \mathbf{p}_i) W_Q W_K^\top (\mathbf{c}_j + \mathbf{p}_j)^\top$$
+        <p>Expanding the matrix product by distributivity:</p>
+        $$A_{i,j} = \underbrace{\mathbf{c}_i W_Q W_K^\top \mathbf{c}_j^\top}_{\text{content-to-content}} + \underbrace{\mathbf{c}_i W_Q W_K^\top \mathbf{p}_j^\top}_{\text{content-to-position}} + \underbrace{\mathbf{p}_i W_Q W_K^\top \mathbf{c}_j^\top}_{\text{position-to-content}} + \underbrace{\mathbf{p}_i W_Q W_K^\top \mathbf{p}_j^\top}_{\text{position-to-position}}$$
+
+        <p class="step"><strong>Step 2: Pathology of the Position-to-Position Term</strong></p>
+        <p>The fourth term $\mathbf{p}_i W_Q W_K^\top \mathbf{p}_j^\top$ depends <em>only on where the words are located in the sequence</em>, completely ignoring what the words actually mean. For instance, it says "token at position 3 should attend to token at position 5" regardless of whether the sentence is a question, a legal contract, or code. In natural text, absolute position-to-position bias is largely redundant and adds substantial noise. DeBERTa explicitly drops this term, setting it to zero.</p>
+
+        <p class="step"><strong>Step 3: DeBERTa Disentangled Projection Formulation</strong></p>
+        <p>Rather than forcing content and position vectors to share the single projection matrices $W_Q$ and $W_K$, DeBERTa defines dedicated projections:</p>
+        <ul>
+          <li>Content Query: $\mathbf{q}_i^c = \mathbf{c}_i W_{q,c}$</li>
+          <li>Content Key: $\mathbf{k}_j^c = \mathbf{c}_j W_{k,c}$</li>
+          <li>Relative Position Query: $\mathbf{q}_{j|i}^r = \mathbf{p}_{j|i} W_{q,r}$</li>
+          <li>Relative Position Key: $\mathbf{k}_{i|j}^r = \mathbf{p}_{i|j} W_{k,r}$</li>
+        </ul>
+        <p>The unscaled attention score is formulated as the sum of three disentangled components:</p>
+        $$A_{i,j} = \underbrace{\mathbf{q}_i^c (\mathbf{k}_j^c)^\top}_{\text{content-to-content}} + \underbrace{\mathbf{q}_i^c (\mathbf{k}_{i|j}^r)^\top}_{\text{content-to-position}} + \underbrace{\mathbf{q}_{j|i}^r (\mathbf{k}_j^c)^\top}_{\text{position-to-content}} \quad \blacksquare$$
+
+        <p class="step"><strong>Step 4: Linguistic Intuition of Disentangled Terms</strong></p>
+        <ul>
+          <li><strong>Content-to-Content ($\mathbf{q}_i^c (\mathbf{k}_j^c)^\top$):</strong> Captures pure semantic co-reference (e.g., word "apple" relates to word "fruit" regardless of where they appear).</li>
+          <li><strong>Content-to-Position ($\mathbf{q}_i^c (\mathbf{k}_{i|j}^r)^\top$):</strong> Evaluates: <em>"Given that I am the verb 'threw', how important is the token located 2 positions to my right?"</em> (likely the direct object noun).</li>
+          <li><strong>Position-to-Content ($\mathbf{q}_{j|i}^r (\mathbf{k}_j^c)^\top$):</strong> Evaluates: <em>"Given that a token is located 1 position to my left, how does its specific content (e.g., adjective 'heavy') modify me?"</em></li>
+        </ul>
+        <p>This disentanglement allows DeBERTa to model syntax and grammatical dependency parsing with unprecedented mathematical precision.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1B.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1B.7</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap MCQ: Why RoBERTa Discarded Next Sentence Prediction (NSP):</strong></p>
+        <p>In the original BERT paper (Devlin et al., 2018), pre-training used a dual objective: Masked Language Modeling (MLM) + Next Sentence Prediction (NSP). In 2019, Meta AI published RoBERTa (Liu et al.), completely removing the NSP task. Which of the following statements provides the precise empirical and theoretical reason for discarding NSP?</p>
+        <ol type="A">
+          <li>NSP negative pairs were sampled from different documents, so the model learned shallow topical discrimination rather than sentence coherence; training on contiguous text chunks with MLM alone strictly improved downstream GLUE and SQuAD benchmarks.</li>
+          <li>NSP required a secondary classification head that saturated GPU tensor cores, causing memory fragmentation.</li>
+          <li>Binary cross-entropy is non-convex when optimized jointly with vocabulary softmax, causing loss oscillation.</li>
+          <li>NSP was mathematically incompatible with dynamic masking.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Analysis:</div>
+        <p class="step"><strong>Correct Answer: A</strong></p>
+        <p class="step"><strong>Deep Architectural and Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Why A is Correct:</strong> In BERT's original implementation of NSP, a negative sentence pair $(A, B)$ was formed by taking sentence $A$ from document 1 and sampling sentence $B$ at random from an entirely different document 2.
+          <br>Consequently, Sentence $A$ might be about astronomy (<em>"The Hubble telescope observed a distant supernova"</em>) while Sentence $B$ was about cooking (<em>"Fold the egg whites gently into the batter"</em>).
+          <br>The network quickly discovered that it did not need to understand multi-sentence grammatical coherence or discourse flow; it only had to detect whether the two sentences shared similar topic keywords!
+          <br>Furthermore, splitting inputs into short sentence pairs prevented the Transformer from attending across long paragraph spans. When Liu et al. tested full contiguous document blocks (<code>FULL-SENTENCES</code>) with MLM alone, downstream performance on SQuAD, MNLI, and SST-2 <strong>strictly improved</strong> across the board. NSP was a noisy, misleading auxiliary task.</li>
+          <li><strong>Why B is False:</strong> The NSP head is a trivial linear layer $\mathbf{w}_{\text{NSP}} \in \mathbb{R}^{d \times 2}$ requiring negligible memory ($< 2 \text{ KB}$); it had zero impact on tensor core saturation.</li>
+          <li><strong>Why C is False:</strong> Joint multi-task optimization of cross-entropy heads is standard across deep learning and does not introduce loss oscillation.</li>
+          <li><strong>Why D is False:</strong> Dynamic masking operates purely at the token level; it is completely orthogonal to sequence-level sentence pairing.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.1B.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.1B.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-anthropic">Anthropic</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap MCQ: Anisotropy &amp; The `[CLS]` Token vs Mean Pooling Failure Mode in SBERT:</strong></p>
+        <p>In Sentence-BERT (Reimers &amp; Gurevych, 2019), the authors demonstrated that if you take an off-the-shelf, pre-trained BERT model and compute cosine similarities between sentences using the raw final-layer <code>[CLS]</code> token, the results are catastrophically poor (often yielding Pearson correlations near zero or worse than raw GloVe vectors). Which of the following statements provides the mathematically rigorous reason for this phenomenon?</p>
+        <ol type="A">
+          <li>Pre-trained contextual word representations suffer from <strong>anisotropy (the representation cone problem)</strong>, where all vectors cluster in a narrow, high-dimensional directional cone with high average cosine similarity, and the raw <code>[CLS]</code> token was optimized strictly for the binary NSP classification hyperplane rather than sentence-level semantic centroid representation.</li>
+          <li>The <code>[CLS]</code> token embedding is masked 15% of the time during MLM, creating permanent numerical zeroes in its weight gradients.</li>
+          <li>Cosine similarity is non-metric on unit spheres and produces imaginary eigenvalues when computed on 768-dimensional vectors.</li>
+          <li>The LayerNorm layers in BERT enforce zero variance across tokens, causing <code>[CLS]</code> vectors to collapse to uniform constants.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Analysis:</div>
+        <p class="step"><strong>Correct Answer: A</strong></p>
+        <p class="step"><strong>Deep Geometric and Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Why A is Correct:</strong> Ethayarajh (EMNLP 2019) proved that contextual word embeddings from pre-trained language models (BERT, RoBERTa, GPT-2) exhibit severe <strong>anisotropy</strong>: instead of being uniformly distributed across all directions of the unit sphere $\mathbb{S}^{d-1}$, the embeddings are squeezed into a narrow cone around a dominant singular direction.
+          <br>In an anisotropic space, any two arbitrary sentences chosen at random yield an extremely high baseline cosine similarity ($\cos(\mathbf{u}, \mathbf{v}) \in [0.85, 0.98]$), completely destroying semantic discrimination!
+          <br>Furthermore, the <code>[CLS]</code> token in raw BERT was never trained as a semantic sentence summary; its only training signal came from the binary NSP classifier ($\sigma(\mathbf{w}^\top \mathbf{h}_{[\text{CLS}]})$), forcing it to act merely as a linear separator for topical shifts.
+          <br><strong>Sentence-BERT solved both problems:</strong> Mean Pooling over all token contextual states averages out idiosyncratic word noises, and fine-tuning on NLI/MNRL with a Siamese contrastive objective regularizes the space (promoting <em>uniformity</em> on the hypersphere, Wang & Isola, 2020), expanding the dynamic range of cosine similarities across $[-1.0, +1.0]$.</li>
+          <li><strong>Why B is False:</strong> Special tokens <code>[CLS]</code> and <code>[SEP]</code> are <em>explicitly exempt</em> from the 15% masking rule in BERT; they are never masked.</li>
+          <li><strong>Why C is False:</strong> Cosine similarity on normalized unit vectors is strictly isometric to Euclidean distance ($d^2 = 2 - 2\cos$) and is a valid metric on hyperspheres of any dimension.</li>
+          <li><strong>Why D is False:</strong> LayerNorm normalizes across the feature dimension to zero mean and unit variance; it never forces token variance across sequences to collapse.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- CHAPTER SUMMARY -->
+    <div class="chapter-summary">
+      <h4>Chapter 5.1B Key Takeaways</h4>
+      <ul>
+        <li><strong>Encoder Architecture:</strong> Encoders employ unrestricted bidirectional self-attention and are optimized via Masked Language Modeling (MLM), making them ideal for sentence embeddings, classification, and retrieval.</li>
+        <li><strong>BERT:</strong> Trained on 15% masked tokens with WordPiece tokenization; maps words into rich context-dependent representations.</li>
+        <li><strong>RoBERTa Improvements:</strong> Proved that BERT was undertrained, eliminated the detrimental NSP task, implemented dynamic masking, and scaled batch sizes.</li>
+        <li><strong>DeBERTa Disentanglement:</strong> Decoupled content and relative position vectors, computing content-to-content, content-to-position, and position-to-content attention for human-level NLU.</li>
+        <li><strong>SBERT Siamese Networks:</strong> Solved the $O(N^2)$ cross-encoder bottleneck by pre-computing fixed-size sentence vectors via mask-aware mean pooling.</li>
+        <li><strong>Two-Stage Enterprise Search:</strong> High-throughput Bi-Encoder MIPS for candidate recall ($K=100$) followed by a heavy Cross-Encoder for precision re-ranking ($K=10$).</li>
+        <li><strong>Multiple Negatives Ranking Loss (MNRL):</strong> Efficient in-batch contrastive loss that treats all other documents in a mini-batch as negative samples, scaling dense retrieval training.</li>
+      </ul>
+    </div>
+  </div>
+</div>

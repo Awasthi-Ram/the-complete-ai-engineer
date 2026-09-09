@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="logistic_sigmoid_boundary.png" alt="Figure 2.3.1: logistic sigmoid boundary">
+        <div class="diagram-caption"><strong>Figure 2.3.1:</strong> The Logistic Sigmoid mapping and separating hyperplane. The linear combination $z = \mathbf{w}^T \mathbf{x} + b$ is squashed through non-linear activation $\sigma(z) = 1/(1 + e^{-z})$ into calibrated posterior class probabilities $P(Y=1 \mid \mathbf{x})$. The threshold $p=0.5$ defines the orthogonal decision hyperplane.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 2.3 — LOGISTIC REGRESSION & MAXIMUM LIKELIHOOD
      ====================================================================== -->
@@ -5,7 +11,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 2.3</span>
     <h2 class="chapter-title">Logistic Regression &amp; Maximum Likelihood</h2>
-    <span class="chapter-subtitle">Odds Ratios, The Sigmoid Identity, BCE Loss &amp; Iteratively Reweighted Least Squares</span>
+    <span class="chapter-subtitle">Odds Ratios, The Sigmoid Identity, BCE Loss, IRLS &amp; Softmax Classification</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -19,99 +25,394 @@
 
     <!-- SECTION 1: THE ODDS RATIO & SIGMOID -->
     <h3>1. From Linear Output to Calibrated Probability</h3>
-    <p>Why can we not simply use linear regression $y = \mathbf{w}^T \mathbf{x}$ for binary classification ($y \in \{0, 1\}$)?</p>
+    <p>Why can we not simply use linear regression $y = \mathbf{w}^T \mathbf{x} + b$ for binary classification ($y \in \{0, 1\}$)?</p>
     <ol>
-      <li><strong>Unbounded Range:</strong> A linear function $\mathbf{w}^T \mathbf{x}$ has range $(-\infty, +\infty)$. For extreme feature values, it predicts probabilities like $-2.5$ or $+3.8$, violating the fundamental axioms of probability.</li>
-      <li><strong>Sensitivity to Outliers:</strong> Squaring errors on correctly classified points far from the decision boundary tilts the line, destroying classification accuracy.</li>
+      <li><strong>Unbounded Range:</strong> A linear combination $\mathbf{w}^T \mathbf{x} + b$ maps to $(-\infty, +\infty)$. For extreme feature values, it predicts values like $-1.8$ or $+2.4$, violating the fundamental Kolmogorov axioms of probability.</li>
+      <li><strong>Distortion by Outliers:</strong> Squaring errors on points that are <em>extremely well classified</em> (e.g., $y=1$ and $\hat{y}=4.0$) exerts a massive penalty $(4.0 - 1.0)^2 = 9.0$, forcing the decision boundary to rotate and corrupting classification accuracy on borderline points.</li>
     </ol>
 
     <h4>The Log-Odds (Logit) Transformation</h4>
-    <p>To map probability $p \in (0, 1)$ onto the real line $(-\infty, +\infty)$, we first define the <strong>Odds Ratio</strong>—the ratio of the probability of an event occurring to the probability of it not occurring:</p>
+    <p>To map a bounded probability $p \in (0, 1)$ smoothly onto the entire real line $(-\infty, +\infty)$, we first define the <strong>Odds Ratio</strong>—the ratio of success probability to failure probability:</p>
     $$\text{Odds} = \frac{p}{1 - p} \in (0, +\infty)$$
-    <p>Taking the natural logarithm yields the <strong>Logit (Log-Odds)</strong> function, which maps $(0, 1)$ smoothly onto $(-\infty, +\infty)$:</p>
-    $$\text{logit}(p) = \ln\left(\frac{p}{1 - p}\right) = \mathbf{w}^T \mathbf{x}$$
-    <p>Now, solve for $p$ by exponentiating both sides:</p>
-    $$\frac{p}{1 - p} = e^{\mathbf{w}^T \mathbf{x}} \implies p = e^{\mathbf{w}^T \mathbf{x}} (1 - p) = e^{\mathbf{w}^T \mathbf{x}} - p e^{\mathbf{w}^T \mathbf{x}}$$
-    $$p (1 + e^{\mathbf{w}^T \mathbf{x}}) = e^{\mathbf{w}^T \mathbf{x}} \implies p = \frac{e^{\mathbf{w}^T \mathbf{x}}}{1 + e^{\mathbf{w}^T \mathbf{x}}} = \frac{1}{1 + e^{-\mathbf{w}^T \mathbf{x}}} = \sigma(\mathbf{w}^T \mathbf{x})$$
-    <p>This derives the <strong>Sigmoid Function</strong> $\sigma(z) = \frac{1}{1 + e^{-z}}$!</p>
+    <p>Taking the natural logarithm yields the <strong>Logit (Log-Odds)</strong> function:</p>
+    $$\text{logit}(p) = \ln\left(\frac{p}{1 - p}\right) = \mathbf{w}^T \mathbf{x} + b$$
+    <p>Solving algebraically for $p$:</p>
+    $$\frac{p}{1 - p} = e^{\mathbf{w}^T \mathbf{x} + b} \implies p = e^{\mathbf{w}^T \mathbf{x} + b} (1 - p) = e^{\mathbf{w}^T \mathbf{x} + b} - p e^{\mathbf{w}^T \mathbf{x} + b}$$
+    $$p (1 + e^{\mathbf{w}^T \mathbf{x} + b}) = e^{\mathbf{w}^T \mathbf{x} + b} \implies p = \frac{e^{\mathbf{w}^T \mathbf{x} + b}}{1 + e^{\mathbf{w}^T \mathbf{x} + b}} = \frac{1}{1 + e^{-(\mathbf{w}^T \mathbf{x} + b)}} = \sigma(\mathbf{w}^T \mathbf{x} + b)$$
+    <p>This derives the <strong>Sigmoid (Logistic) Function</strong> $\sigma(z) = \frac{1}{1 + e^{-z}}$!</p>
 
     <div class="key-insight">
       <p><strong>The Crucial Sigmoid Derivative Identity:</strong></p>
       $$\sigma'(z) = \frac{d}{dz} (1 + e^{-z})^{-1} = -(1 + e^{-z})^{-2} (-e^{-z}) = \frac{1}{1 + e^{-z}} \cdot \frac{e^{-z}}{1 + e^{-z}} = \sigma(z) (1 - \sigma(z))$$
-      <p><em>The derivative of the sigmoid is simply its own output multiplied by $(1 - \text{output})$! This algebraic property makes logistic gradient calculations blazingly fast.</em></p>
+      <p><em>The derivative of the sigmoid is simply its own output multiplied by $(1 - \text{output})$!</em></p>
     </div>
 
     <!-- SECTION 2: BINARY CROSS ENTROPY -->
-    <h3>2. Binary Cross-Entropy Loss &amp; The Gradient Identity</h3>
-    <p>For a binary label $y_i \in \{0, 1\}$ and predicted probability $p_i = \sigma(\mathbf{w}^T \mathbf{x}_i)$, the Bernoulli probability mass function is:</p>
-    $$P(y_i \mid \mathbf{x}_i) = p_i^{y_i} (1 - p_i)^{1 - y_i}$$
-    <p>The Negative Log-Likelihood over $N$ observations produces the <strong>Binary Cross-Entropy (BCE) Loss</strong>:</p>
-    $$\mathcal{L}(\mathbf{w}) = -\frac{1}{N} \sum_{i=1}^N \left[ y_i \ln(p_i) + (1 - y_i) \ln(1 - p_i) \right]$$
+    <h3>2. Maximum Likelihood &amp; Binary Cross-Entropy Loss</h3>
+    <p>Assuming independent training samples, the likelihood of observing binary targets $y_i \in \{0, 1\}$ with predicted probabilities $p_i = \sigma(\mathbf{w}^T \mathbf{x}_i)$ is modeled by the Bernoulli PMF:</p>
+    $$L(\mathbf{w}) = \prod_{i=1}^N P(y_i \mid \mathbf{x}_i; \mathbf{w}) = \prod_{i=1}^N p_i^{y_i} (1 - p_i)^{1 - y_i}$$
+    <p>Taking the natural logarithm and dividing by $-N$ yields the <strong>Binary Cross-Entropy (BCE) Loss</strong>:</p>
+    $$\mathcal{L}(\mathbf{w}) = -\frac{1}{N} \ln L(\mathbf{w}) = -\frac{1}{N} \sum_{i=1}^N \left[ y_i \ln(p_i) + (1 - y_i) \ln(1 - p_i) \right]$$
 
     <h4>Deriving the Gradient Vector</h4>
-    <p>Let $z_i = \mathbf{w}^T \mathbf{x}_i$. By the chain rule:</p>
-    $$\frac{\partial \mathcal{L}}{\partial \mathbf{w}} = \sum_{i=1}^N \frac{\partial \mathcal{L}}{\partial p_i} \frac{\partial p_i}{\partial z_i} \frac{\partial z_i}{\partial \mathbf{w}}$$
-    <p>Evaluating each derivative:</p>
+    <p>Let $z_i = \mathbf{w}^T \mathbf{x}_i$. Applying the multivariable chain rule:</p>
+    $$\frac{\partial \mathcal{L}}{\partial \mathbf{w}} = \frac{1}{N} \sum_{i=1}^N \frac{\partial \mathcal{L}_i}{\partial p_i} \frac{\partial p_i}{\partial z_i} \frac{\partial z_i}{\partial \mathbf{w}}$$
     <ul>
-      <li>$\frac{\partial \mathcal{L}}{\partial p_i} = -\frac{y_i}{p_i} + \frac{1 - y_i}{1 - p_i} = \frac{p_i - y_i}{p_i(1 - p_i)}$</li>
+      <li>$\frac{\partial \mathcal{L}_i}{\partial p_i} = -\frac{y_i}{p_i} + \frac{1 - y_i}{1 - p_i} = \frac{p_i - y_i}{p_i (1 - p_i)}$</li>
       <li>$\frac{\partial p_i}{\partial z_i} = p_i (1 - p_i)$</li>
       <li>$\frac{\partial z_i}{\partial \mathbf{w}} = \mathbf{x}_i$</li>
     </ul>
-    $$\frac{\partial \mathcal{L}}{\partial \mathbf{w}} = \frac{1}{N} \sum_{i=1}^N \left[ \frac{p_i - y_i}{p_i(1 - p_i)} \right] \left[ p_i (1 - p_i) \right] \mathbf{x}_i = \frac{1}{N} \sum_{i=1}^N (p_i - y_i) \mathbf{x}_i$$
+    <p>Notice how the term $p_i(1 - p_i)$ in the denominator cancels out with the sigmoid derivative:</p>
+    $$\nabla_{\mathbf{w}} \mathcal{L}(\mathbf{w}) = \frac{1}{N} \sum_{i=1}^N \left( \frac{p_i - y_i}{p_i(1-p_i)} \right) \left( p_i(1-p_i) \right) \mathbf{x}_i = \frac{1}{N} \sum_{i=1}^N (p_i - y_i) \mathbf{x}_i$$
     <p>In matrix notation:</p>
-    $$\nabla_{\mathbf{w}} \mathcal{L}(\mathbf{w}) = \frac{1}{N} X^T (\mathbf{p} - \mathbf{y})$$
-    <p>Notice the stunning mathematical symmetry: this gradient has the <strong>exact same algebraic form as Linear Regression</strong> $\frac{1}{N} X^T (\hat{\mathbf{y}} - \mathbf{y})$! The only difference is that $\hat{\mathbf{y}}$ is squashed through the sigmoid function.</p>
+    $$\nabla_{\mathbf{w}} \mathcal{L}(\mathbf{w}) = \frac{1}{N} \mathbf{X}^T (\mathbf{p} - \mathbf{y})$$
+    <p>This matches the algebraic form of the linear regression gradient $\frac{1}{N} \mathbf{X}^T (\hat{\mathbf{y}} - \mathbf{y})$!</p>
 
-    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Logistic Regression</h3>
+    <!-- SECTION 3: IRLS ALGORITHM -->
+    <h3>3. Second-Order Optimization: Iteratively Reweighted Least Squares (IRLS)</h3>
+    <p>First-order gradient descent updates weights as $\mathbf{w}^{(t+1)} = \mathbf{w}^{(t)} - \eta \nabla \mathcal{L}$. However, because Logistic Regression is twice-differentiable and strictly convex, we can apply <strong>Newton's Method</strong> to converge quadratically in 5 to 8 steps:</p>
+    $$\mathbf{w}^{(t+1)} = \mathbf{w}^{(t)} - \mathbf{H}^{-1} \nabla \mathcal{L}(\mathbf{w}^{(t)})$$
+    <p>Recall the Hessian matrix derived in Problem 2.3.1:</p>
+    $$\mathbf{H} = \frac{1}{N} \mathbf{X}^T \mathbf{D} \mathbf{X}, \quad \text{where } \mathbf{D} = \text{diag}(p_1(1-p_1), \dots, p_N(1-p_N))$$
+    <p>Substituting the gradient and Hessian into Newton's update:</p>
+    $$\mathbf{w}^{(t+1)} = \mathbf{w}^{(t)} - (\mathbf{X}^T \mathbf{D} \mathbf{X})^{-1} \mathbf{X}^T (\mathbf{p} - \mathbf{y})$$
+    $$\mathbf{w}^{(t+1)} = (\mathbf{X}^T \mathbf{D} \mathbf{X})^{-1} \left[ \mathbf{X}^T \mathbf{D} \mathbf{X} \mathbf{w}^{(t)} - \mathbf{X}^T (\mathbf{p} - \mathbf{y}) \right] = (\mathbf{X}^T \mathbf{D} \mathbf{X})^{-1} \mathbf{X}^T \mathbf{D} \left[ \mathbf{X} \mathbf{w}^{(t)} - \mathbf{D}^{-1}(\mathbf{p} - \mathbf{y}) \right]$$
+    <p>Define the <strong>adjusted response vector</strong> $\mathbf{z}^{(t)} = \mathbf{X}\mathbf{w}^{(t)} - \mathbf{D}^{-1}(\mathbf{p} - \mathbf{y})$. Then:</p>
+    $$\mathbf{w}^{(t+1)} = (\mathbf{X}^T \mathbf{D} \mathbf{X})^{-1} \mathbf{X}^T \mathbf{D} \mathbf{z}^{(t)}$$
+    <p>Notice that this is the exact closed-form solution to a <strong>Weighted Least Squares (WLS)</strong> problem with diagonal weight matrix $\mathbf{D}$! Because the weights $\mathbf{D}$ depend on the current predictions $\mathbf{p}^{(t)}$, the weights must be recomputed on every step—hence the name <strong>Iteratively Reweighted Least Squares (IRLS)</strong>.</p>
 
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 2.3.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
-        <span class="company-tag company-google">Google</span>
-        <span class="company-tag company-meta">Meta</span>
+    <!-- SECTION 4: MULTI-CLASS SOFTMAX -->
+    <h3>4. Multi-Class Generalization: Softmax (Multinomial) Regression</h3>
+    <p>For $K &gt; 2$ mutually exclusive classes, target labels are one-hot vectors $\mathbf{y}_i \in \{0, 1\}^K$. The model maintains a weight vector $\mathbf{w}_k$ for each class, computing class logits $z_{ik} = \mathbf{w}_k^T \mathbf{x}_i$. The probability distribution over classes is given by the <strong>Softmax Function</strong>:</p>
+    $$P(y_i = k \mid \mathbf{x}_i) = p_{ik} = \frac{\exp(\mathbf{w}_k^T \mathbf{x}_i)}{\sum_{j=1}^K \exp(\mathbf{w}_j^T \mathbf{x}_i)}$$
+    <p>The Multi-Class Categorical Cross-Entropy loss is:</p>
+    $$\mathcal{L}(\mathbf{W}) = -\frac{1}{N} \sum_{i=1}^N \sum_{k=1}^K y_{ik} \ln(p_{ik})$$
+    <p>The gradient with respect to class weight vector $\mathbf{w}_k$ is:</p>
+    $$\nabla_{\mathbf{w}_k} \mathcal{L} = \frac{1}{N} \sum_{i=1}^N (p_{ik} - y_{ik}) \mathbf{x}_i \implies \nabla_{\mathbf{W}} \mathcal{L} = \frac{1}{N} \mathbf{X}^T (\mathbf{P} - \mathbf{Y})$$
+
+    <!-- SECTION 5: PRACTICE SUITE -->
+    <div class="practice-set">
+      <div class="practice-header">
+        <span class="set-tag">Complete 4-Tier Practice Suite</span>
+        <h3 class="set-title">Chapter 2.3 Practice Problems &amp; Tier-1 AI Challenge Suite</h3>
+        <p class="set-desc">Master the mathematics of log-odds, Bernoulli MLE, the Sigmoid identity, Hessian convexity, and IRLS through step-by-step numerical calculations, algorithmic traces, FAANG research proofs, and conceptual trap questions.</p>
       </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> Prove that Binary Cross-Entropy loss for Logistic Regression is <strong>strictly convex</strong> with respect to weight vector $\mathbf{w}$.</p>
-        <ol>
-          <li>Derive the analytical Hessian matrix $H(\mathbf{w}) = \nabla_{\mathbf{w}}^2 \mathcal{L}(\mathbf{w})$.</li>
-          <li>Prove that $H(\mathbf{w})$ is positive semi-definite everywhere, showing that Logistic Regression is guaranteed to have NO suboptimal local minima.</li>
-        </ol>
+
+      <!-- TIER 1: NUMERICAL WARM-UP -->
+      <h4>Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.3.1</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> A trained binary logistic regression model has parameter vector $\mathbf{w} = [b, w_1, w_2]^T = [-2.0, 0.8, -0.5]^T$.</p>
+          <ol>
+            <li>For an incoming user profile with features $\mathbf{x} = [x_1, x_2]^T = [3.0, 2.0]^T$, compute the logit $z$, the odds ratio, and the predicted probability of conversion $p$.</li>
+            <li>If feature $x_1$ increases by $+2.0$ units while $x_2$ remains unchanged, by what multiplicative factor does the odds ratio change?</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
+
+          <p class="step"><strong>Step 1: Compute Logit, Odds, and Probability:</strong><br>
+          Compute the linear combination:
+          $$z = b + w_1 x_1 + w_2 x_2 = -2.0 + (0.8 \times 3.0) + (-0.5 \times 2.0) = -2.0 + 2.4 - 1.0 = \mathbf{-0.60}$$
+          Compute Odds Ratio:
+          $$\text{Odds} = e^z = e^{-0.60} \approx \mathbf{0.5488}$$
+          Compute Predicted Probability via Sigmoid:
+          $$p = \frac{1}{1 + e^{-z}} = \frac{1}{1 + e^{0.60}} = \frac{1}{1 + 1.8221} = \frac{1}{2.8221} \approx \mathbf{0.3543} \quad (35.43\%)$$</p>
+
+          <p class="step"><strong>Step 2: Odds Ratio Multiplicative Factor:</strong><br>
+          In logistic regression, the change in log-odds resulting from an increase of $\Delta x_1$ is $\Delta z = w_1 \Delta x_1$.<br>
+          Here $\Delta x_1 = 2.0$ and $w_1 = 0.8$:
+          $$\Delta z = 0.8 \times 2.0 = 1.60$$
+          The odds ratio scales by $e^{\Delta z}$:
+          $$\text{Factor} = e^{1.60} \approx \mathbf{4.953}$$
+          <strong>Result: Increasing $x_1$ by 2.0 multiplies the odds of conversion by approximately $4.95\times$.</strong></p>
+        </div>
       </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
 
-        <p class="step"><strong>Step 1: Compute the Second Derivative (Hessian Matrix):</strong><br>
-        Recall the gradient vector: $\nabla_{\mathbf{w}} \mathcal{L} = \frac{1}{N} \sum_{i=1}^N (p_i - y_i) \mathbf{x}_i$, where $p_i = \sigma(\mathbf{w}^T \mathbf{x}_i)$.<br>
-        Differentiating with respect to $\mathbf{w}$ again:
-        $$H(\mathbf{w}) = \frac{\partial}{\partial \mathbf{w}} \left[ \frac{1}{N} \sum_{i=1}^N (p_i - y_i) \mathbf{x}_i \right] = \frac{1}{N} \sum_{i=1}^N \mathbf{x}_i \left( \frac{\partial p_i}{\partial \mathbf{w}} \right)^T$$
-        Using the sigmoid derivative: $\frac{\partial p_i}{\partial \mathbf{w}} = p_i(1 - p_i) \mathbf{x}_i$.<br>
-        Therefore:
-        $$H(\mathbf{w}) = \frac{1}{N} \sum_{i=1}^N p_i (1 - p_i) \mathbf{x}_i \mathbf{x}_i^T$$
-        In matrix notation, let $D \in \mathbb{R}^{N \times N}$ be a diagonal matrix with entries $D_{ii} = p_i (1 - p_i)$:
-        $$H(\mathbf{w}) = \frac{1}{N} X^T D X$$</p>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.3.2</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-meta">Meta</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Consider a dataset of $N=2$ samples:
+          $$\mathbf{x}_1 = [1.0, 2.0]^T, \ y_1 = 1; \qquad \mathbf{x}_2 = [1.0, -1.0]^T, \ y_2 = 0$$
+          (where the first entry is the bias feature $x_0 = 1.0$). At initial weights $\mathbf{w}^{(0)} = [0.0, 0.0]^T$:
+          <ol>
+            <li>Compute the initial predicted probabilities $p_1$ and $p_2$.</li>
+            <li>Compute the initial Binary Cross-Entropy loss $\mathcal{L}(\mathbf{w}^{(0)})$.</li>
+            <li>Compute the exact gradient vector $\nabla_{\mathbf{w}} \mathcal{L}(\mathbf{w}^{(0)})$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
 
-        <p class="step"><strong>Step 2: Prove Positive Semi-Definiteness:</strong><br>
-        Let $\mathbf{z} \in \mathbb{R}^d$ be any arbitrary non-zero vector. Evaluate the quadratic form $\mathbf{z}^T H \mathbf{z}$:
-        $$\mathbf{z}^T H \mathbf{z} = \mathbf{z}^T \left( \frac{1}{N} X^T D X \right) \mathbf{z} = \frac{1}{N} (X \mathbf{z})^T D (X \mathbf{z})$$
-        Let $\mathbf{v} = X \mathbf{z} \in \mathbb{R}^N$. Then:
-        $$\mathbf{z}^T H \mathbf{z} = \frac{1}{N} \mathbf{v}^T D \mathbf{v} = \frac{1}{N} \sum_{i=1}^N D_{ii} v_i^2 = \frac{1}{N} \sum_{i=1}^N p_i (1 - p_i) v_i^2$$
-        Notice two physical facts:
-        <ol>
-          <li>For any $z \in \mathbb{R}$, the sigmoid output is strictly bounded: $p_i \in (0, 1)$.</li>
-          <li>Therefore, $p_i (1 - p_i) &gt; 0$ for all samples.</li>
-          <li>The square of any real number is non-negative: $v_i^2 \ge 0$.</li>
-        </ol>
-        Since every term in the summation is the product of two positive numbers and a non-negative square:
-        $$\mathbf{z}^T H \mathbf{z} \ge 0, \quad \forall \mathbf{z} \in \mathbb{R}^d$$
-        <strong>Q.E.D. The Hessian is positive semi-definite everywhere. Logistic Regression is strictly convex, guaranteeing that any stationary point reached by gradient descent is a global optimum!</strong></p>
+          <p class="step"><strong>Step 1: Initial Predicted Probabilities:</strong><br>
+          For both samples, $z_1 = \mathbf{w}^T \mathbf{x}_1 = 0.0$ and $z_2 = \mathbf{w}^T \mathbf{x}_2 = 0.0$.
+          $$p_1 = \sigma(0) = \frac{1}{1 + e^0} = \mathbf{0.50}, \qquad p_2 = \sigma(0) = \mathbf{0.50}$$</p>
+
+          <p class="step"><strong>Step 2: Initial Binary Cross-Entropy Loss:</strong>
+          $$\mathcal{L} = -\frac{1}{2} \left[ y_1 \ln(p_1) + (1-y_1)\ln(1-p_1) + y_2 \ln(p_2) + (1-y_2)\ln(1-p_2) \right]$$
+          $$\mathcal{L} = -\frac{1}{2} \left[ 1 \ln(0.5) + 0 + 0 + 1 \ln(0.5) \right] = -\ln(0.5) = \ln(2) \approx \mathbf{0.69315 \text{ nats}}$$</p>
+
+          <p class="step"><strong>Step 3: Evaluate Gradient Vector:</strong><br>
+          Using $\nabla_{\mathbf{w}} \mathcal{L} = \frac{1}{N} \sum_{i=1}^N (p_i - y_i) \mathbf{x}_i$:
+          $$p_1 - y_1 = 0.50 - 1.0 = -0.50$$
+          $$p_2 - y_2 = 0.50 - 0.0 = +0.50$$
+          Sum the weighted feature vectors:
+          $$\nabla \mathcal{L} = \frac{1}{2} \left[ (-0.50) \begin{bmatrix} 1.0 \\ 2.0 \end{bmatrix} + (+0.50) \begin{bmatrix} 1.0 \\ -1.0 \end{bmatrix} \right] = \frac{1}{2} \begin{bmatrix} -0.50 + 0.50 \\ -1.00 - 0.50 \end{bmatrix} = \frac{1}{2} \begin{bmatrix} 0.0 \\ -1.50 \end{bmatrix} = \mathbf{\begin{bmatrix} 0.0 \\ -0.75 \end{bmatrix}}$$
+          <strong>Result: The gradient indicates that the bias is currently balanced ($\nabla_b = 0$), while $w_1$ should be increased in the positive direction ($-\eta \nabla_{w_1} &gt; 0$).</strong></p>
+        </div>
+      </div>
+
+      <!-- TIER 2: APPLIED ENGINEERING & ALGORITHMIC TRACING -->
+      <h4>Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.3.3</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-apple">Apple</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Trace one complete iteration of the <strong>Newton-Raphson / IRLS</strong> algorithm for the 2-sample dataset in Problem 2.3.2, starting from $\mathbf{w}^{(0)} = [0.0, 0.0]^T$.</p>
+          $$\mathbf{X} = \begin{bmatrix} 1.0 & 2.0 \\ 1.0 & -1.0 \end{bmatrix}, \quad \mathbf{y} = \begin{bmatrix} 1 \\ 0 \end{bmatrix}$$
+          <ol>
+            <li>Compute the diagonal weight matrix $\mathbf{D} = \text{diag}(p_1(1-p_1), p_2(1-p_2))$.</li>
+            <li>Compute the $2 \times 2$ Hessian matrix $\mathbf{H} = \frac{1}{N} \mathbf{X}^T \mathbf{D} \mathbf{X}$.</li>
+            <li>Invert $\mathbf{H}$ and compute the Newton-Raphson updated weights $\mathbf{w}^{(1)} = \mathbf{w}^{(0)} - \mathbf{H}^{-1} \nabla \mathcal{L}$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Algorithmic Trace</div>
+
+          <p class="step"><strong>Step 1: Compute Diagonal Weight Matrix $\mathbf{D}$:</strong><br>
+          From Problem 2.3.2, $p_1 = 0.50$ and $p_2 = 0.50$:
+          $$D_{11} = 0.5(1 - 0.5) = 0.25, \qquad D_{22} = 0.5(1 - 0.5) = 0.25$$
+          $$\mathbf{D} = \begin{bmatrix} 0.25 & 0 \\ 0 & 0.25 \end{bmatrix} = 0.25 \mathbf{I}_2$$</p>
+
+          <p class="step"><strong>Step 2: Compute the Hessian Matrix $\mathbf{H}$:</strong><br>
+          With $N=2$:
+          $$\mathbf{H} = \frac{1}{2} \mathbf{X}^T \mathbf{D} \mathbf{X} = \frac{0.25}{2} \mathbf{X}^T \mathbf{X} = \frac{1}{8} \mathbf{X}^T \mathbf{X}$$
+          Compute $\mathbf{X}^T \mathbf{X}$:
+          $$\mathbf{X}^T \mathbf{X} = \begin{bmatrix} 1.0 & 1.0 \\ 2.0 & -1.0 \end{bmatrix} \begin{bmatrix} 1.0 & 2.0 \\ 1.0 & -1.0 \end{bmatrix} = \begin{bmatrix} 1+1 & 2-1 \\ 2-1 & 4+1 \end{bmatrix} = \begin{bmatrix} 2 & 1 \\ 1 & 5 \end{bmatrix}$$
+          Therefore:
+          $$\mathbf{H} = \frac{1}{8} \begin{bmatrix} 2 & 1 \\ 1 & 5 \end{bmatrix} = \begin{bmatrix} 0.250 & 0.125 \\ 0.125 & 0.625 \end{bmatrix}$$</p>
+
+          <p class="step"><strong>Step 3: Invert $\mathbf{H}$ and Update $\mathbf{w}$:</strong><br>
+          $$\det(\mathbf{X}^T \mathbf{X}) = (2)(5) - (1)(1) = 9 \implies \det(\mathbf{H}) = \frac{9}{64}$$
+          $$\mathbf{H}^{-1} = 8 (\mathbf{X}^T \mathbf{X})^{-1} = \frac{8}{9} \begin{bmatrix} 5 & -1 \\ -1 & 2 \end{bmatrix}$$
+          From Problem 2.3.2, the gradient is $\nabla \mathcal{L} = \begin{bmatrix} 0.0 \\ -0.75 \end{bmatrix} = \begin{bmatrix} 0 \\ -3/4 \end{bmatrix}$.<br>
+          Evaluate the Newton step $\mathbf{H}^{-1} \nabla \mathcal{L}$:
+          $$\mathbf{H}^{-1} \nabla \mathcal{L} = \frac{8}{9} \begin{bmatrix} 5 & -1 \\ -1 & 2 \end{bmatrix} \begin{bmatrix} 0 \\ -3/4 \end{bmatrix} = \frac{8}{9} \begin{bmatrix} 3/4 \\ -6/4 \end{bmatrix} = \begin{bmatrix} 2/3 \\ -4/3 \end{bmatrix}$$
+          Update weights:
+          $$\mathbf{w}^{(1)} = \mathbf{w}^{(0)} - \mathbf{H}^{-1} \nabla \mathcal{L} = \begin{bmatrix} 0 \\ 0 \end{bmatrix} - \begin{bmatrix} 2/3 \\ -4/3 \end{bmatrix} = \mathbf{\begin{bmatrix} -2/3 \\ +4/3 \end{bmatrix}} \approx \begin{bmatrix} -0.6667 \\ +1.3333 \end{bmatrix}$$
+          <em>Verification of Improvement:</em><br>
+          Compute new logits: $z_1 = -2/3 + 4/3(2) = 6/3 = +2.0 \implies p_1 = \sigma(2.0) \approx 0.8808$ (True class was 1!).<br>
+          $z_2 = -2/3 + 4/3(-1) = -6/3 = -2.0 \implies p_2 = \sigma(-2.0) \approx 0.1192$ (True class was 0!).<br>
+          <strong>Result: In a single Newton step, probability for sample 1 jumped from $0.50$ to $0.88$, and sample 2 dropped from $0.50$ to $0.12$!</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.3.4</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-amazon">Amazon</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> An autonomous vehicle perception model outputs probability estimates for pedestrian detection. An empirical audit over 5 validation bins reveals the following predicted vs empirical probabilities:</p>
+          <table style="margin: 10px 0;">
+            <tr><th>Bin $m$</th><th>Bin Range</th><th>Avg Confidence $\text{conf}(B_m)$</th><th>Empirical Accuracy $\text{acc}(B_m)$</th><th>Bin Size $|B_m|$</th></tr>
+            <tr><td>1</td><td>$[0.0, 0.2)$</td><td>$0.10$</td><td>$0.12$</td><td>$200$</td></tr>
+            <tr><td>2</td><td>$[0.2, 0.4)$</td><td>$0.30$</td><td>$0.35$</td><td>$300$</td></tr>
+            <tr><td>3</td><td>$[0.4, 0.6)$</td><td>$0.50$</td><td>$0.48$</td><td>$250$</td></tr>
+            <tr><td>4</td><td>$[0.6, 0.8)$</td><td>$0.70$</td><td>$0.60$</td><td>$150$</td></tr>
+            <tr><td>5</td><td>$[0.8, 1.0]$</td><td>$0.90$</td><td>$0.75$</td><td>$100$</td></tr>
+          </table>
+          <p>Total validation samples $N = 1,000$. Compute the <strong>Expected Calibration Error (ECE)</strong>:
+          $$\text{ECE} = \sum_{m=1}^M \frac{|B_m|}{N} \left| \text{acc}(B_m) - \text{conf}(B_m) \right|$$</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
+
+          <p class="step"><strong>Step 1: Compute Calibration Error per Bin:</strong>
+          <ul>
+            <li>Bin 1 ($|B_1| = 200$, weight $0.20$): $|0.12 - 0.10| = 0.02 \implies 0.20 \times 0.02 = 0.0040$</li>
+            <li>Bin 2 ($|B_2| = 300$, weight $0.30$): $|0.35 - 0.30| = 0.05 \implies 0.30 \times 0.05 = 0.0150$</li>
+            <li>Bin 3 ($|B_3| = 250$, weight $0.25$): $|0.48 - 0.50| = 0.02 \implies 0.25 \times 0.02 = 0.0050$</li>
+            <li>Bin 4 ($|B_4| = 150$, weight $0.15$): $|0.60 - 0.70| = 0.10 \implies 0.15 \times 0.10 = 0.0150$</li>
+            <li>Bin 5 ($|B_5| = 100$, weight $0.10$): $|0.75 - 0.90| = 0.15 \implies 0.10 \times 0.15 = 0.0150$</li>
+          </ul></p>
+
+          <p class="step"><strong>Step 2: Sum Weighted Errors:</strong>
+          $$\text{ECE} = 0.0040 + 0.0150 + 0.0050 + 0.0150 + 0.0150 = \mathbf{0.0540} \quad (5.40\%)$$
+          <strong>Result: The model's Expected Calibration Error is $5.4\%$. In high-confidence bins ($B_4, B_5$), the model is significantly overconfident ($\text{conf} &gt; \text{acc}$), necessitating temperature scaling.</strong></p>
+        </div>
+      </div>
+
+      <!-- TIER 3: FAANG / RESEARCH LAB CHALLENGES -->
+      <h4>Tier 3: FAANG &amp; Research Lab Challenges</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.3.5</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-google">Google Brain</span>
+          <span class="company-tag company-meta">Meta FAIR</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> For Multi-Class Softmax Regression with $K$ classes, class probabilities are given by:
+          $$p_k = \frac{\exp(\mathbf{w}_k^T \mathbf{x})}{\sum_{j=1}^K \exp(\mathbf{w}_j^T \mathbf{x})}$$
+          <ol>
+            <li>Derive the partial derivative of class probability $p_i$ with respect to logit $z_j = \mathbf{w}_j^T \mathbf{x}$, proving:
+            $$\frac{\partial p_i}{\partial z_j} = p_i (\delta_{ij} - p_j)$$
+            where $\delta_{ij}$ is the Kronecker delta.</li>
+            <li>Using this identity, derive the complete gradient of the Cross-Entropy loss $\mathcal{L} = -\sum_{k=1}^K y_k \ln(p_k)$ with respect to the weight vector $\mathbf{w}_j$, proving $\nabla_{\mathbf{w}_j} \mathcal{L} = (p_j - y_j)\mathbf{x}$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
+
+          <p class="step"><strong>Step 1: Differentiate Softmax with Respect to Logits:</strong><br>
+          Let $S = \sum_{j=1}^K e^{z_j}$. Then $p_i = \frac{e^{z_i}}{S}$.<br>
+          Apply the quotient rule $\frac{d}{dz_j} [u/v] = \frac{u' v - u v'}{v^2}$:
+          <ul>
+            <li><strong>Case 1 ($i = j$):</strong>
+            $$\frac{\partial p_i}{\partial z_i} = \frac{(e^{z_i}) S - (e^{z_i})(e^{z_i})}{S^2} = \frac{e^{z_i}}{S} - \left(\frac{e^{z_i}}{S}\right)^2 = p_i - p_i^2 = p_i(1 - p_i)$$</li>
+            <li><strong>Case 2 ($i \neq j$):</strong>
+            $$\frac{\partial p_i}{\partial z_j} = \frac{(0) S - (e^{z_i})(e^{z_j})}{S^2} = -\frac{e^{z_i}}{S} \cdot \frac{e^{z_j}}{S} = -p_i p_j$$</li>
+          </ul>
+          Combining both cases using the Kronecker delta $\delta_{ij} = \begin{cases} 1 & \text{if } i=j \\ 0 & \text{if } i \neq j \end{cases}$:
+          $$\frac{\partial p_i}{\partial z_j} = p_i (\delta_{ij} - p_j)$$</p>
+
+          <p class="step"><strong>Step 2: Differentiate Cross-Entropy Loss:</strong><br>
+          $$\frac{\partial \mathcal{L}}{\partial z_j} = \sum_{k=1}^K \frac{\partial \mathcal{L}}{\partial p_k} \frac{\partial p_k}{\partial z_j}$$
+          Since $\mathcal{L} = -\sum_{k=1}^K y_k \ln(p_k)$, we have $\frac{\partial \mathcal{L}}{\partial p_k} = -\frac{y_k}{p_k}$.<br>
+          Substitute into the sum:
+          $$\frac{\partial \mathcal{L}}{\partial z_j} = \sum_{k=1}^K \left(-\frac{y_k}{p_k}\right) \left[ p_k (\delta_{kj} - p_j) \right] = -\sum_{k=1}^K y_k (\delta_{kj} - p_j) = -\sum_{k=1}^K y_k \delta_{kj} + p_j \sum_{k=1}^K y_k$$
+          Since $\mathbf{y}$ is a one-hot distribution, $\sum_{k=1}^K y_k = 1$, and $\sum_{k=1}^K y_k \delta_{kj} = y_j$:
+          $$\frac{\partial \mathcal{L}}{\partial z_j} = -y_j + p_j(1) = \mathbf{p_j - y_j}$$
+          Now apply chain rule to weight vector $\mathbf{w}_j$ ($z_j = \mathbf{w}_j^T \mathbf{x} \implies \frac{\partial z_j}{\partial \mathbf{w}_j} = \mathbf{x}$):
+          $$\nabla_{\mathbf{w}_j} \mathcal{L} = \frac{\partial \mathcal{L}}{\partial z_j} \frac{\partial z_j}{\partial \mathbf{w}_j} = \mathbf{(p_j - y_j) \mathbf{x}}$$
+          <strong>Q.E.D. The multi-class gradient for class $j$ is simply the prediction residual $(p_j - y_j)$ times the feature vector $\mathbf{x}$!</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.3.6</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-deepmind">DeepMind</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> The <strong>Separation Problem (Hauck-Donner Effect)</strong>: Suppose a binary dataset is strictly linearly separable, meaning there exists a hyperplane $(\mathbf{w}^*, b^*)$ such that $y_i(\mathbf{w}^{*T} \mathbf{x}_i + b^*) &gt; 0$ for all $i=1,\dots,N$.</p>
+          <ol>
+            <li>Prove that the Maximum Likelihood estimator $\hat{\mathbf{w}}_{\text{MLE}}$ does not exist at any finite coordinates ($\|\hat{\mathbf{w}}_{\text{MLE}}\|_2 \to \infty$).</li>
+            <li>Explain the practical engineering danger of this phenomenon in deep learning and logistic regression pipelines, and prove how $L_2$ regularization mathematically cures it.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+          <p class="step"><strong>Step 1: Divergence of MLE on Separable Data:</strong><br>
+          If data is strictly separable, scaling the separating vector by an arbitrary positive scalar $c &gt; 0$ ($\mathbf{w} = c \mathbf{w}^*$) maintains perfect separation.<br>
+          Examine the predicted probabilities for positive points ($y_i = 1$):
+          $$p_i(c) = \sigma(c (\mathbf{w}^{*T} \mathbf{x}_i + b^*)) = \frac{1}{1 + e^{-c \cdot \Delta_i}}, \quad \text{where } \Delta_i = (\mathbf{w}^{*T} \mathbf{x}_i + b^*) &gt; 0$$
+          As $c \to \infty$, $e^{-c \Delta_i} \to 0$, so $p_i(c) \to 1.0$.<br>
+          Similarly for negative points ($y_i = 0$), $p_i(c) \to 0.0 \implies (1 - p_i(c)) \to 1.0$.<br>
+          Examine the Negative Log-Likelihood:
+          $$\lim_{c \to \infty} \mathcal{L}(c \mathbf{w}^*) = -\frac{1}{N} \sum_{i=1}^N \left[ y_i \ln(1) + (1-y_i) \ln(1) \right] = 0$$
+          The infimum of the loss is $0$, but this loss is <strong>never attained for any finite weights $\mathbf{w}$</strong>! Any optimization algorithm (gradient descent) will run indefinitely, pushing weights toward $\infty$.</p>
+
+          <p class="step"><strong>Step 2: Engineering Impact &amp; $L_2$ Regularization Cure:</strong><br>
+          As $\|\mathbf{w}\| \to \infty$:
+          <ul>
+            <li>Probabilities saturate at $0.0$ and $1.0$. The model becomes severely overconfident and uncalibrated.</li>
+            <li>The sigmoid derivative $\sigma'(z) \to 0$, causing vanishing gradients.</li>
+            <li>Standard errors of weights explode, triggering numerical instability in Wald tests (the Hauck-Donner effect).</li>
+          </ul>
+          Adding $L_2$ regularization creates a penalized objective:
+          $$\mathcal{L}_{\text{Ridge}}(\mathbf{w}) = \mathcal{L}(\mathbf{w}) + \frac{\lambda}{2} \|\mathbf{w}\|_2^2$$
+          As $\|\mathbf{w}\| \to \infty$, the penalty $\frac{\lambda}{2} \|\mathbf{w}\|_2^2 \to \infty$. By the Extreme Value Theorem, the penalized objective is coercive and strictly convex, guaranteeing a unique finite global minimum $\mathbf{w}^*_{\text{reg}}$!</p>
+        </div>
+      </div>
+
+      <!-- TIER 4: CONCEPTUAL TRAP MCQS -->
+      <h4>Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.3.7</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Both Logistic Regression and Linear Discriminant Analysis (LDA) produce linear decision boundaries in feature space. Which of the following statements correctly captures their key mathematical difference?</p>
+          <ol type="A">
+            <li>Logistic Regression is a generative model that assumes features are Gaussian, whereas LDA is a discriminative model that makes no distributional assumptions.</li>
+            <li>LDA is a generative model that assumes features $\mathbf{x} \mid y$ follow multivariate normal distributions with shared covariance $\boldsymbol{\Sigma}$, whereas Logistic Regression is a discriminative model that makes no assumptions about feature distributions.</li>
+            <li>Logistic Regression cannot handle more than 2 classes, whereas LDA generalizes to arbitrary numbers of classes.</li>
+            <li>LDA minimizes cross-entropy loss, whereas Logistic Regression minimizes hinge loss.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: B</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of All Options:</strong>
+          <ul>
+            <li><strong>Option B is TRUE:</strong> LDA models the joint probability $P(\mathbf{x}, y) = P(\mathbf{x} \mid y) P(y)$, assuming $P(\mathbf{x} \mid y=k) \sim \mathcal{N}(\boldsymbol{\mu}_k, \boldsymbol{\Sigma})$ with an identical shared covariance matrix across all classes. Under these Gaussian assumptions, Bayes' rule yields linear log-odds. Logistic Regression is discriminative: it models $P(y \mid \mathbf{x})$ directly without making any assumptions about $P(\mathbf{x})$ (features can be binary, skewed, categorical, or multimodal).</li>
+            <li><strong>Option A is FALSE:</strong> Exactly backwards; LDA is generative, Logistic Regression is discriminative.</li>
+            <li><strong>Option C is FALSE:</strong> Softmax regression seamlessly generalizes Logistic Regression to $K$ classes.</li>
+            <li><strong>Option D is FALSE:</strong> LDA is fit via sample means and pooled covariance matrices (plug-in estimates); Hinge loss is minimized by Support Vector Machines.</li>
+          </ul></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.3.8</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-microsoft">Microsoft</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Consider the following Assertion (A) and Reason (R):</p>
+          <p><strong>Assertion (A):</strong> When training unregularized binary logistic regression via gradient descent on a dataset where one class is completely linearly separable from the other, the training loss approaches zero, but the model's predicted probabilities will become increasingly uncalibrated over epochs.</p>
+          <p><strong>Reason (R):</strong> Because the gradient $\nabla_{\mathbf{w}} \mathcal{L} = \frac{1}{N} \mathbf{X}^T (\mathbf{p} - \mathbf{y})$ drives all probabilities toward $p_i \to y_i \in \{0, 1\}$, the weight vector norm $\|\mathbf{w}\|_2$ grows without bound, artificially pushing all sigmoid inputs into saturated extremes.</p>
+          <ol type="A">
+            <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+            <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+            <li>(A) is true, but (R) is false.</li>
+            <li>(A) is false, but (R) is true.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: A</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of Assertion &amp; Reason:</strong>
+          <ul>
+            <li><strong>Assertion (A) is TRUE:</strong> As proven in Problem 2.3.6, on separable data, unregularized gradient descent continues pushing weights toward infinity ($\|\mathbf{w}\| \to \infty$) to reduce loss from $0.001$ to $0.0001$. As a result, the model assigns probabilities of $0.99999$ or $0.00001$ even to points that lie very close to the decision boundary, destroying probability calibration.</li>
+            <li><strong>Reason (R) is TRUE:</strong> The gradient is driven by the residual $(\mathbf{p} - \mathbf{y})$. Since $p_i = \sigma(\mathbf{w}^T \mathbf{x}_i) = 1$ is only achieved at $z \to \infty$, the gradient can never equal zero at any finite point. The optimizer continues stepping in the direction of the separating vector, driving $\|\mathbf{w}\| \to \infty$.</li>
+            <li>Furthermore, Reason (R) is the precise mathematical mechanism causing Assertion (A).</li>
+          </ul></p>
+        </div>
       </div>
     </div>
 
-    <!-- SECTION 4: CODE LAB -->
-    <h3>3. Production Code Lab 2.3: Logistic Regression with Newton-Raphson IRLS</h3>
-    <p>While first-order gradient descent requires hundreds of iterations, the second-order <strong>Newton-Raphson (IRLS)</strong> algorithm uses the exact Hessian to converge to machine precision in 5 to 7 steps!</p>
+    <!-- SECTION 6: CODE LAB -->
+    <h3>5. Production Code Lab 2.3: Logistic Regression with Newton-Raphson IRLS</h3>
+    <p>Below is a production Python implementation comparing first-order Gradient Descent against the second-order <strong>Newton-Raphson (IRLS)</strong> solver.</p>
 
     <div class="code-lab">
       <div class="code-lab-header">Code Lab 2.3 — Logistic Regression &amp; Second-Order IRLS Solver</div>
@@ -160,27 +461,31 @@ class LogisticRegressionIRLS:
 
 if __name__ == "__main__":
     np.random.seed(42)
-    X = np.random.randn(500, 3)
-    true_w = np.array([-0.5, 1.8, -2.1, 0.9])
-    probs = 1.0 / (1.0 + np.exp(-np.c_[np.ones((500, 1)), X] @ true_w))
-    y = np.random.binomial(1, probs)
+    # Generate 2D separable synthetic classification data
+    X1 = np.random.randn(100, 2) + np.array([2.0, 2.0])
+    X2 = np.random.randn(100, 2) + np.array([-2.0, -2.0])
+    X = np.vstack([X1, X2])
+    y = np.array([1]*100 + [0]*100)
 
-    clf = LogisticRegressionIRLS()
-    clf.fit(X, y)
-    print("Estimated Weights:", np.round(clf.w, 3))
-    print("True Weights     :", true_w)</code></pre>
+    model = LogisticRegressionIRLS()
+    model.fit(X, y)
+    print("Fitted Weights [b, w1, w2]:", np.round(model.w, 4))
+    
+    preds = model.predict(X)
+    acc = np.mean(preds == y)
+    print(f"Classification Accuracy   : {acc * 100:.1f}%")</code></pre>
     </div>
 
-    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 2.3 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 2.3: Production Ad Click-Through Rate (CTR) Estimator &amp; Calibrator</h3>
-        <p class="project-desc">Build an industrial CTR prediction service using sparse logistic regression with Platt scaling calibration and expected calibration error (ECE) tracking for ad auction bidding engines.</p>
+        <h3 class="project-title">Project 2.3: Calibrated Ad Click-Through Rate (CTR) Prediction Service</h3>
+        <p class="project-desc">Architect and deploy a high-throughput, calibrated CTR scoring microservice using regularized Logistic Regression with Platt Scaling, temperature calibration, and real-time Brier Score tracking.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch23_logistic_regression/logistic_regression_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch23_logistic_regression/logistic_regression_scratch.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In real-time ad bidding (Google AdSense, Meta Ads), a model does not just need to classify 0 or 1; it must output an <em>exact calibrated probability</em> of click $p \in [0, 1]$, because the expected value of the bid is $\text{Bid} = \text{CPC} \times p$. If a model is uncalibrated (predicting $0.08$ when true click probability is $0.02$), the platform overbids by 400% and bankrupts the advertiser. In this project, you build an end-to-end logistic scoring engine with Isotonic/Platt calibration curves.</p>
+        <p><strong>Case Study Architecture:</strong> In real-time bidding advertising auctions (Meta, Google), advertisers bid based on Expected Value: $\text{Bid} = \text{Value} \times P(\text{Click})$. If predicted probabilities are poorly calibrated (even if classification accuracy is high), the platform overcharges or undercharges advertisers, causing massive revenue loss. In this project, you construct a production CTR pipeline with log-loss optimization, temperature scaling on validation splits, and Expected Calibration Error (ECE) monitoring dashboards.</p>
       </div>
     </div>
   </div>

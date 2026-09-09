@@ -1,0 +1,849 @@
+<!-- ======================================================================
+     CHAPTER 4.7 — NLP FOUNDATIONS: WORD2VEC, GLOVE & DENSE EMBEDDINGS
+     ====================================================================== -->
+<div class="chapter" id="chapter-4-7">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 4.7</span>
+    <h2 class="chapter-title">NLP Foundations: Word2Vec, GloVe &amp; Semantic Embeddings</h2>
+    <span class="chapter-subtitle">From One-Hot Sparsity to Dense Vector Geometry, Skip-Gram with Negative Sampling, GloVe, FastText &amp; Subword Tokenization</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"You shall know a word by the company it keeps."</p>
+    <p class="attribution">— John Rupert Firth, 1957</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE EVOLUTION OF TEXT REPRESENTATION -->
+    <h3>1. The Evolution of Text Representation</h3>
+    <p>Computers do not process human thoughts or linguistic tokens natively; they perform linear algebra on floating-point vectors and tensors. The central question of Natural Language Processing (NLP) has always been: <em>How do we project discrete, arbitrary human symbols into continuous mathematical spaces such that geometric distance reflects semantic similarity?</em></p>
+
+    <h4>1.1 One-Hot Encoding and the Curse of Orthogonality</h4>
+    <p>The simplest representation maps each word in a vocabulary $V$ of size $|V|$ to a standard basis vector $\mathbf{e}_i \in \mathbb{R}^{|V|}$, where a single coordinate is $1$ and all other $|V|-1$ coordinates are $0$:</p>
+    $$\mathbf{x}_{\text{king}} = [1, 0, 0, \dots, 0]^\top, \quad \mathbf{x}_{\text{queen}} = [0, 1, 0, \dots, 0]^\top, \quad \mathbf{x}_{\text{apple}} = [0, 0, 1, \dots, 0]^\top$$
+
+    <p>While intuitive, one-hot encodings suffer from two fatal mathematical pathologies:</p>
+    <ol>
+      <li><strong>Extreme Dimensional Sparsity:</strong> For modern enterprise vocabularies where $|V| \ge 50,000$ to $500,000$, representing a single token requires storing a vector that is $99.998\%$ zeros. A sequence of length $T=1000$ produces an input matrix of size $1000 \times 500,000$, demanding gigabytes of memory for zero information gain.</li>
+      <li><strong>Total Semantic Orthogonality:</strong> For any two distinct words $u \ne v$:
+      $$\mathbf{x}_u^\top \mathbf{x}_v = 0 \implies \cos(\theta) = \frac{\mathbf{x}_u \cdot \mathbf{x}_v}{\|\mathbf{x}_u\|_2 \|\mathbf{x}_v\|_2} = 0$$
+      Every word is completely perpendicular to every other word! The Euclidean distance between "cat" and "kitten" is identical to the Euclidean distance between "cat" and "quantum":
+      $$\|\mathbf{x}_{\text{cat}} - \mathbf{x}_{\text{kitten}}\|_2 = \sqrt{2} = \|\mathbf{x}_{\text{cat}} - \mathbf{x}_{\text{quantum}}\|_2$$
+      The geometry contains zero semantic topology.</li>
+    </ol>
+
+    <h4>1.2 Bag-of-Words &amp; TF-IDF</h4>
+    <p>The next evolutionary step counted word occurrences across documents. A document $d$ is represented by a term frequency vector $\mathbf{c}_d \in \mathbb{R}^{|V|}$. To downweight ubiquitously common words ("the", "is", "at") while elevating discriminative keywords, the <strong>Term Frequency-Inverse Document Frequency (TF-IDF)</strong> formulation was developed:</p>
+    $$\text{TF}(t, d) = \frac{f_{t,d}}{\sum_{t' \in d} f_{t',d}}, \quad \text{IDF}(t, D) = \log\left( \frac{1 + |D|}{1 + |\{d \in D : t \in d\}|} \right) + 1$$
+    $$\text{TF-IDF}(t, d, D) = \text{TF}(t, d) \times \text{IDF}(t, D)$$
+
+    <p>While TF-IDF enabled search engines (BM25, Chapter 5.3), it preserves zero word order and treats synonyms as unrelated axes: "cardiac arrest" and "heart attack" share zero overlap in TF-IDF space.</p>
+
+    <!-- SECTION 2: THE DISTRIBUTIONAL HYPOTHESIS & DENSE EMBEDDINGS -->
+    <h3>2. The Distributional Hypothesis &amp; Dense Vector Spaces</h3>
+    <p>In 1957, linguist J.R. Firth stated the foundational principle of computational semantics: <em>"You shall know a word by the company it keeps."</em> Words that occur in similar contexts share semantic meaning. If the words "latte", "espresso", and "cappuccino" consistently appear next to "drink", "cup", "steamed", and "caffeine", their vector representations should be mathematically clustered together.</p>
+
+    <p>Instead of high-dimensional sparse vectors, we seek a mapping to a <strong>dense vector space</strong> $\mathbb{R}^d$ where $d \ll |V|$ (typically $d \in [100, 768]$):</p>
+    $$E: V \to \mathbb{R}^d, \quad w \mapsto \mathbf{v}_w$$
+    <p>In this space, semantic similarity is directly computed via cosine similarity:</p>
+    $$\text{sim}(u, v) = \frac{\mathbf{v}_u^\top \mathbf{v}_v}{\|\mathbf{v}_u\|_2 \|\mathbf{v}_v\|_2} \in [-1, 1]$$
+
+    <!-- DIAGRAM: WORD2VEC ARCHITECTURES & 2D SEMANTIC SPACE -->
+    <div style="text-align: center; margin: 1.8em 0;">
+      <img src="word2vec_diagram.jpg" alt="Word2Vec CBOW vs Skip-Gram and Semantic Vector Arithmetic" style="max-width: 100%; border-radius: 8px; border: 2px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+      <p style="font-size: 0.9em; color: #555; margin-top: 10px;"><em>Figure 4.7.1:</em> <strong>Top Left:</strong> Continuous Bag-of-Words (CBOW) predicts the center word from surrounding context words. <strong>Top Right:</strong> Skip-Gram predicts context words given the center word. <strong>Bottom:</strong> Linear semantic regularities in the learned vector space ($\mathbf{v}_{\text{king}} - \mathbf{v}_{\text{man}} + \mathbf{v}_{\text{woman}} \approx \mathbf{v}_{\text{queen}}$).</p>
+    </div>
+
+    <!-- SECTION 3: WORD2VEC: CBOW AND SKIP-GRAM -->
+    <h3>3. Word2Vec Architecture (Mikolov et al., 2013)</h3>
+    <p>In 2013, Tomas Mikolov and colleagues at Google published two neural architectures that transformed AI: <strong>Continuous Bag-of-Words (CBOW)</strong> and <strong>Skip-Gram</strong>. Rather than training a deep multi-layer network, Word2Vec discarded hidden non-linearities entirely, training a single projection matrix directly on text corpora with unprecedented efficiency.</p>
+
+    <h4>3.1 Continuous Bag-of-Words (CBOW)</h4>
+    <p>Given a sequence of words $(w_1, w_2, \dots, w_T)$ and a context window of radius $C$, CBOW uses the $2C$ surrounding context words $w_{t-C}, \dots, w_{t-1}, w_{t+1}, \dots, w_{t+C}$ to predict the target center word $w_t$.</p>
+    <p>Let $W \in \mathbb{R}^{d \times |V|}$ be the input embedding matrix, and $W' \in \mathbb{R}^{|V| \times d}$ be the output embedding matrix. For context words $\{w_{t+j}\}_{j=-C, j \ne 0}^C$, the hidden representation is the average of their input vectors:</p>
+    $$\mathbf{h} = \frac{1}{2C} \sum_{-C \le j \le C, j \ne 0} \mathbf{v}_{w_{t+j}} = \frac{1}{2C} \sum_{-C \le j \le C, j \ne 0} W_{*, w_{t+j}}$$
+    <p>The score for candidate target word $w$ is the inner product $\mathbf{z}_w = \mathbf{v}'_w{}^\top \mathbf{h}$, and the conditional probability is computed via Softmax:</p>
+    $$P(w_t = w | \text{context}) = \frac{\exp(\mathbf{v}'_w{}^\top \mathbf{h})}{\sum_{k=1}^{|V|} \exp(\mathbf{v}'_k{}^\top \mathbf{h})}$$
+    <p>CBOW acts as an averaging smoother, making it exceptionally fast to train and effective for frequent vocabulary tokens.</p>
+
+    <h4>3.2 The Skip-Gram Architecture</h4>
+    <p>Skip-Gram flips the objective: given the center word $w_t$, it predicts each surrounding context word $w_{t+j}$ for $-C \le j \le C, j \ne 0$. The objective is to maximize the average log probability across the corpus:</p>
+    $$\mathcal{L}(\theta) = \frac{1}{T} \sum_{t=1}^{T} \sum_{-C \le j \le C, j \ne 0} \log P(w_{t+j} | w_t)$$
+
+    <p>Assuming conditional independence of context words given the center word, the probability of context word $w_O$ given center word $w_I$ is:</p>
+    $$P(w_O | w_I) = \frac{\exp\left( {\mathbf{v}'_{w_O}}^\top \mathbf{v}_{w_I} \right)}{\sum_{w=1}^{|V|} \exp\left( {\mathbf{v}'_w}^\top \mathbf{v}_{w_I} \right)}$$
+
+    <div class="warning-box">
+      <p><strong>The Computational Bottleneck — Softmax over $|V|$:</strong><br>
+      Notice the denominator: $\sum_{w=1}^{|V|} \exp\left( {\mathbf{v}'_w}^\top \mathbf{v}_{w_I} \right)$. To compute the gradient for a single word pair, the model must compute $|V|$ dot products and exponentiations. With $|V| = 200,000$ and $T = 10^9$ words, a single epoch requires $\approx 2 \times 10^{14}$ floating point operations solely on the partition function denominator. This renders naive Softmax impossible at scale.</p>
+    </div>
+
+    <!-- SECTION 4: NEGATIVE SAMPLING -->
+    <h3>4. Skip-Gram with Negative Sampling (SGNS)</h3>
+    <p>Mikolov et al. resolved the partition function bottleneck by replacing multi-class classification with a set of independent binary logistic regressions, an algorithm known as <strong>Noise Contrastive Estimation (NCE)</strong> or <strong>Negative Sampling (NEG)</strong>.</p>
+
+    <p>For each true center-context pair $(w_I, w_O) \in \mathcal{D}$ (labeled $y=1$), we sample $k$ "noise" words $w_{n_1}, \dots, w_{n_k}$ from a background noise distribution $P_n(w)$ (labeled $y=0$). The objective maximizes the probability that true pairs came from the data while minimizing the probability that noise words came from the data:</p>
+    $$\mathcal{L}_{\text{SGNS}}(\mathbf{v}, \mathbf{v}') = \sum_{(w_I, w_O) \in \mathcal{D}} \left[ \log \sigma\left( {\mathbf{v}'_{w_O}}^\top \mathbf{v}_{w_I} \right) + \sum_{i=1}^{k} \mathbb{E}_{w_{n_i} \sim P_n(w)} \left[ \log \sigma\left( -{\mathbf{v}'_{w_{n_i}}}^\top \mathbf{v}_{w_I} \right) \right] \right]$$
+
+    <p>where $\sigma(z) = \frac{1}{1 + e^{-z}}$ is the sigmoid function. Using the identity $\sigma(-z) = 1 - \sigma(z)$, this drives the dot product of true co-occurring words toward $+\infty$ and noise words toward $-\infty$.</p>
+
+    <h4>Mathematical Derivation of SGNS Gradients</h4>
+    <p>Let $z = {\mathbf{v}'_{w_O}}^\top \mathbf{v}_{w_I}$. Note that $\frac{d}{dz} \log \sigma(z) = 1 - \sigma(z)$, and $\frac{d}{dz} \log \sigma(-z) = -\sigma(z)$. Computing the partial derivatives with respect to the input vector $\mathbf{v}_{w_I}$:</p>
+    $$\frac{\partial \mathcal{L}}{\partial \mathbf{v}_{w_I}} = \left( 1 - \sigma({\mathbf{v}'_{w_O}}^\top \mathbf{v}_{w_I}) \right) \mathbf{v}'_{w_O} - \sum_{i=1}^k \sigma({\mathbf{v}'_{w_{n_i}}}^\top \mathbf{v}_{w_I}) \mathbf{v}'_{w_{n_i}}$$
+    <p>And with respect to the true context vector $\mathbf{v}'_{w_O}$ and negative context vector $\mathbf{v}'_{w_{n_i}}$:</p>
+    $$\frac{\partial \mathcal{L}}{\partial \mathbf{v}'_{w_O}} = \left( 1 - \sigma({\mathbf{v}'_{w_O}}^\top \mathbf{v}_{w_I}) \right) \mathbf{v}_{w_I}$$
+    $$\frac{\partial \mathcal{L}}{\partial \mathbf{v}'_{w_{n_i}}} = -\sigma({\mathbf{v}'_{w_{n_i}}}^\top \mathbf{v}_{w_I}) \mathbf{v}_{w_I}$$
+
+    <p>Each update now costs only $\mathcal{O}(k \cdot d)$ floating point operations instead of $\mathcal{O}(|V| \cdot d)$! With $k \in [5, 20]$, this yields a <strong>10,000x speedup</strong>.</p>
+
+    <div class="key-insight">
+      <p><strong>The Magic $\frac{3}{4}$ Power Unigram Distribution:</strong><br>
+      How do we choose the noise distribution $P_n(w)$? If we sample purely uniformly, rare words dominate and the model never learns to distinguish common words. If we sample proportional to raw corpus frequency $U(w)$, ultra-frequent stop words ("the", "of", "and") dominate every negative sample. Mikolov discovered empirically that raising the unigram frequency to the $\frac{3}{4}$ power strikes the optimal balance:
+      $$P_n(w) = \frac{U(w)^{0.75}}{\sum_{w' \in V} U(w')^{0.75}}$$
+      For a word with frequency $10^{-6}$, $U(w)^{0.75} \approx 3.16 \times 10^{-5}$ — boosting its sampling probability by over 30x relative to common words!</p>
+    </div>
+
+    <!-- SECTION 5: GLOVE -->
+    <h3>5. GloVe: Global Vectors for Word Representation (Pennington et al., 2014)</h3>
+    <p>While Word2Vec scans local sliding windows via online SGD, Stanford researchers argued that it fails to exploit the vast statistical information residing in <strong>global corpus co-occurrence statistics</strong>. They introduced <strong>GloVe (Global Vectors)</strong>, which unifies global matrix factorization (like LSA) and local context window modeling.</p>
+
+    <p>Let $X_{ij}$ count the number of times word $j$ appears in the context of word $i$. Let $X_i = \sum_k X_{ik}$ be the total occurrences of word $i$. The conditional co-occurrence probability is $P_{ij} = P(j|i) = \frac{X_{ij}}{X_i}$.</p>
+
+    <h4>The Ratio of Co-occurrence Probabilities</h4>
+    <p>Consider two probe words $i = \text{"ice"}$ and $j = \text{"steam"}$. For a context word $k = \text{"solid"}$, we expect $P(\text{solid}|\text{ice})$ to be high and $P(\text{solid}|\text{steam})$ to be low, yielding a large ratio $\frac{P_{ik}}{P_{jk}} \gg 1$. For $k = \text{"gas"}$, the ratio is $\ll 1$. For irrelevant words like $k = \text{"water"}$ or $k = \text{"fashion"}$, the ratio is close to $1$.</p>
+
+    <p>Pennington et al. showed that to preserve this ratio in vector space, the dot product of word vectors must equal the logarithm of their co-occurrence counts:</p>
+    $$\mathbf{w}_i^\top \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j = \log X_{ij}$$
+
+    <p>This yields the <strong>GloVe Weighted Least Squares Objective</strong>:</p>
+    $$J = \sum_{i,j=1}^{|V|} f(X_{ij}) \left( \mathbf{w}_i^\top \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right)^2$$
+
+    <p>where $f(X_{ij})$ is a non-decreasing weighting function designed to prevent rare co-occurrences and ultra-frequent co-occurrences from dominating the loss:</p>
+    $$f(x) = \begin{cases} \left( \frac{x}{x_{\max}} \right)^\alpha & \text{if } x < x_{\max} \\ 1 & \text{otherwise} \end{cases}$$
+    <p>Typically, $x_{\max} = 100$ and $\alpha = 0.75$. GloVe trains via AdaGrad on the non-zero cells of the co-occurrence matrix $X$, yielding remarkably stable and robust representations.</p>
+
+    <!-- SECTION 6: FASTTEXT -->
+    <h3>6. FastText: Enriching Word Vectors with Subword Information (Bojanowski et al., 2017)</h3>
+    <p>Both Word2Vec and GloVe assign a single atomic vector to each vocabulary word. This introduces two serious limitations:</p>
+    <ol>
+      <li><strong>Out-of-Vocabulary (OOV) Catastrophe:</strong> If an unknown word appears at test time (e.g., "bioinformatics", "unfriendliness", or a misspelled word "engneering"), the model has no vector and must assign a random or generic <code>&lt;UNK&gt;</code> token.</li>
+      <li><strong>Ignorance of Morphology:</strong> In morphologically rich languages (German, Turkish, Finnish, Russian), words are constructed from roots, prefixes, and suffixes. In English, "play", "player", "playing", "playable" share obvious semantic roots, yet standard Word2Vec learns four entirely independent vectors with no parameter sharing.</li>
+    </ol>
+
+    <p>Facebook AI Research (FAIR) introduced <strong>FastText</strong>, representing each word $w$ as a bag of <strong>character $n$-grams</strong> bounded by special boundary symbols <code>&lt;</code> and <code>&gt;</code>.</p>
+    <p>For example, for the word <code>"where"</code> with $n=3$:</p>
+    $$\text{Subwords} = \{\text{<wh}, \text{whe}, \text{her}, \text{ere}, \text{re>}, \text{<where>}\}$$
+    <p>The vector for word $w$ is the sum of its character $n$-gram vectors:</p>
+    $$\mathbf{v}_w = \sum_{g \in \mathcal{G}_w} \mathbf{z}_g$$
+    <p>If an unseen word "untranslatability" appears at test time, FastText decomposes it into subword $n$-grams ("un", "trans", "lat", "abil", "ity") and computes a rich, meaningful embedding vector even though the full token never existed in the training set!</p>
+
+    <!-- SECTION 7: SUBWORD TOKENIZATION & BPE -->
+    <h3>7. Subword Tokenization: Byte-Pair Encoding (BPE) &amp; The Path to LLMs</h3>
+    <p>While FastText used character $n$-grams to enrich word embeddings, modern Large Language Models (LLMs like GPT-4, LLaMA, and Claude) require a discrete vocabulary of subwords rather than full words or individual characters. The industry standard that bridged this divide is <strong>Byte-Pair Encoding (BPE)</strong> (Sennrich et al., 2016; Radford et al., 2019).</p>
+
+    <h4>7.1 The Subword Dilemma</h4>
+    <ul>
+      <li><strong>Word-level vocabularies:</strong> Huge vocabulary sizes ($|V| > 500,000$), massive memory footprint, unable to handle new or misspelled words (OOV).</li>
+      <li><strong>Character-level vocabularies:</strong> Tiny vocabulary ($|V| \approx 256$), zero OOV words, but sequences become $5\times$ to $8\times$ longer, exploding the $\mathcal{O}(T^2)$ self-attention cost in Transformers.</li>
+      <li><strong>Subword tokenization:</strong> Finds the optimal sweet spot! Frequent words remain complete tokens (e.g., "the", "transform"), while rare words are decomposed into meaningful sub-units (e.g., "token" + "ization").</li>
+    </ul>
+
+    <h4>7.2 The Byte-Pair Encoding (BPE) Algorithm</h4>
+    <p>BPE constructs its vocabulary bottom-up via iterative statistical merging:</p>
+    <ol>
+      <li><strong>Initialization:</strong> Split every word in the training corpus into individual characters, appending an end-of-word marker (e.g., <code>&lt;/w&gt;</code>). The initial vocabulary $V_0$ consists solely of unique base characters.</li>
+      <li><strong>Frequency Counting:</strong> Scan the corpus and count the co-occurrence frequency of every adjacent symbol pair $(c_i, c_{i+1})$.</li>
+      <li><strong>Greedy Merge:</strong> Identify the most frequent pair $(c_A, c_B) = \arg\max_{(u, v)} \text{count}(u, v)$. Add the concatenated symbol $c_A c_B$ to the vocabulary.</li>
+      <li><strong>Corpus Replacement:</strong> Replace all occurrences of $(c_A, c_B)$ in the corpus with the new token $c_A c_B$.</li>
+      <li><strong>Repeat:</strong> Iterate steps 2–4 for a predetermined number of merge operations $M$, reaching a target vocabulary size $|V| = |V_0| + M$ (typically $32,000$ to $100,000$ tokens).</li>
+    </ol>
+
+    <p>In modern production architectures (GPT-2, GPT-4), <strong>Byte-level BPE (BBPE)</strong> operates directly on raw UTF-8 bytes ($256$ initial tokens). This completely eliminates out-of-vocabulary tokens across all languages, emojis, and binary code without any character normalization or replacement!</p>
+
+    <!-- SECTION 8: THE FATAL FLAW OF STATIC EMBEDDINGS -->
+    <h3>8. The Fatal Flaw of Static Embeddings &amp; The Bridge to Transformers</h3>
+    <p>Despite their brilliance, Word2Vec, GloVe, and FastText belong to the family of <strong>static word embeddings</strong>: each unique token string $w$ has exactly one fixed vector $\mathbf{v}_w$ in memory.</p>
+
+    <div class="real-world-box">
+      <p><strong>The Polysemy Dilemma:</strong><br>
+      Consider the word <em>"apple"</em> in two sentences:<br>
+      Sentence A: <em>"The farmer harvested a crisp, organic <strong>apple</strong> from the orchard."</em><br>
+      Sentence B: <em>"Apple reported record quarterly revenue driven by iPhone and cloud services."</em><br><br>
+      In static embeddings, $\mathbf{v}_{\text{apple}}$ must occupy a single point in space. It ends up being the vector average of fruit-concepts and tech-corporate concepts:
+      $$\mathbf{v}_{\text{apple}} \approx 0.5 \, \mathbf{v}_{\text{fruit}} + 0.5 \, \mathbf{v}_{\text{corporation}}$$
+      In Sentence A, the vector incorrectly brings along corporate connotations; in Sentence B, it brings along botanical connotations! Words have <strong>polysemy</strong>: meaning is fluid, dynamic, and strictly conditioned on context.</p>
+    </div>
+
+    <p>This fundamental breakdown catalyzed the revolution from static embeddings to <strong>contextualized representations</strong>: first ELMo (Peters et al., 2018) via bidirectional LSTMs, and ultimately <strong>BERT and the Transformer</strong> (Vaswani et al., 2017; Devlin et al., 2018), where a word's vector $\mathbf{h}_t = f(x_t | x_1, \dots, x_T)$ is dynamically recomputed as a weighted attention sum over its surrounding sentence (the subject of Part 5).</p>
+
+    <!-- SECTION 9: FAANG INTERVIEW PROBLEM -->
+    <h3>9. Silicon Valley / FAANG Interview Challenge</h3>
+    <div class="interview-question">
+      <p><strong>Meta / Google Interview Question:</strong><br>
+      <em>"Derive the negative sampling loss function from first principles using maximum likelihood estimation on a latent bipartite graph. Then implement a fully vectorized PyTorch module for Word2Vec Skip-Gram with Negative Sampling that performs the forward loss calculation with zero Python loops over context or negative samples."</em></p>
+    </div>
+
+    <!-- SECTION 10: PRODUCTION CODE LAB -->
+    <h3>10. Production Code Lab: Complete PyTorch Skip-Gram with Negative Sampling</h3>
+    <p>Below is a production-grade, fully vectorized PyTorch implementation of Word2Vec with Negative Sampling, complete with unigram table construction, batch tensor contractions via <code>torch.bmm</code>, and vector arithmetic verification.</p>
+
+    <pre><code class="language-python">import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+
+class SkipGramNegativeSampling(nn.Module):
+    """
+    Production-grade Word2Vec Skip-Gram with Negative Sampling (SGNS).
+    Implements vectorized forward loss using batch matrix multiplication (bmm).
+    """
+    def __init__(self, vocab_size: int, embed_dim: int, padding_idx: int = 0):
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.embed_dim = embed_dim
+        
+        # Target (input) word embeddings: v_w
+        self.in_embed = nn.Embedding(vocab_size, embed_dim, padding_idx=padding_idx)
+        # Context (output) word embeddings: v'_w
+        self.out_embed = nn.Embedding(vocab_size, embed_dim, padding_idx=padding_idx)
+        
+        # Initialize weights with Xavier uniform scaled for embeddings
+        nn.init.uniform_(self.in_embed.weight, -0.5 / embed_dim, 0.5 / embed_dim)
+        nn.init.zeros_(self.out_embed.weight)
+
+    def forward(self, center_words: torch.Tensor, target_words: torch.Tensor, 
+                neg_words: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            center_words: Tensor of shape (batch_size,)
+            target_words: Tensor of shape (batch_size,) - true co-occurring context words
+            neg_words:    Tensor of shape (batch_size, num_negatives) - noise words
+        Returns:
+            Scalar loss tensor
+        """
+        # Shape: (batch_size, embed_dim)
+        v_center = self.in_embed(center_words)
+        # Shape: (batch_size, embed_dim)
+        v_target = self.out_embed(target_words)
+        # Shape: (batch_size, num_negatives, embed_dim)
+        v_neg = self.out_embed(neg_words)
+        
+        # --- Positive Pair Score: log sigma(v'_target^T v_center) ---
+        # Element-wise dot product: (batch_size,)
+        pos_dot = torch.sum(v_center * v_target, dim=1)
+        pos_loss = F.logsigmoid(pos_dot)
+        
+        # --- Negative Pairs Score: sum_i log sigma(-v'_neg_i^T v_center) ---
+        # Vectorized via batch matrix multiplication:
+        # (batch_size, num_negatives, embed_dim) x (batch_size, embed_dim, 1)
+        # -> (batch_size, num_negatives, 1) -> (batch_size, num_negatives)
+        neg_dot = torch.bmm(v_neg, v_center.unsqueeze(2)).squeeze(2)
+        neg_loss = torch.sum(F.logsigmoid(-neg_dot), dim=1)
+        
+        # Overall objective: maximize pos_loss + neg_loss  ==> minimize negative
+        total_loss = -torch.mean(pos_loss + neg_loss)
+        return total_loss
+
+    def get_embeddings(self) -> torch.Tensor:
+        """Standard practice: add or average in_embed and out_embed weights."""
+        return (self.in_embed.weight.data + self.out_embed.weight.data) / 2.0
+
+
+class UnigramNoiseSampler:
+    """Efficient alias-table or multinomial table for 3/4 unigram sampling."""
+    def __init__(self, word_counts: np.ndarray, power: float = 0.75, table_size: int = 1_000_000):
+        # Raise frequencies to power
+        powered = np.power(word_counts, power)
+        norm_probs = powered / np.sum(powered)
+        
+        # Build cumulative lookup table for O(1) sampling
+        cumulative = np.cumsum(norm_probs)
+        self.table = np.zeros(table_size, dtype=np.int32)
+        cur_word = 0
+        for i in range(table_size):
+            r = (i + 1) / table_size
+            while cur_word < len(word_counts) - 1 and r > cumulative[cur_word]:
+                cur_word += 1
+            self.table[i] = cur_word
+
+    def sample(self, batch_size: int, num_negatives: int) -> torch.Tensor:
+        indices = np.random.randint(0, len(self.table), size=(batch_size, num_negatives))
+        return torch.from_numpy(self.table[indices]).long()
+
+
+# --- Unit Test & Semantic Verification ---
+if __name__ == "__main__":
+    torch.manual_seed(42)
+    np.random.seed(42)
+    
+    vocab_size = 5000
+    embed_dim = 64
+    batch_size = 32
+    num_neg = 5
+    
+    model = SkipGramNegativeSampling(vocab_size=vocab_size, embed_dim=embed_dim)
+    
+    # Simulate dummy training batch
+    centers = torch.randint(1, vocab_size, (batch_size,))
+    targets = torch.randint(1, vocab_size, (batch_size,))
+    
+    # Simulate word frequencies following Zipf's law: f(r) ~ 1/r
+    ranks = np.arange(1, vocab_size + 1)
+    zipf_counts = 100_000.0 / ranks
+    sampler = UnigramNoiseSampler(zipf_counts, power=0.75)
+    negs = sampler.sample(batch_size, num_neg)
+    
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
+    
+    # Verify gradient flow
+    optimizer.zero_grad()
+    loss = model(centers, targets, negs)
+    loss.backward()
+    optimizer.step()
+    
+    print(f"[Word2Vec SGNS Unit Test] Batch Loss: {loss.item():.4f}")
+    assert not torch.isnan(loss), "Loss computed as NaN!"
+    assert model.in_embed.weight.grad is not None, "Gradients not computed!"
+    print("[SUCCESS] Vectorized SGNS Module Verified.")
+</code></pre>
+
+    <!-- SECTION 11: CAPSTONE LAB -->
+    <h3>11. Capstone Project: Vector Analogy Arithmetic &amp; Cosine Evaluation</h3>
+    <div class="project-box">
+      <p><strong>Hands-on Capstone: Semantic Vector Arithmetic</strong><br>
+      Once word vectors are trained, semantic relationships emerge as regular geometric translations. The classic Mikolov vector offset tests the equation:</p>
+      $$\mathbf{v}^* = \arg\max_{w \in V \setminus \{a, b, c\}} \cos\left( \mathbf{v}_b - \mathbf{v}_a + \mathbf{v}_c, \, \mathbf{v}_w \right)$$
+      <p>For example: $\mathbf{v}_{\text{king}} - \mathbf{v}_{\text{man}} + \mathbf{v}_{\text{woman}} \approx \mathbf{v}_{\text{queen}}$. Below is the evaluation routine for analogy benchmarks:</p>
+
+      <pre><code class="language-python">def solve_analogy(a: str, b: str, c: str, word2idx: dict, idx2word: dict, 
+                  embeddings: torch.Tensor, top_k: int = 3) -> list:
+    """
+    Solves analogies of the form: a is to b as c is to ?
+    e.g., 'man' : 'king' :: 'woman' : 'queen'
+    """
+    # Normalize embeddings to unit vectors for cosine similarity via dot product
+    norm_emb = F.normalize(embeddings, p=2, dim=1)
+    
+    va = norm_emb[word2idx[a]]
+    vb = norm_emb[word2idx[b]]
+    vc = norm_emb[word2idx[c]]
+    
+    # Target query vector
+    query = vb - va + vc
+    query = query / torch.norm(query)
+    
+    # Compute cosine similarity across entire vocabulary
+    scores = torch.matmul(norm_emb, query)
+    
+    # Exclude the input words from candidate answers
+    for input_word in [a, b, c]:
+        if input_word in word2idx:
+            scores[word2idx[input_word]] = -float('inf')
+            
+    top_scores, top_indices = torch.topk(scores, top_k)
+    return [(idx2word[idx.item()], round(score.item(), 4)) for idx, score in zip(top_indices, top_scores)]
+
+print("Analogy Solved: 'man':'king' :: 'woman':?")
+print("Expected Top Candidate: 'queen'")
+</code></pre>
+    </div>
+
+    <!-- ======================================================================
+         SECTION 12: GRADED PRACTICE SUITE (8 PROBLEMS: 4.7.1 TO 4.7.8)
+         ====================================================================== -->
+    <h3>12. Graded Practice Suite: NLP Foundations &amp; Word Embeddings</h3>
+    <p>Mastering word embeddings requires rigorous mathematical competence in logistic contrastive loss functions, co-occurrence statistics, subword tokenization hand-tracing, and geometric vector properties.</p>
+
+    <!-- PROBLEM 4.7.1 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.7.1</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Skip-Gram with Negative Sampling (SGNS) Step-by-Step Forward Loss and Gradient:</strong></p>
+        <p>Suppose you are training a Skip-Gram model with embedding dimension $d=3$. For the center target word $w_I = \text{"neural"}$, its input embedding vector is:</p>
+        $$\mathbf{v}_I = [0.6, -0.8, 0.4]^\top$$
+        <p>The true co-occurring context word is $w_O = \text{"network"}$, with output embedding vector:</p>
+        $$\mathbf{v}'_O = [0.5, -0.6, 0.2]^\top$$
+        <p>During negative sampling, $K=3$ noise words $w_{n_1}, w_{n_2}, w_{n_3}$ are drawn from the unigram table with output embedding vectors:</p>
+        $$\mathbf{v}'_{n_1} = [-0.4, 0.5, 0.1]^\top, \quad \mathbf{v}'_{n_2} = [0.8, 0.2, -0.3]^\top, \quad \mathbf{v}'_{n_3} = [-0.1, -0.9, 0.7]^\top$$
+        <ol>
+          <li>Calculate the inner product $z_{\text{pos}} = {\mathbf{v}'_O}^\top \mathbf{v}_I$ and the positive pair model probability $\sigma(z_{\text{pos}})$.</li>
+          <li>Calculate the inner products $z_{n_i} = {\mathbf{v}'_{n_i}}^\top \mathbf{v}_I$ and the negative pair log-probabilities $\ln \sigma(-z_{n_i})$ for each noise word $i \in \{1, 2, 3\}$.</li>
+          <li>Compute the total negative sampling scalar loss $\mathcal{L}_{\text{SGNS}} = -\left[ \ln \sigma(z_{\text{pos}}) + \sum_{i=1}^3 \ln \sigma(-z_{n_i}) \right]$.</li>
+          <li>Calculate the analytical gradient vector of the loss with respect to the input center vector: $\nabla_{\mathbf{v}_I} \mathcal{L}_{\text{SGNS}} \in \mathbb{R}^3$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: Positive Pair Inner Product and Probability</strong></p>
+        <p>The dot product between the center vector $\mathbf{v}_I$ and true context vector $\mathbf{v}'_O$ is:</p>
+        $$z_{\text{pos}} = {\mathbf{v}'_O}^\top \mathbf{v}_I = (0.5)(0.6) + (-0.6)(-0.8) + (0.2)(0.4) = 0.30 + 0.48 + 0.08 = 0.86$$
+        <p>The sigmoid activation is:</p>
+        $$\sigma(0.86) = \frac{1}{1 + e^{-0.86}} = \frac{1}{1 + 0.423162} = \frac{1}{1.423162} \approx 0.70266 \approx 0.7027$$
+        <p>The positive log-likelihood term is:</p>
+        $$\ln \sigma(z_{\text{pos}}) = \ln(0.70266) \approx -0.35287 \approx -0.3529$$
+
+        <p class="step"><strong>Step 2: Negative Sample Inner Products and Log Probabilities</strong></p>
+        <p>For each negative sample $w_{n_i}$, compute $z_{n_i} = {\mathbf{v}'_{n_i}}^\top \mathbf{v}_I$ and $\ln \sigma(-z_{n_i})$:</p>
+        <ul>
+          <li><strong>Negative Sample 1 ($\mathbf{v}'_{n_1} = [-0.4, 0.5, 0.1]^\top$):</strong>
+          $$z_{n_1} = (-0.4)(0.6) + (0.5)(-0.8) + (0.1)(0.4) = -0.24 - 0.40 + 0.04 = -0.60$$
+          $$-z_{n_1} = +0.60 \implies \sigma(0.60) = \frac{1}{1 + e^{-0.60}} = \frac{1}{1 + 0.548812} \approx 0.64566$$
+          $$\ln \sigma(-z_{n_1}) = \ln(0.64566) \approx -0.43748 \approx -0.4375$$</li>
+          <li><strong>Negative Sample 2 ($\mathbf{v}'_{n_2} = [0.8, 0.2, -0.3]^\top$):</strong>
+          $$z_{n_2} = (0.8)(0.6) + (0.2)(-0.8) + (-0.3)(0.4) = 0.48 - 0.16 - 0.12 = 0.20$$
+          $$-z_{n_2} = -0.20 \implies \sigma(-0.20) = \frac{1}{1 + e^{0.20}} = \frac{1}{1 + 1.221403} \approx 0.45017$$
+          $$\ln \sigma(-z_{n_2}) = \ln(0.45017) \approx -0.79812 \approx -0.7981$$</li>
+          <li><strong>Negative Sample 3 ($\mathbf{v}'_{n_3} = [-0.1, -0.9, 0.7]^\top$):</strong>
+          $$z_{n_3} = (-0.1)(0.6) + (-0.9)(-0.8) + (0.7)(0.4) = -0.06 + 0.72 + 0.28 = 0.94$$
+          $$-z_{n_3} = -0.94 \implies \sigma(-0.94) = \frac{1}{1 + e^{0.94}} = \frac{1}{1 + 2.559981} \approx 0.28090$$
+          $$\ln \sigma(-z_{n_3}) = \ln(0.28090) \approx -1.26976 \approx -1.2698$$</li>
+        </ul>
+
+        <p class="step"><strong>Step 3: Total SGNS Scalar Loss</strong></p>
+        <p>Sum the negative log-probabilities:</p>
+        $$\sum_{i=1}^3 \ln \sigma(-z_{n_i}) = -0.43748 - 0.79812 - 1.26976 = -2.50536$$
+        $$\mathcal{L}_{\text{SGNS}} = -\left[ -0.35287 + (-2.50536) \right] = -[-2.85823] = \mathbf{2.8582}$$
+
+        <p class="step"><strong>Step 4: Analytical Gradient Vector $\nabla_{\mathbf{v}_I} \mathcal{L}_{\text{SGNS}}$</strong></p>
+        <p>Using the identity $\frac{d}{dz} \ln \sigma(z) = 1 - \sigma(z)$ and $\frac{d}{dz} \ln \sigma(-z) = -\sigma(z)$:</p>
+        $$\nabla_{\mathbf{v}_I} \mathcal{L}_{\text{SGNS}} = -\left[ (1 - \sigma(z_{\text{pos}})) \mathbf{v}'_O - \sum_{i=1}^3 \sigma(z_{n_i}) \mathbf{v}'_{n_i} \right] = -(1 - \sigma(z_{\text{pos}})) \mathbf{v}'_O + \sum_{i=1}^3 \sigma(z_{n_i}) \mathbf{v}'_{n_i}$$
+        <p>Compute each scalar coefficient:</p>
+        <ul>
+          <li>$1 - \sigma(z_{\text{pos}}) = 1 - 0.70266 = 0.29734$
+          $$-(1 - \sigma(z_{\text{pos}})) \mathbf{v}'_O = -0.29734 \times [0.5, -0.6, 0.2]^\top = [-0.14867, 0.17840, -0.05947]^\top$$</li>
+          <li>$\sigma(z_{n_1}) = \sigma(-0.60) = 1 - \sigma(0.60) = 1 - 0.64566 = 0.35434$
+          $$\sigma(z_{n_1}) \mathbf{v}'_{n_1} = 0.35434 \times [-0.4, 0.5, 0.1]^\top = [-0.14174, 0.17717, 0.03543]^\top$$</li>
+          <li>$\sigma(z_{n_2}) = \sigma(0.20) = 1 - \sigma(-0.20) = 1 - 0.45017 = 0.54983$
+          $$\sigma(z_{n_2}) \mathbf{v}'_{n_2} = 0.54983 \times [0.8, 0.2, -0.3]^\top = [0.43986, 0.10997, -0.16495]^\top$$</li>
+          <li>$\sigma(z_{n_3}) = \sigma(0.94) = 1 - \sigma(-0.94) = 1 - 0.28090 = 0.71910$
+          $$\sigma(z_{n_3}) \mathbf{v}'_{n_3} = 0.71910 \times [-0.1, -0.9, 0.7]^\top = [-0.07191, -0.64719, 0.50337]^\top$$</li>
+        </ul>
+        <p>Summing the components coordinate-by-coordinate:</p>
+        $$\nabla_{\mathbf{v}_I} \mathcal{L}_1 = -0.14867 - 0.14174 + 0.43986 - 0.07191 = \mathbf{0.0775}$$
+        $$\nabla_{\mathbf{v}_I} \mathcal{L}_2 = 0.17840 + 0.17717 + 0.10997 - 0.64719 = \mathbf{-0.1816}$$
+        $$\nabla_{\mathbf{v}_I} \mathcal{L}_3 = -0.05947 + 0.03543 - 0.16495 + 0.50337 = \mathbf{0.3144}$$
+        $$\nabla_{\mathbf{v}_I} \mathcal{L}_{\text{SGNS}} = \begin{bmatrix} 0.0775 \\ -0.1816 \\ 0.3144 \end{bmatrix}$$
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.7.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.7.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>GloVe Co-occurrence Weighting and Log-Bilinear Squared Loss:</strong></p>
+        <p>In the GloVe model, the co-occurrence matrix cell for word pair $(i, j) = (\text{"dna"}, \text{"helix"})$ has observed co-occurrence count $X_{ij} = 36$. The hyperparameter settings are $x_{\max} = 100$ and $\alpha = 0.75$. The current parameter state is:</p>
+        $$\mathbf{w}_i = [0.4, -0.2, 0.5]^\top, \quad \tilde{\mathbf{w}}_j = [0.3, 0.6, -0.1]^\top, \quad b_i = 0.15, \quad \tilde{b}_j = -0.05$$
+        <ol>
+          <li>Calculate the exact GloVe weighting coefficient $f(X_{ij}) = (X_{ij} / x_{\max})^\alpha$ to four decimal places.</li>
+          <li>Calculate the predicted log co-occurrence scalar $\hat{y}_{ij} = \mathbf{w}_i^\top \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j$.</li>
+          <li>Compute the target value $y_{ij} = \ln(X_{ij})$ and the prediction residual $\hat{y}_{ij} - y_{ij}$.</li>
+          <li>Calculate the weighted squared loss contribution $J_{ij} = f(X_{ij}) \left( \hat{y}_{ij} - y_{ij} \right)^2$.</li>
+          <li>Compute the parameter gradient vector $\nabla_{\mathbf{w}_i} J_{ij} \in \mathbb{R}^3$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: GloVe Weighting Function</strong></p>
+        <p>Since $X_{ij} = 36 < x_{\max} = 100$:</p>
+        $$f(X_{ij}) = \left( \frac{36}{100} \right)^{0.75} = (0.36)^{3/4} = (0.6^2)^{3/4} = (0.6)^{1.5} = 0.6 \times \sqrt{0.6}$$
+        $$\sqrt{0.6} \approx 0.77459667 \implies f(X_{ij}) = 0.6 \times 0.77459667 = 0.464758 \approx \mathbf{0.4648}$$
+
+        <p class="step"><strong>Step 2: Predicted Log Co-occurrence Value $\hat{y}_{ij}$</strong></p>
+        <p>Compute the dot product:</p>
+        $$\mathbf{w}_i^\top \tilde{\mathbf{w}}_j = (0.4)(0.3) + (-0.2)(0.6) + (0.5)(-0.1) = 0.12 - 0.12 - 0.05 = -0.05$$
+        <p>Adding the bias terms:</p>
+        $$\hat{y}_{ij} = \mathbf{w}_i^\top \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j = -0.05 + 0.15 + (-0.05) = \mathbf{0.0500}$$
+
+        <p class="step"><strong>Step 3: Target Log Count and Residual</strong></p>
+        <p>The ground truth target is:</p>
+        $$y_{ij} = \ln(36) \approx 3.5835189 \approx 3.5835$$
+        <p>The prediction residual is:</p>
+        $$\Delta_{ij} = \hat{y}_{ij} - y_{ij} = 0.0500 - 3.5835 = \mathbf{-3.5335}$$
+
+        <p class="step"><strong>Step 4: Weighted Squared Loss Contribution</strong></p>
+        <p>The squared residual is:</p>
+        $$\Delta_{ij}^2 = (-3.5335)^2 \approx 12.48562$$
+        <p>Multiplying by the weighting coefficient:</p>
+        $$J_{ij} = f(X_{ij}) \Delta_{ij}^2 = 0.464758 \times 12.48562 = \mathbf{5.8028}$$
+
+        <p class="step"><strong>Step 5: Gradient Vector $\nabla_{\mathbf{w}_i} J_{ij}$</strong></p>
+        <p>Differentiating $J_{ij}$ with respect to $\mathbf{w}_i$ using the chain rule:</p>
+        $$\nabla_{\mathbf{w}_i} J_{ij} = 2 f(X_{ij}) (\hat{y}_{ij} - y_{ij}) \tilde{\mathbf{w}}_j = 2 (0.464758) (-3.5335) \tilde{\mathbf{w}}_j = -3.2846 \times [0.3, 0.6, -0.1]^\top$$
+        $$\nabla_{\mathbf{w}_i} J_{ij} = \begin{bmatrix} -3.2846 \times 0.3 \\ -3.2846 \times 0.6 \\ -3.2846 \times (-0.1) \end{bmatrix} = \begin{bmatrix} \mathbf{-0.9854} \\ \mathbf{-1.9708} \\ \mathbf{0.3285} \end{bmatrix}$$
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.7.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.7.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-bytedance">ByteDance</span>
+        <span class="company-tag company-openai">OpenAI</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Byte-Pair Encoding (BPE) Algorithmic Hand-Trace:</strong></p>
+        <p>Consider a mini-corpus with the following words and token frequencies:</p>
+        $$\mathcal{D} = \{\text{"low"}: 5, \quad \text{"lower"}: 2, \quad \text{"newest"}: 6, \quad \text{"widest"}: 3\}$$
+        <p>Each word is terminated with the end-of-word marker <code>&lt;/w&gt;</code> and decomposed into individual characters:</p>
+        $$\text{l o w &lt;/w&gt; : 5}, \quad \text{l o w e r &lt;/w&gt; : 2}, \quad \text{n e w e s t &lt;/w&gt; : 6}, \quad \text{w i d e s t &lt;/w&gt; : 3}$$
+        <p>The initial vocabulary $V_0$ consists of the 11 unique base characters: <code>{'l', 'o', 'w', 'e', 'r', 'n', 's', 't', 'i', 'd', '&lt;/w&gt;'}</code>.</p>
+        <ol>
+          <li>Perform exactly <strong>4 sequential BPE merge iterations</strong>. For each iteration, construct the table of all adjacent symbol pairs, state their frequencies across the corpus, state the winning pair (break ties alphabetically by pair string), show the updated vocabulary, and show the updated corpus representation.</li>
+          <li>Using the final learned 4-merge vocabulary, show how the unseen test word <code>"lowest"</code> is tokenized, tracing each merge step.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: Iteration 1 Frequency Analysis and Merge</strong></p>
+        <p>Extract all adjacent symbol pairs and multiply by word occurrences:</p>
+        <ul>
+          <li><code>('l', 'o')</code>: $5 + 2 = 7$</li>
+          <li><code>('o', 'w')</code>: $5 + 2 = 7$</li>
+          <li><code>('w', '&lt;/w&gt;')</code>: $5$</li>
+          <li><code>('w', 'e')</code>: $2 \text{ (from lower)} + 6 \text{ (from newest)} = 8$</li>
+          <li><code>('e', 'r')</code>: $2$</li>
+          <li><code>('r', '&lt;/w&gt;')</code>: $2$</li>
+          <li><code>('n', 'e')</code>: $6$</li>
+          <li><code>('e', 'w')</code>: $6$</li>
+          <li><code>('e', 's')</code>: $6 \text{ (newest)} + 3 \text{ (widest)} = \mathbf{9}$</li>
+          <li><code>('s', 't')</code>: $6 \text{ (newest)} + 3 \text{ (widest)} = \mathbf{9}$</li>
+          <li><code>('t', '&lt;/w&gt;')</code>: $6 \text{ (newest)} + 3 \text{ (widest)} = \mathbf{9}$</li>
+          <li><code>('w', 'i')</code>: $3$</li>
+          <li><code>('i', 'd')</code>: $3$</li>
+          <li><code>('d', 'e')</code>: $3$</li>
+        </ul>
+        <p>Max frequency is 9, with a three-way tie: <code>('e', 's')</code>, <code>('s', 't')</code>, <code>('t', '&lt;/w&gt;')</code>. Breaking tie alphabetically: <strong>Merge 1: <code>('e', 's') -> 'es'</code></strong> (Frequency = 9).</p>
+        <p>Updated Corpus:</p>
+        $$\text{l o w &lt;/w&gt; : 5}, \quad \text{l o w e r &lt;/w&gt; : 2}, \quad \text{n e w es t &lt;/w&gt; : 6}, \quad \text{w i d es t &lt;/w&gt; : 3}$$
+        <p>Vocabulary size: $11 + 1 = 12$. Added: <code>'es'</code>.</p>
+
+        <p class="step"><strong>Step 2: Iteration 2 Frequency Analysis and Merge</strong></p>
+        <p>Count remaining pairs:</p>
+        <ul>
+          <li><code>('es', 't')</code>: $6 + 3 = \mathbf{9}$</li>
+          <li><code>('t', '&lt;/w&gt;')</code>: $6 + 3 = \mathbf{9}$</li>
+          <li><code>('w', 'es')</code>: $6$</li>
+          <li><code>('d', 'es')</code>: $3$</li>
+          <li><code>('l', 'o')</code>: $7$, <code>('o', 'w')</code>: $7$, <code>('n', 'e')</code>: $6$, <code>('e', 'w')</code>: $6$, <code>('w', '&lt;/w&gt;')</code>: $5$</li>
+        </ul>
+        <p>Tie between <code>('es', 't')</code> and <code>('t', '&lt;/w&gt;')</code> (freq 9). Alphabetical tie-break: <strong>Merge 2: <code>('es', 't') -> 'est'</code></strong> (Frequency = 9).</p>
+        <p>Updated Corpus:</p>
+        $$\text{l o w &lt;/w&gt; : 5}, \quad \text{l o w e r &lt;/w&gt; : 2}, \quad \text{n e w est &lt;/w&gt; : 6}, \quad \text{w i d est &lt;/w&gt; : 3}$$
+        <p>Vocabulary size: $12 + 1 = 13$. Added: <code>'est'</code>.</p>
+
+        <p class="step"><strong>Step 3: Iteration 3 Frequency Analysis and Merge</strong></p>
+        <p>Count pairs:</p>
+        <ul>
+          <li><code>('est', '&lt;/w&gt;')</code>: $6 + 3 = \mathbf{9}$</li>
+          <li><code>('l', 'o')</code>: $7$, <code>('o', 'w')</code>: $7$, <code>('n', 'e')</code>: $6$, <code>('e', 'w')</code>: $6$, <code>('w', 'est')</code>: $6$</li>
+        </ul>
+        <p>Max frequency is 9: <strong>Merge 3: <code>('est', '&lt;/w&gt;') -> 'est&lt;/w&gt;'</code></strong> (Frequency = 9).</p>
+        <p>Updated Corpus:</p>
+        $$\text{l o w &lt;/w&gt; : 5}, \quad \text{l o w e r &lt;/w&gt; : 2}, \quad \text{n e w est&lt;/w&gt; : 6}, \quad \text{w i d est&lt;/w&gt; : 3}$$
+        <p>Vocabulary size: $13 + 1 = 14$. Added: <code>'est&lt;/w&gt;'</code>.</p>
+
+        <p class="step"><strong>Step 4: Iteration 4 Frequency Analysis and Merge</strong></p>
+        <p>Count pairs:</p>
+        <ul>
+          <li><code>('l', 'o')</code>: $5 + 2 = \mathbf{7}$</li>
+          <li><code>('o', 'w')</code>: $5 + 2 = \mathbf{7}$</li>
+          <li><code>('n', 'e')</code>: $6$, <code>('e', 'w')</code>: $6$, <code>('w', 'est&lt;/w&gt;')</code>: $6$, <code>('w', '&lt;/w&gt;')</code>: $5$</li>
+        </ul>
+        <p>Tie between <code>('l', 'o')</code> and <code>('o', 'w')</code> (freq 7). Alphabetical tie-break: <strong>Merge 4: <code>('l', 'o') -> 'lo'</code></strong> (Frequency = 7).</p>
+        <p>Final Learned Merge Rules (in order):</p>
+        $$\text{Rule 1: } (\text{'e'}, \text{'s'}) \to \text{'es'}, \quad \text{Rule 2: } (\text{'es'}, \text{'t'}) \to \text{'est'}, \quad \text{Rule 3: } (\text{'est'}, \text{'&lt;/w&gt;'}) \to \text{'est&lt;/w&gt;'}, \quad \text{Rule 4: } (\text{'l'}, \text{'o'}) \to \text{'lo'}$$
+        <p>Final Vocabulary: <code>{'l', 'o', 'w', 'e', 'r', 'n', 's', 't', 'i', 'd', '&lt;/w&gt;', 'es', 'est', 'est&lt;/w&gt;', 'lo'}</code> (Size: 15).</p>
+
+        <p class="step"><strong>Step 5: Tokenizing Unseen Test Word "lowest"</strong></p>
+        <p>Start with character-split sequence: <code>['l', 'o', 'w', 'e', 's', 't', '&lt;/w&gt;']</code>.</p>
+        <ol>
+          <li>Apply Rule 1 (<code>'e', 's' -> 'es'</code>): <code>['l', 'o', 'w', 'es', 't', '&lt;/w&gt;']</code></li>
+          <li>Apply Rule 2 (<code>'es', 't' -> 'est'</code>): <code>['l', 'o', 'w', 'est', '&lt;/w&gt;']</code></li>
+          <li>Apply Rule 3 (<code>'est', '&lt;/w&gt;' -> 'est&lt;/w&gt;'</code>): <code>['l', 'o', 'w', 'est&lt;/w&gt;']</code></li>
+          <li>Apply Rule 4 (<code>'l', 'o' -> 'lo'</code>): <code>['lo', 'w', 'est&lt;/w&gt;']</code></li>
+        </ol>
+        <p>Resulting Tokenization: $\mathbf{['lo', 'w', 'est</w>']}$. The unseen word was successfully parsed into 3 valid vocabulary subwords without any out-of-vocabulary fallback!</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.7.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.7.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-bloomberg">Bloomberg</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>FastText OOV Vector Reconstruction &amp; Hash Collision Analysis:</strong></p>
+        <p>In FastText, a word is embedded by decomposing it into character $n$-grams ($n=3$) plus special boundaries <code>&lt;</code> and <code>&gt;</code>, along with the full sequence <code>&lt;word&gt;</code>. To maintain a bounded parameter matrix, FastText maps each $n$-gram string $s$ to a bucket index $b \in \{0, 1, \dots, B-1\}$ via the hash function:</p>
+        $$h(s) = \left( \sum_{k=0}^{L-1} c_k \cdot 31^{L-1-k} \right) \pmod{B}$$
+        <p>where $c_k$ is the ASCII value of the $k$-th character and $L$ is string length. Let bucket size $B=10$ and embedding dimension $d=3$.</p>
+        <p>Suppose the out-of-vocabulary word is <code>"cat"</code>. The bounded string is <code>"&lt;cat&gt;"</code>. The character 3-grams are: <code>"&lt;ca"</code>, <code>"cat"</code>, <code>"at&gt;"</code>, and the full sequence is <code>"&lt;cat&gt;"</code>.</p>
+        <p>ASCII values: <code>'&lt;': 60</code>, <code>'&gt;': 62</code>, <code>'a': 97</code>, <code>'c': 99</code>, <code>'t': 116</code>.</p>
+        <ol>
+          <li>Compute the exact integer polynomial hash value modulo 10 for each of the 4 subword tokens.</li>
+          <li>Determine if any hash collisions occur.</li>
+          <li>Given the embedding lookup table $E \in \mathbb{R}^{10 \times 3}$ where row $i$ is $E[i] = [0.1 \cdot i, \; -0.05 \cdot i, \; 0.2 \cdot (i \pmod 3)]$:
+          compute the composite FastText embedding vector $\mathbf{v}_{\text{cat}} = \frac{1}{|\mathcal{G}|} \sum_{g \in \mathcal{G}} E[h(g)]$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: Subword Hash Computations</strong></p>
+        <p>Note: In modular arithmetic modulo 10, $31 \equiv 1 \pmod{10}$. Therefore, for any power $p$, $31^p \equiv 1^p \equiv 1 \pmod{10}$!</p>
+        $$h(s) = \left( \sum_{k=0}^{L-1} c_k \cdot 31^{L-1-k} \right) \pmod{10} \equiv \left( \sum_{k=0}^{L-1} c_k \right) \pmod{10}$$
+        <p>Let us verify and compute each subword:</p>
+        <ul>
+          <li><strong>Subword 1: <code>"&lt;ca"</code></strong> (chars: 60, 99, 97):
+          $$\text{Sum} = 60 + 99 + 97 = 256 \implies 256 \pmod{10} = \mathbf{6}$$
+          Full polynomial check: $60 \times 31^2 + 99 \times 31 + 97 = 60 \times 961 + 3069 + 97 = 57660 + 3069 + 97 = 60826 \equiv 6 \pmod{10}$. Verified!</li>
+          <li><strong>Subword 2: <code>"cat"</code></strong> (chars: 99, 97, 116):
+          $$\text{Sum} = 99 + 97 + 116 = 312 \implies 312 \pmod{10} = \mathbf{2}$$</li>
+          <li><strong>Subword 3: <code>"at&gt;"</code></strong> (chars: 97, 116, 62):
+          $$\text{Sum} = 97 + 116 + 62 = 275 \implies 275 \pmod{10} = \mathbf{5}$$</li>
+          <li><strong>Subword 4: <code>"&lt;cat&gt;"</code></strong> (chars: 60, 99, 97, 116, 62):
+          $$\text{Sum} = 60 + 99 + 97 + 116 + 62 = 434 \implies 434 \pmod{10} = \mathbf{4}$$</li>
+        </ul>
+        <p>The 4 hash bucket indices are: $h(\text{"&lt;ca"}) = 6, \; h(\text{"cat"}) = 2, \; h(\text{"at&gt;"}) = 5, \; h(\text{"&lt;cat&gt;"}) = 4$.</p>
+
+        <p class="step"><strong>Step 2: Collision Analysis</strong></p>
+        <p>The resulting buckets $\{6, 2, 5, 4\}$ are mutually distinct. <strong>Zero hash collisions occur</strong> for this token set.</p>
+
+        <p class="step"><strong>Step 3: Embedding Lookup and Composite Vector Sum</strong></p>
+        <p>Retrieve the vectors from table $E$ for rows 6, 2, 5, 4:</p>
+        <ul>
+          <li>Row 6: $[0.1 \times 6, \; -0.05 \times 6, \; 0.2 \times (6 \pmod 3)] = [0.6, \; -0.30, \; 0.2 \times 0] = [0.6, -0.30, 0.0]$</li>
+          <li>Row 2: $[0.1 \times 2, \; -0.05 \times 2, \; 0.2 \times (2 \pmod 3)] = [0.2, \; -0.10, \; 0.2 \times 2] = [0.2, -0.10, 0.4]$</li>
+          <li>Row 5: $[0.1 \times 5, \; -0.05 \times 5, \; 0.2 \times (5 \pmod 3)] = [0.5, \; -0.25, \; 0.2 \times 2] = [0.5, -0.25, 0.4]$</li>
+          <li>Row 4: $[0.1 \times 4, \; -0.05 \times 4, \; 0.2 \times (4 \pmod 3)] = [0.4, \; -0.20, \; 0.2 \times 1] = [0.4, -0.20, 0.2]$</li>
+        </ul>
+        <p>Summing the 4 vectors:</p>
+        $$\sum_{g \in \mathcal{G}} E[h(g)] = \begin{bmatrix} 0.6 + 0.2 + 0.5 + 0.4 \\ -0.30 - 0.10 - 0.25 - 0.20 \\ 0.0 + 0.4 + 0.4 + 0.2 \end{bmatrix} = \begin{bmatrix} 1.7 \\ -0.85 \\ 1.0 \end{bmatrix}$$
+        <p>Averaging across the $|\mathcal{G}| = 4$ subwords:</p>
+        $$\mathbf{v}_{\text{cat}} = \frac{1}{4} \begin{bmatrix} 1.7 \\ -0.85 \\ 1.0 \end{bmatrix} = \begin{bmatrix} \mathbf{0.4250} \\ \mathbf{-0.2125} \\ \mathbf{0.2500} \end{bmatrix}$$
+        <p>This demonstrates how FastText reconstructs an out-of-vocabulary embedding dynamically from subword hash tables.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.7.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.7.5</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google Brain</span>
+        <span class="company-tag company-stanford">Stanford</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Levy &amp; Goldberg (2014) Theorem: Skip-Gram with Negative Sampling Implicitly Factorizes Shifted Pointwise Mutual Information (PMI):</strong></p>
+        <p>In a seminal paper (NeurIPS 2014), Omer Levy and Yoav Goldberg proved that Word2Vec Skip-Gram with Negative Sampling (SGNS) is mathematically equivalent to factorizing a shifted word-context Pointwise Mutual Information (PMI) matrix.</p>
+        <ol>
+          <li>Formulate the global corpus objective function of SGNS as a sum over unique word-context pairs $(w, c) \in V \times V_C$ weighted by empirical co-occurrence counts $\#(w, c)$ and unigram negative sampling probabilities $P_n(c) = \frac{\#(c)}{|\mathcal{D}|}$.</li>
+          <li>Let $M \in \mathbb{R}^{|V| \times |V_C|}$ be a non-parametric matrix where entry $M_{w,c} = \mathbf{w}^\top \mathbf{c}$. Express the local objective $\ell(M_{w,c})$ for a single cell $(w, c)$.</li>
+          <li>Compute the partial derivative $\frac{\partial \ell}{\partial M_{w,c}}$ and set it to zero to find the global optimum $M^*_{w,c}$.</li>
+          <li>Prove that the optimal cell value satisfies:
+          $$M^*_{w,c} = \operatorname{PMI}(w, c) - \ln K$$
+          where $\operatorname{PMI}(w, c) = \ln \left( \frac{P(w, c)}{P(w) P(c)} \right)$ and $K$ is the number of negative samples.</li>
+          <li>Explain the geometric and statistical purpose of the $-\ln K$ shift.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Proof:</div>
+        <p class="step"><strong>Step 1: Global Corpus Objective Formulation</strong></p>
+        <p>In SGNS, each observed occurrence of word $w$ with context word $c$ generates one positive term and $K$ negative terms drawn from context distribution $P_D(c) = \frac{\#(c)}{|\mathcal{D}|}$, where $|\mathcal{D}| = \sum_{c'} \#(c')$ is the total number of word tokens in the corpus. Aggregating across all unique pairs $(w, c)$:</p>
+        $$\mathcal{L} = \sum_{w \in V} \sum_{c \in V_C} \#(w, c) \log \sigma(\mathbf{w}^\top \mathbf{c}) + \sum_{w \in V} \sum_{c \in V_C} \#(w, c) \cdot K \cdot \mathbb{E}_{c_N \sim P_D} [\log \sigma(-\mathbf{w}^\top \mathbf{c}_N)]$$
+        <p>Noting that $\sum_{c \in V_C} \#(w, c) = \#(w)$, the expectation over negative samples expands as:</p>
+        $$\sum_{w \in V} \#(w) \cdot K \sum_{c \in V_C} \frac{\#(c)}{|\mathcal{D}|} \log \sigma(-\mathbf{w}^\top \mathbf{c})$$
+        <p>Combining both sums under a single summation over all pairs $(w, c)$:</p>
+        $$\mathcal{L} = \sum_{w \in V} \sum_{c \in V_C} \left[ \#(w, c) \log \sigma(\mathbf{w}^\top \mathbf{c}) + K \cdot \frac{\#(w) \#(c)}{|\mathcal{D}|} \log \sigma(-\mathbf{w}^\top \mathbf{c}) \right]$$
+
+        <p class="step"><strong>Step 2: Non-Parametric Cell Formulation</strong></p>
+        <p>If we treat each dot product as an independent free parameter $M_{w,c} = \mathbf{w}^\top \mathbf{c}$ (which corresponds to an embedding dimension $d \ge \min(|V|, |V_C|)$), the global objective decomposes into independent scalar objectives for each cell $(w, c)$:</p>
+        $$\ell(M_{w,c}) = \#(w, c) \log \sigma(M_{w,c}) + K \frac{\#(w) \#(c)}{|\mathcal{D}|} \log \sigma(-M_{w,c})$$
+
+        <p class="step"><strong>Step 3: Differentiating and Setting to Zero</strong></p>
+        <p>Recall the derivatives: $\frac{d}{dz} \log \sigma(z) = 1 - \sigma(z)$, and $\frac{d}{dz} \log \sigma(-z) = -\sigma(z)$. Setting the partial derivative with respect to $M_{w,c}$ to zero:</p>
+        $$\frac{\partial \ell}{\partial M_{w,c}} = \#(w, c) (1 - \sigma(M_{w,c})) - K \frac{\#(w) \#(c)}{|\mathcal{D}|} \sigma(M_{w,c}) = 0$$
+        <p>Rearranging terms:</p>
+        $$\#(w, c) (1 - \sigma(M_{w,c})) = K \frac{\#(w) \#(c)}{|\mathcal{D}|} \sigma(M_{w,c})$$
+        $$\frac{1 - \sigma(M_{w,c})}{\sigma(M_{w,c})} = \frac{K \frac{\#(w) \#(c)}{|\mathcal{D}|}}{\#(w, c)}$$
+
+        <p class="step"><strong>Step 4: Deriving the Shifted PMI Equivalence</strong></p>
+        <p>Recall the algebraic definition of the sigmoid function:</p>
+        $$\sigma(z) = \frac{1}{1 + e^{-z}} \implies 1 - \sigma(z) = \frac{e^{-z}}{1 + e^{-z}} \implies \frac{1 - \sigma(z)}{\sigma(z)} = e^{-z}$$
+        <p>Inverting both sides yields:</p>
+        $$\frac{\sigma(M_{w,c})}{1 - \sigma(M_{w,c})} = e^{M_{w,c}} = \frac{\#(w, c)}{K \frac{\#(w) \#(c)}{|\mathcal{D}|}} = \frac{\#(w, c) \cdot |\mathcal{D}|}{\#(w) \#(c)} \cdot \frac{1}{K}$$
+        <p>Taking the natural logarithm of both sides:</p>
+        $$M^*_{w,c} = \ln \left( \frac{\#(w, c) \cdot |\mathcal{D}|}{\#(w) \#(c)} \right) - \ln K$$
+        <p>Now consider the empirical probabilities $P(w, c) = \frac{\#(w, c)}{|\mathcal{D}|}$, $P(w) = \frac{\#(w)}{|\mathcal{D}|}$, and $P(c) = \frac{\#(c)}{|\mathcal{D}|}$:</p>
+        $$\frac{P(w, c)}{P(w) P(c)} = \frac{\frac{\#(w, c)}{|\mathcal{D}|}}{\frac{\#(w)}{|\mathcal{D}|} \cdot \frac{\#(c)}{|\mathcal{D}|}} = \frac{\#(w, c) \cdot |\mathcal{D}|}{\#(w) \#(c)}$$
+        <p>Therefore, by definition of Pointwise Mutual Information:</p>
+        $$\mathbf{w}^\top \mathbf{c} = M^*_{w,c} = \operatorname{PMI}(w, c) - \ln K \quad \blacksquare$$
+
+        <p class="step"><strong>Step 5: Statistical and Geometric Role of $-\ln K$</strong></p>
+        <p>When $K > 1$, $\ln K > 0$, shifting all matrix values downward. For word pairs that co-occur purely by chance ($\operatorname{PMI}(w, c) \approx 0$), $M^*_{w,c} = -\ln K < 0$, forcing their inner product to be negative (repelling them in embedding space). Only pairs that co-occur significantly more frequently than chance ($\operatorname{PMI}(w, c) > \ln K$) achieve positive dot products. Higher $K$ acts as a conservative regularizer, filtering out spurious co-occurrences in rare vocabulary items.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.7.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.7.6</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-meta">Meta FAIR</span>
+        <span class="company-tag company-cmu">CMU</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>First-Principles Mathematical Derivation of the GloVe Log-Bilinear Least Squares Objective:</strong></p>
+        <p>The foundational insight of GloVe (Pennington, Socher, Manning, 2014) is that semantic relationships should be modeled on the <em>ratio</em> of co-occurrence probabilities rather than raw probabilities themselves.</p>
+        <ol>
+          <li>Let $P_{ik} = P(k|i) = \frac{X_{ik}}{X_i}$ be the conditional probability of context word $k$ given target word $i$. State the general functional dependence $F(\mathbf{w}_i, \mathbf{w}_j, \tilde{\mathbf{w}}_k) = \frac{P_{ik}}{P_{jk}}$.</li>
+          <li>Apply vector space linearity: why must $F$ depend only on the vector difference $\mathbf{w}_i - \mathbf{w}_j$?</li>
+          <li>Why must the arguments of $F$ interact via an inner product $(\mathbf{w}_i - \mathbf{w}_j)^\top \tilde{\mathbf{w}}_k$?</li>
+          <li>Using the group homomorphism property $F(A - B) = \frac{F(A)}{F(B)}$, determine the unique functional form of $F$.</li>
+          <li>Incorporate symmetry between word and context to derive the scalar equation $\mathbf{w}_i^\top \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j = \ln X_{ij}$.</li>
+          <li>Explain why ordinary least squares fails on this matrix and why the weighting function $f(X_{ij})$ is strictly required.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Derivation:</div>
+        <p class="step"><strong>Step 1: The Probability Ratio Hypothesis</strong></p>
+        <p>Let word $i = \text{"ice"}$, $j = \text{"steam"}$, and context probe $k$. If $k = \text{"solid"}$, $\frac{P_{ik}}{P_{jk}} \gg 1$. If $k = \text{"gas"}$, $\frac{P_{ik}}{P_{jk}} \ll 1$. If $k = \text{"water"}$, $\frac{P_{ik}}{P_{jk}} \approx 1$. The ratio isolates thermodynamic state from general fluid properties. Thus, a function $F$ must satisfy:</p>
+        $$F(\mathbf{w}_i, \mathbf{w}_j, \tilde{\mathbf{w}}_k) = \frac{P_{ik}}{P_{jk}}$$
+
+        <p class="step"><strong>Step 2: Vector Linearity Constraint</strong></p>
+        <p>In linear vector spaces, semantic translation between two concepts is represented by vector subtraction ($\mathbf{v}_{\text{king}} - \mathbf{v}_{\text{queen}} \approx \mathbf{v}_{\text{man}} - \mathbf{v}_{\text{woman}}$). To preserve translation invariance, $F$ can only depend on the difference vector:</p>
+        $$F(\mathbf{w}_i - \mathbf{w}_j, \tilde{\mathbf{w}}_k) = \frac{P_{ik}}{P_{jk}}$$
+
+        <p class="step"><strong>Step 3: Scalar Projection Consistency</strong></p>
+        <p>The right-hand side is a scalar in $\mathbb{R}_{>0}$, while the arguments on the left are vectors in $\mathbb{R}^d$. The most natural linear map preserving vector orientation is the Euclidean dot product:</p>
+        $$F\left( (\mathbf{w}_i - \mathbf{w}_j)^\top \tilde{\mathbf{w}}_k \right) = \frac{P_{ik}}{P_{jk}}$$
+
+        <p class="step"><strong>Step 4: Group Homomorphism and the Exponential Function</strong></p>
+        <p>We require $F$ to map the additive group $(\mathbb{R}, +)$ to the multiplicative group $(\mathbb{R}_{>0}, \times)$:</p>
+        $$F(A - B) = \frac{F(A)}{F(B)}$$
+        <p>The unique continuous solution to Cauchy's exponential functional equation is the exponential function: $F(z) = \exp(z)$. Substituting:</p>
+        $$\exp\left( (\mathbf{w}_i - \mathbf{w}_j)^\top \tilde{\mathbf{w}}_k \right) = \frac{\exp(\mathbf{w}_i^\top \tilde{\mathbf{w}}_k)}{\exp(\mathbf{w}_j^\top \tilde{\mathbf{w}}_k)} = \frac{P_{ik}}{P_{jk}}$$
+        <p>Equating numerators and denominators:</p>
+        $$\exp(\mathbf{w}_i^\top \tilde{\mathbf{w}}_k) = P_{ik} = \frac{X_{ik}}{X_i} \implies \mathbf{w}_i^\top \tilde{\mathbf{w}}_k = \ln X_{ik} - \ln X_i$$
+
+        <p class="step"><strong>Step 5: Symmetry and Bias Absorption</strong></p>
+        <p>In an undirected context window, the co-occurrence matrix is symmetric: $X_{ik} = X_{ki}$. However, the equation above is asymmetric because $\ln X_i$ depends only on word $i$, while $\mathbf{w}_i^\top \tilde{\mathbf{w}}_k = \tilde{\mathbf{w}}_k^\top \mathbf{w}_i$ is symmetric. To restore mathematical symmetry, $\ln X_i$ is absorbed into an independent bias term $b_i$, and an explicit context bias $\tilde{b}_k$ is added:</p>
+        $$\mathbf{w}_i^\top \tilde{\mathbf{w}}_k + b_i + \tilde{b}_k = \ln X_{ik} \quad \blacksquare$$
+
+        <p class="step"><strong>Step 6: Justification of the Weighted Least Squares Loss</strong></p>
+        <p>If we fit this model with standard Ordinary Least Squares (OLS), two fatal problems emerge:</p>
+        <ol>
+          <li>$\ln(0)$ is undefined: In any real text corpus, the vast majority of cells have $X_{ij} = 0$.</li>
+          <li><strong>Heteroscedastic Variance:</strong> By the Delta method, the variance of the log-count is inversely proportional to the count:
+          $$\operatorname{Var}(\ln X_{ij}) \approx \frac{1}{X_{ij}} \operatorname{Var}(X_{ij})$$
+          Rare co-occurrences (e.g., $X_{ij}=1$) carry extreme statistical noise yet represent over 80% of all non-zero cells! Conversely, ultra-frequent stop words ("the", "of") carry counts in the millions.</li>
+        </ol>
+        <p>GloVe resolves both issues by optimizing only over non-zero cells ($X_{ij} > 0$) weighted by $f(X_{ij}) = \min(1, (X_{ij}/x_{\max})^\alpha)$. This assigns zero weight to unseen pairs, downweights noisy rare pairs, and caps ubiquitous stop words at 1, achieving the minimum-variance weighted least squares estimator.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.7.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.7.7</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap MCQ: The $3/4$ Power Unigram Noise Distribution:</strong></p>
+        <p>In Word2Vec Negative Sampling, the noise distribution $P_n(w)$ is defined by raising the unigram word count $U(w)$ to the $0.75$ power: $P_n(w) \propto U(w)^{0.75}$. Which of the following statements provides the mathematically precise reason for this exact functional choice?</p>
+        <ol type="A">
+          <li>It proves exact convergence of the negative sampling loss to the true Softmax partition function denominator via Jensen's inequality.</li>
+          <li>It sub-linearly dampens the extreme probability gap between high-frequency words and rare words governed by Zipf's Law, ensuring rare words are sampled frequently enough to receive meaningful gradient updates without letting stop words monopolize negative gradients.</li>
+          <li>It minimizes the trace of the Fisher Information Matrix for the logistic regression estimator under power-law priors.</li>
+          <li>It prevents floating-point underflow in 16-bit half-precision IEEE 754 representations during backpropagation.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Analysis:</div>
+        <p class="step"><strong>Correct Answer: B</strong></p>
+        <p class="step"><strong>Deep Mathematical and Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Why B is Correct:</strong> Natural language obeys <strong>Zipf's Law</strong>: the frequency of the $r$-th most frequent word scales as $f(r) \propto \frac{1}{r}$. In a 1-billion word corpus, the word "the" appears $\approx 70,000,000$ times, whereas an informative technical word like "backpropagation" may appear only $70$ times (a ratio of $1,000,000 : 1$).
+          <br>If we sampled noise words proportional to raw frequency $U(w)^1$, over 99.9% of all negative updates would update only the top 50 stop words ("the", "of", "and", "to"), while rare words would never appear as negative samples, leaving their vectors randomly initialized.
+          <br>Conversely, if we sampled uniformly $U(w)^0 = \frac{1}{|V|}$, rare words (which constitute 90% of the vocabulary list) would dominate every negative sample, preventing the model from learning subtle boundaries among frequent words.
+          <br>By setting the exponent to $\alpha = 0.75$:
+          $$\frac{U(\text{"the"})^{0.75}}{U(\text{"backprop"})^{0.75}} = (10^6)^{0.75} = 10^{4.5} \approx 31,622$$
+          The probability ratio is compressed by a factor of over <strong>31x</strong>! Rare words receive over 30 times more negative gradient signals, while stop words still retain their statistical presence.</li>
+          <li><strong>Why A is False:</strong> Negative sampling does <em>not</em> converge to the true Softmax partition function; it optimizes a distinct binary logistic objective. Noise Contrastive Estimation (NCE) with specific normalization constants can approximate Softmax, but the $0.75$ power is an empirical heuristic, not a Jensen's inequality proof.</li>
+          <li><strong>Why C is False:</strong> While Fisher information is relevant to asymptotic estimator efficiency, the $0.75$ exponent does not minimize the trace of the Fisher matrix.</li>
+          <li><strong>Why D is False:</strong> Word2Vec was originally implemented and trained in full single-precision (FP32) C code in 2013, completely unrelated to FP16 half-precision limits.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- PROBLEM 4.7.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 4.7.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-anthropic">Anthropic</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap MCQ: Linear Analogy Arithmetic &amp; Cosine Search Masking:</strong></p>
+        <p>The famous semantic analogy equation tests whether $\mathbf{v}_{\text{king}} - \mathbf{v}_{\text{man}} + \mathbf{v}_{\text{woman}} \approx \mathbf{v}_{\text{queen}}$. When searching the entire vocabulary $V$ for the closest word to the query vector $\mathbf{q} = \mathbf{v}_b - \mathbf{v}_a + \mathbf{v}_c$ using cosine similarity:</p>
+        $$w^* = \arg\max_{w \in V \setminus \{a, b, c\}} \cos(\mathbf{q}, \mathbf{v}_w)$$
+        <p>Why is it strictly necessary to <strong>explicitly mask out the query tokens $\{a, b, c\}$</strong> from candidate results?</p>
+        <ol type="A">
+          <li>Without masking, the vector difference $\mathbf{v}_b - \mathbf{v}_a$ often has a smaller Euclidean norm than the base vectors, causing the query vector $\mathbf{q}$ to have an overwhelmingly high cosine similarity with $\mathbf{v}_b$ (e.g., "king") or $\mathbf{v}_c$ (e.g., "woman").</li>
+          <li>Without masking, the triangle inequality in non-Euclidean cosine manifolds is violated, causing NaN division by zero.</li>
+          <li>Negative sampling causes word vectors to be strictly orthogonal to their own difference vectors.</li>
+          <li>Masking is solely a legacy artifact of 1990s LSA systems and has no mathematical necessity in modern cosine vector spaces.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Analysis:</div>
+        <p class="step"><strong>Correct Answer: A</strong></p>
+        <p class="step"><strong>Deep Geometric and Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Why A is Correct:</strong> Consider the query vector:
+          $$\mathbf{q} = \mathbf{v}_{\text{king}} + (\mathbf{v}_{\text{woman}} - \mathbf{v}_{\text{man}})$$
+          In dense embedding spaces, the offset vector $\mathbf{d} = \mathbf{v}_{\text{woman}} - \mathbf{v}_{\text{man}}$ represents the direction of the semantic relation "female gender". However, because word embeddings encode hundreds of semantic features simultaneously (politics, royalty, power, history, grammar), the magnitude of the offset vector $\|\mathbf{d}\|_2$ is often significantly smaller than the magnitude of the concept vector $\|\mathbf{v}_{\text{king}}\|_2$.
+          <br>Consequently:
+          $$\mathbf{q} = \mathbf{v}_{\text{king}} + \boldsymbol{\epsilon}, \quad \text{where } \|\boldsymbol{\epsilon}\| \ll \|\mathbf{v}_{\text{king}}\|$$
+          The vector $\mathbf{q}$ points in nearly the exact same direction as $\mathbf{v}_{\text{king}}$! If the input word "king" is not masked out, the cosine similarity $\cos(\mathbf{q}, \mathbf{v}_{\text{king}})$ typically exceeds $0.85$, while $\cos(\mathbf{q}, \mathbf{v}_{\text{queen}})$ might be $0.72$. Thus, without masking, the model simply answers <em>"king is to man as woman is to... king"</em>! Masking out the input tokens is mathematically mandatory to force the query out of the local neighborhood of the source words.</li>
+          <li><strong>Why B is False:</strong> Cosine similarity on normalized unit vectors is isometric to Euclidean distance on the unit hypersphere: $\|\mathbf{u} - \mathbf{v}\|_2^2 = 2 - 2\cos(\theta)$. Spherical distance satisfies the metric triangle inequality; no division by zero or manifold collapse occurs.</li>
+          <li><strong>Why C is False:</strong> Word vectors are never strictly orthogonal to their difference vectors; in fact, $\mathbf{v}_b^\top (\mathbf{v}_b - \mathbf{v}_a) = \|\mathbf{v}_b\|^2 - \mathbf{v}_b^\top \mathbf{v}_a$, which is strictly positive whenever $\cos(\mathbf{v}_a, \mathbf{v}_b) < 1$.</li>
+          <li><strong>Why D is False:</strong> Masking is an active requirement in all modern vector benchmark evaluations (including Google Analogy, BATS, and Word2Vec test suites).</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- CHAPTER SUMMARY -->
+    <div class="chapter-summary">
+      <h4>Chapter 4.7 Key Takeaways</h4>
+      <ul>
+        <li><strong>One-Hot Limitations:</strong> One-hot vectors are high-dimensional, sparse, and completely orthogonal, capturing no semantic geometry.</li>
+        <li><strong>Distributional Hypothesis:</strong> Words appearing in similar contexts share similar meanings; dense embeddings capture this via cosine proximity in $\mathbb{R}^d$.</li>
+        <li><strong>Word2Vec:</strong> CBOW predicts target words from context; Skip-Gram predicts context words from the center word.</li>
+        <li><strong>Negative Sampling:</strong> Replaces the intractable $\mathcal{O}(|V|)$ Softmax denominator with binary classification against $k$ noise words drawn from $P_n(w) \propto U(w)^{0.75}$, speeding up training by orders of magnitude.</li>
+        <li><strong>GloVe:</strong> Fits log-bilinear dot products to the log of global co-occurrence frequencies using a weighted least-squares objective derived from co-occurrence probability ratios.</li>
+        <li><strong>FastText:</strong> Sums subword character $n$-gram embeddings to solve out-of-vocabulary words and capture internal morphological structure.</li>
+        <li><strong>Subword Tokenization (BPE):</strong> Bridges word-level and character-level representations via statistical iterative pair merges; Byte-level BPE provides universal coverage for modern LLMs.</li>
+        <li><strong>The Static Limitation:</strong> Fixed embeddings cannot handle polysemy (e.g., "Apple" company vs "apple" fruit), which necessitates contextualized representations (BERT and Transformers in Part 5).</li>
+      </ul>
+    </div>
+  </div>
+</div>

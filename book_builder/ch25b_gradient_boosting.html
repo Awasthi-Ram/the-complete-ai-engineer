@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="gradient_boosting_residuals.png" alt="Figure 2.5b.1: gradient boosting residuals">
+        <div class="diagram-caption"><strong>Figure 2.5b.1:</strong> Gradient Boosted Decision Trees (GBDT) sequential additive modeling. Rather than training independent trees in parallel, each consecutive tree $h_m(\mathbf{x})$ is trained to predict the negative gradient (pseudo-residuals) of the loss with respect to previous ensemble predictions $F_{m-1}(\mathbf{x})$, scaled by shrinkage factor $\eta$.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 2.5B — GRADIENT BOOSTED DECISION TREES (XGBOOST, LIGHTGBM)
      ====================================================================== -->
@@ -19,95 +25,401 @@
 
     <!-- SECTION 1: FUNCTIONAL GRADIENT DESCENT -->
     <h3>1. From Bagging to Boosting: Functional Gradient Descent</h3>
-    <p>While Random Forests train trees independently in parallel to reduce variance, <strong>Boosting</strong> trains trees sequentially to reduce bias. Each new tree is explicitly constructed to correct the residual mistakes made by the collective ensemble of all previous trees:</p>
+    <p>While Random Forests train trees independently in parallel to reduce variance, <strong>Boosting</strong> trains trees sequentially in series to reduce bias. Each new tree is explicitly constructed to correct the residual mistakes made by the collective ensemble of all previous trees:</p>
     $$F_m(\mathbf{x}) = F_{m-1}(\mathbf{x}) + \eta f_m(\mathbf{x})$$
-    <p>Where $\eta \in (0, 1]$ is the shrinkage learning rate.</p>
+    <p>where $\eta \in (0, 1]$ is the shrinkage learning rate (step size), and $f_m(\mathbf{x})$ is the $m$-th base learner (decision tree).</p>
 
-    <h4>Gradient Boosting as Gradient Descent in Function Space</h4>
-    <p>Jerome Friedman (2001) realized that fitting residuals is mathematically equivalent to <strong>Gradient Descent in Function Space</strong>. In standard parameter optimization, we take steps in parameter space: $\mathbf{w} \leftarrow \mathbf{w} - \eta \nabla_{\mathbf{w}} \mathcal{L}$. In Gradient Boosting, we take steps in <em>prediction space</em>:</p>
-    $$f_m(\mathbf{x}_i) \approx -\left[ \frac{\partial \mathcal{L}(y_i, F(\mathbf{x}_i))}{\partial F(\mathbf{x}_i)} \right]_{F = F_{m-1}}$$
-    <p>The "residuals" fitted by tree $m$ are literally the <strong>Negative Gradients (Pseudo-Residuals)</strong> of the loss function!</p>
+    <h4>Gradient Boosting as Optimization in Function Space</h4>
+    <p>Jerome Friedman (2001) realized that fitting residuals is mathematically equivalent to <strong>Gradient Descent in Function Space</strong>. In standard parameter optimization, we update weights along the negative gradient in parameter space: $\mathbf{w} \leftarrow \mathbf{w} - \eta \nabla_{\mathbf{w}} \mathcal{L}$. In Gradient Boosting, we treat the predictions $F(\mathbf{x}_1), \dots, F(\mathbf{x}_N)$ as the parameters themselves, updating along the negative gradient in <em>prediction space</em>:</p>
+    $$r_{im} = -\left[ \frac{\partial \mathcal{L}(y_i, F(\mathbf{x}_i))}{\partial F(\mathbf{x}_i)} \right]_{F = F_{m-1}}$$
+    <p>These pseudo-residuals $r_{im}$ define the gradient direction for any differentiable loss function:</p>
 
-    <!-- SECTION 2: XGBOOST DERIVATION -->
-    <h3>2. The XGBoost Formulation: Second-Order Taylor Expansion</h3>
-    <p>Tianqi Chen and Carlos Guestrin (2016) revolutionized machine learning by introducing <strong>XGBoost (eXtreme Gradient Boosting)</strong>. Unlike traditional GBDT which only uses first-order gradients, XGBoost uses a <strong>Second-Order Taylor Expansion</strong> of the loss function, allowing exact analytical optimization of tree leaves.</p>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Loss Function $\mathcal{L}(y, F)$</th>
+            <th>Task Type</th>
+            <th>Negative Gradient (Pseudo-Residual $r_i$)</th>
+            <th>Optimal Leaf Update $c_j$</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Squared Error:</strong> $\frac{1}{2}(y - F)^2$</td>
+            <td>Continuous Regression</td>
+            <td>$y_i - F(\mathbf{x}_i)$ (Standard Residual)</td>
+            <td>Mean of residuals: $\frac{1}{|R_j|} \sum_{i \in R_j} r_i$</td>
+          </tr>
+          <tr>
+            <td><strong>Absolute Error ($L_1$):</strong> $|y - F|$</td>
+            <td>Robust Regression</td>
+            <td>$\text{sign}(y_i - F(\mathbf{x}_i))$</td>
+            <td>Median of residuals: $\text{median}_{i \in R_j}(y_i - F(\mathbf{x}_i))$</td>
+          </tr>
+          <tr>
+            <td><strong>Binary Log-Loss:</strong> $-[y \ln p + (1-y)\ln(1-p)]$</td>
+            <td>Binary Classification</td>
+            <td>$y_i - \sigma(F(\mathbf{x}_i)) = y_i - p_i$</td>
+            <td>Newton step: $\frac{\sum_{i \in R_j} (y_i - p_i)}{\sum_{i \in R_j} p_i(1 - p_i)}$</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-    <div class="real-world-box">
-      <h4>🏆 The XGBoost Objective Derivation</h4>
-      <p>At step $t$, we seek a new tree $f_t(\mathbf{x})$ that minimizes the objective:</p>
+    <!-- SECTION 2: ADABOOST -->
+    <h3>2. AdaBoost: Exponential Loss &amp; Sample Re-Weighting</h3>
+    <p>Before Friedman generalized boosting to arbitrary loss functions, Yoav Freund and Robert Schapire (1995) introduced <strong>AdaBoost (Adaptive Boosting)</strong>. Rather than fitting residuals, AdaBoost reweights training samples so that misclassified samples receive exponentially higher weights in the next iteration:</p>
+    $$w_i^{(m+1)} = w_i^{(m)} \exp\left( \alpha_m \mathbb{I}(y_i \neq G_m(\mathbf{x}_i)) \right)$$
+    <p>The classifier weight $\alpha_m$ is determined by its weighted training error $\text{err}_m$:</p>
+    $$\alpha_m = \frac{1}{2} \ln\left( \frac{1 - \text{err}_m}{\text{err}_m} \right)$$
+    <p>Freund and Schapire proved that AdaBoost is an exact coordinate descent optimizer minimizing the <strong>Exponential Loss</strong> $\mathcal{L}(y, F) = \exp(-y F(\mathbf{x}))$. However, because exponential loss grows unbounded for large negative margins, AdaBoost is notoriously sensitive to mislabeled outliers, leading to the dominance of modern GBDTs with robust log-loss.</p>
+
+    <!-- SECTION 3: XGBOOST DERIVATION -->
+    <h3>3. The XGBoost Formulation: Second-Order Taylor Expansion</h3>
+    <p>Tianqi Chen and Carlos Guestrin (2016) revolutionized machine learning by introducing <strong>XGBoost (eXtreme Gradient Boosting)</strong>. While classical GBDT approximates loss using only first-order gradients, XGBoost applies a <strong>Second-Order Taylor Expansion</strong>, incorporating both the gradient and the Hessian curvature to derive exact closed-form optimal leaf weights and regularized split gains.</p>
+
+    <div class="proof-box">
+      <h4>Full Derivation of the XGBoost Objective</h4>
+      <p>At iteration $t$, we add tree $f_t(\mathbf{x})$ to minimize the penalized objective:</p>
       $$\mathcal{L}^{(t)} = \sum_{i=1}^N \mathcal{L}\left(y_i, \hat{y}_i^{(t-1)} + f_t(\mathbf{x}_i)\right) + \Omega(f_t)$$
-      <p>Where $\Omega(f_t) = \gamma T + \frac{1}{2} \lambda \sum_{j=1}^T w_j^2$ is the tree complexity penalty ($T$ leaves, weights $w_j$).</p>
-      <p>Approximating the loss using a second-order Taylor expansion $f(x + \Delta x) \approx f(x) + f'(x)\Delta x + \frac{1}{2} f''(x)\Delta x^2$:</p>
+      <p>where $\Omega(f_t) = \gamma T + \frac{1}{2} \lambda \sum_{j=1}^T w_j^2$ is the tree complexity penalty ($T$ terminal leaves, leaf weights $w_j$).</p>
+      
+      <p>Apply the second-order Taylor expansion $f(x + \Delta x) \approx f(x) + f'(x)\Delta x + \frac{1}{2} f''(x)\Delta x^2$:</p>
       $$\mathcal{L}^{(t)} \approx \sum_{i=1}^N \left[ \mathcal{L}(y_i, \hat{y}_i^{(t-1)}) + g_i f_t(\mathbf{x}_i) + \frac{1}{2} h_i f_t^2(\mathbf{x}_i) \right] + \gamma T + \frac{1}{2} \lambda \sum_{j=1}^T w_j^2$$
-      <p>Where $g_i = \frac{\partial \mathcal{L}}{\partial \hat{y}_i^{(t-1)}}$ (gradient) and $h_i = \frac{\partial^2 \mathcal{L}}{\partial (\hat{y}_i^{(t-1)})^2}$ (Hessian). Removing constant terms:</p>
+      <p>where the first and second derivatives are defined as:</p>
+      $$g_i = \left[ \frac{\partial \mathcal{L}(y_i, \hat{y}_i)}{\partial \hat{y}_i} \right]_{\hat{y}_i = \hat{y}_i^{(t-1)}}, \qquad h_i = \left[ \frac{\partial^2 \mathcal{L}(y_i, \hat{y}_i)}{\partial \hat{y}_i^2} \right]_{\hat{y}_i = \hat{y}_i^{(t-1)}}$$
+      <p>Remove the constant term $\mathcal{L}(y_i, \hat{y}_i^{(t-1)})$ and group samples by leaf node $I_j = \{i \mid q(\mathbf{x}_i) = j\}$:</p>
       $$\tilde{\mathcal{L}}^{(t)} = \sum_{j=1}^T \left[ \left( \sum_{i \in I_j} g_i \right) w_j + \frac{1}{2} \left( \sum_{i \in I_j} h_i + \lambda \right) w_j^2 \right] + \gamma T$$
-      <p>Let $G_j = \sum_{i \in I_j} g_i$ and $H_j = \sum_{i \in I_j} h_i$. Differentiating with respect to leaf weight $w_j$ and setting to zero yields the <strong>Optimal Leaf Weight</strong>:</p>
-      $$w_j^* = -\frac{G_j}{H_j + \lambda}$$
-      <p>Substituting $w_j^*$ back into the objective yields the optimal leaf score:</p>
+      <p>Define cumulative leaf gradients $G_j = \sum_{i \in I_j} g_i$ and Hessians $H_j = \sum_{i \in I_j} h_i$:</p>
+      $$\tilde{\mathcal{L}}^{(t)} = \sum_{j=1}^T \left[ G_j w_j + \frac{1}{2} (H_j + \lambda) w_j^2 \right] + \gamma T$$
+      <p>Differentiating with respect to leaf weight $w_j$ and setting to zero:</p>
+      $$\frac{\partial \tilde{\mathcal{L}}^{(t)}}{\partial w_j} = G_j + (H_j + \lambda) w_j = 0 \implies \mathbf{w_j^* = -\frac{G_j}{H_j + \lambda}}$$
+      <p>Substituting $w_j^*$ back into the objective yields the <strong>Optimal Tree Structure Score</strong>:</p>
       $$\tilde{\mathcal{L}}^*(q) = -\frac{1}{2} \sum_{j=1}^T \frac{G_j^2}{H_j + \lambda} + \gamma T$$
-      <p>When evaluating a candidate split partitioning leaf $j$ into Left ($L$) and Right ($R$), the exact <strong>XGBoost Split Gain</strong> is:</p>
+      <p>When evaluating a candidate split partitioning leaf $j$ into Left ($L$) and Right ($R$) children, the exact <strong>XGBoost Split Gain</strong> is:</p>
       $$\text{Gain} = \frac{1}{2} \left[ \frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda} - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda} \right] - \gamma$$
     </div>
 
-    <!-- SECTION 3: LIGHTGBM VS CATBOOST -->
-    <h3>3. High-Scale Engineering: LightGBM &amp; CatBoost</h3>
-    <p>In enterprise datasets (hundreds of millions of rows), XGBoost's exact greedy split search becomes an I/O bottleneck. Two modern frameworks solved this through algorithmic innovations:</p>
+    <!-- SECTION 4: LIGHTGBM & CATBOOST -->
+    <h3>4. Modern Enterprise GBDT: LightGBM vs. CatBoost</h3>
+    <p>On multi-million-row industrial datasets, XGBoost's exact pre-sorted greedy split search creates an I/O and memory bottleneck. Modern engineering frameworks revolutionized tabular AI:</p>
 
-    <h4>LightGBM (Microsoft Research)</h4>
+    <h4>LightGBM (Microsoft Research, 2017)</h4>
     <ul>
-      <li><strong>Histogram-Based Binning:</strong> Discretizes continuous 32-bit floating-point features into 256 discrete integer bins (1 byte each). Computing histogram bin boundaries takes $O(N)$, and split searching takes $O(\text{bins})$, slashing memory by 80% and speeding up training by 15x.</li>
-      <li><strong>GOSS (Gradient-based One-Side Sampling):</strong> Keeps all samples with large gradients ($|g_i| &gt; a$), and randomly downsamples instances with small gradients ($|g_i| \le a$), focusing training on hard, unlearned errors while preserving statistical expectations.</li>
-      <li><strong>Leaf-Wise (Best-First) Growth:</strong> Grows trees by splitting the single leaf that maximizes global loss reduction, rather than growing level-by-level.</li>
+      <li><strong>Histogram-Based Feature Binning:</strong> Discretizes continuous 32-bit float features into 256 discrete integer bins (1 byte each). Computing histogram bin boundaries takes $\mathcal{O}(N)$, and split searching takes $\mathcal{O}(\text{bins})$, slashing memory consumption by $80\%$ and speeding up training by $15\times$.</li>
+      <li><strong>Gradient-based One-Side Sampling (GOSS):</strong> Keeps all instances with large gradients ($|g_i| &gt; a$), and randomly samples a subset $b$ from instances with small gradients ($|g_i| \le a$), focusing training on hard, unlearned errors while preserving mathematical unbiasedness via sample reweighting $\frac{1-a}{b}$.</li>
+      <li><strong>Exclusive Feature Bundling (EFB):</strong> Bundles mutually exclusive sparse features (e.g. one-hot encoded columns) into single dense features.</li>
+      <li><strong>Leaf-Wise (Best-First) Tree Growth:</strong> Instead of growing trees level-by-level (depth-wise), LightGBM splits the single leaf that maximizes global loss reduction, achieving significantly lower loss at equivalent leaf counts.</li>
     </ul>
 
-    <h4>CatBoost (Yandex)</h4>
+    <h4>CatBoost (Yandex, 2018)</h4>
     <ul>
-      <li><strong>Symmetric (Oblivious) Trees:</strong> Uses the exact same split condition across all nodes at the same tree depth. This allows the tree structure to be evaluated on CPUs using bitwise SIMD instructions, achieving microsecond inference latency.</li>
-      <li><strong>Ordered Target Encoding:</strong> Encodes high-cardinality categorical variables using historical cumulative averages, mathematically eliminating target leakage.</li>
+      <li><strong>Symmetric (Oblivious) Trees:</strong> Uses the exact same split condition across all nodes at the same tree depth. This eliminates branching memory jumps and allows trees to be compiled into SIMD bitwise CPU machine code, achieving sub-microsecond inference latency!</li>
+      <li><strong>Ordered Target Encoding:</strong> Encodes categorical variables using historical cumulative averages computed over random permutations of the dataset, mathematically eliminating target leakage.</li>
     </ul>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Gradient Boosting</h3>
-
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 2.5B.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
-        <span class="company-tag company-google">Google</span>
-        <span class="company-tag company-meta">Meta</span>
+    <!-- SECTION 5: PRACTICE SUITE -->
+    <div class="practice-set">
+      <div class="practice-header">
+        <span class="set-tag">Complete 4-Tier Practice Suite</span>
+        <h3 class="set-title">Chapter 2.5B Practice Problems &amp; Tier-1 AI Challenge Suite</h3>
+        <p class="set-desc">Master functional gradient descent, AdaBoost exponential loss, the XGBoost second-order Taylor expansion, and LightGBM GOSS through step-by-step numerical drills, algorithmic traces, FAANG research proofs, and conceptual trap questions.</p>
       </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> In XGBoost, prove why the regularization parameter $\lambda$ in the denominator of the optimal leaf weight formula $w_j^* = -\frac{G_j}{H_j + \lambda}$ acts as an $L_2$ shrinkage stabilizer.</p>
-        <ol>
-          <li>Evaluate $w_j^*$ when sample count in leaf $j$ is small (few samples, small $H_j$).</li>
-          <li>Explain why setting $\gamma &gt; 0$ in the split gain formula acts as automated tree pre-pruning.</li>
-        </ol>
+
+      <!-- TIER 1: NUMERICAL WARM-UP -->
+      <h4>Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5B.1</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In AdaBoost, a weak classifier $G_1$ achieves a weighted classification error rate of $\text{err}_1 = 0.20$ ($20\%$).
+          <ol>
+            <li>Compute the classifier importance weight $\alpha_1 = \frac{1}{2} \ln\left(\frac{1 - \text{err}_1}{\text{err}_1}\right)$.</li>
+            <li>If a training sample with initial weight $w_i^{(1)} = 0.10$ was <strong>misclassified</strong> by $G_1$, compute its updated weight $w_i^{(2)}$ (before normalization).</li>
+            <li>If another sample with initial weight $0.10$ was <strong>correctly classified</strong>, compute its updated weight.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
+
+          <p class="step"><strong>Step 1: Compute Classifier Weight $\alpha_1$:</strong>
+          $$\frac{1 - \text{err}_1}{\text{err}_1} = \frac{1 - 0.20}{0.20} = \frac{0.80}{0.20} = 4.0$$
+          $$\alpha_1 = \frac{1}{2} \ln(4.0) = \frac{1}{2} (1.38629) = \mathbf{0.69315}$$</p>
+
+          <p class="step"><strong>Step 2: Update Weight for Misclassified Sample:</strong><br>
+          Formula: $w_i^{(2)} = w_i^{(1)} e^{\alpha_1}$.
+          $$w_{\text{misclassified}}^{(2)} = 0.10 \times e^{0.69315} = 0.10 \times 2.0 = \mathbf{0.2000}$$
+          The weight of the misclassified sample doubles!</p>
+
+          <p class="step"><strong>Step 3: Update Weight for Correctly Classified Sample:</strong><br>
+          Formula: $w_i^{(2)} = w_i^{(1)} e^{-\alpha_1}$.
+          $$w_{\text{correct}}^{(2)} = 0.10 \times e^{-0.69315} = 0.10 \times 0.5 = \mathbf{0.0500}$$
+          The weight of the correctly classified sample is halved!<br>
+          <strong>Result: Misclassified samples are penalized with $4\times$ the relative importance of correctly classified samples in the subsequent iteration.</strong></p>
+        </div>
       </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
 
-        <p class="step"><strong>Step 1: Shrinkage Effect of $\lambda$:</strong><br>
-        For squared error loss $\mathcal{L} = \frac{1}{2}(y - \hat{y})^2$, the second derivative is constant: $h_i = 1$.<br>
-        In this case, $H_j = \sum_{i \in I_j} 1 = N_j$ (the exact count of samples in leaf $j$). The leaf weight is:
-        $$w_j^* = -\frac{\sum_{i \in I_j} g_i}{N_j + \lambda}$$
-        Notice what happens when a leaf has very few samples (e.g. $N_j = 1$):
-        <ul>
-          <li>If $\lambda = 0$, $w_j^* = -g_1 / 1 = -g_1$, which makes a massive, volatile prediction step based on a single outlier sample!</li>
-          <li>If $\lambda = 10$, $w_j^* = -g_1 / (1 + 10) = -g_1 / 11$, heavily shrinking the leaf prediction toward zero!</li>
-        </ul>
-        Thus, $\lambda$ strictly prevents leaves with low statistical support from making extreme, overfitted predictions.</p>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5B.2</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-meta">Meta</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In an XGBoost tree node, the cumulative gradient sum is $G = -12.0$ and the cumulative Hessian sum is $H = 8.0$.
+          <ol>
+            <li>Compute the optimal leaf weight $w^*$ under unregularized conditions ($\lambda = 0$).</li>
+            <li>Compute the optimal leaf weight $w^*$ when $L_2$ regularization $\lambda = 4.0$ is introduced.</li>
+            <li>Explain the shrinkage percentage caused by $\lambda$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
 
-        <p class="step"><strong>Step 2: Automated Pre-Pruning via $\gamma$:</strong><br>
-        The split gain formula is:
-        $$\text{Gain} = \frac{1}{2} \left[ \frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda} - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda} \right] - \gamma$$
-        Notice that a split is only performed if $\text{Gain} &gt; 0$, which is equivalent to:
-        $$\frac{1}{2} \left[ \frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda} - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda} \right] &gt; \gamma$$
-        $\gamma$ serves as an explicit threshold: if the improvement in objective function does not exceed $\gamma$, the algorithm refuses to create the split! This enforces automatic early stopping (pre-pruning) during tree growth.</p>
+          <p class="step"><strong>Step 1: Unregularized Leaf Weight ($\lambda = 0$):</strong>
+          $$w^* = -\frac{G}{H + \lambda} = -\frac{-12.0}{8.0 + 0} = \frac{12.0}{8.0} = \mathbf{+1.5000}$$</p>
+
+          <p class="step"><strong>Step 2: Regularized Leaf Weight ($\lambda = 4.0$):</strong>
+          $$w^* = -\frac{G}{H + \lambda} = -\frac{-12.0}{8.0 + 4.0} = \frac{12.0}{12.0} = \mathbf{+1.0000}$$</p>
+
+          <p class="step"><strong>Step 3: Shrinkage Impact:</strong><br>
+          The weight shrinks from $+1.50$ to $+1.00$, representing an exact $33.33\%$ shrinkage toward zero. Regularization $\lambda$ dampens the leaf step size, preventing extreme parameter jumps.</p>
+        </div>
+      </div>
+
+      <!-- TIER 2: APPLIED ENGINEERING & ALGORITHMIC TRACING -->
+      <h4>Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5B.3</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-apple">Apple</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> An XGBoost candidate split divides a parent leaf into Left ($L$) and Right ($R$) children with the following cumulative statistics:</p>
+          <ul>
+            <li>Left Child: $G_L = -8.0, \ H_L = 4.0$</li>
+            <li>Right Child: $G_R = -4.0, \ H_R = 6.0$</li>
+          </ul>
+          <p>The tree complexity penalty is $\gamma = 1.0$ and $L_2$ regularization is $\lambda = 2.0$.
+          Compute:
+          <ol>
+            <li>The parent leaf statistics $G_{\text{parent}}$ and $H_{\text{parent}}$, and the parent score.</li>
+            <li>The Left and Right child scores.</li>
+            <li>The exact XGBoost Split Gain. Should the tree execute this split?</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Algorithmic Trace</div>
+
+          <p class="step"><strong>Step 1: Parent Statistics and Score:</strong>
+          $$G_{\text{parent}} = G_L + G_R = -8.0 + (-4.0) = -12.0$$
+          $$H_{\text{parent}} = H_L + H_R = 4.0 + 6.0 = 10.0$$
+          Parent score term:
+          $$\text{Score}_{\text{parent}} = \frac{G_{\text{parent}}^2}{H_{\text{parent}} + \lambda} = \frac{(-12.0)^2}{10.0 + 2.0} = \frac{144.0}{12.0} = \mathbf{12.00}$$</p>
+
+          <p class="step"><strong>Step 2: Child Node Scores:</strong>
+          $$\text{Score}_L = \frac{G_L^2}{H_L + \lambda} = \frac{(-8.0)^2}{4.0 + 2.0} = \frac{64.0}{6.0} \approx \mathbf{10.6667}$$
+          $$\text{Score}_R = \frac{G_R^2}{H_R + \lambda} = \frac{(-4.0)^2}{6.0 + 2.0} = \frac{16.0}{8.0} = \mathbf{2.0000}$$</p>
+
+          <p class="step"><strong>Step 3: Evaluate Split Gain:</strong>
+          $$\text{Gain} = \frac{1}{2} \left[ \text{Score}_L + \text{Score}_R - \text{Score}_{\text{parent}} \right] - \gamma$$
+          $$\text{Gain} = \frac{1}{2} \left[ 10.6667 + 2.0000 - 12.0000 \right] - 1.0$$
+          $$\text{Gain} = \frac{1}{2} \left[ 0.6667 \right] - 1.0 = 0.3333 - 1.0 = \mathbf{-0.6667}$$
+          <strong>Conclusion: The split gain is NEGATIVE ($\text{Gain} = -0.6667 &lt; 0$). The improvement in objective ($0.3333$) is insufficient to cover the leaf creation penalty $\gamma = 1.0$. XGBoost strictly REJECTS the split and keeps the parent node intact (pre-pruning).</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5B.4</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-amazon">Amazon</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In LightGBM's <strong>Gradient-based One-Side Sampling (GOSS)</strong>, an engineer processes $N = 100$ instances. The top fraction is set to $a = 0.20$ ($20\%$) and the sample fraction is set to $b = 0.10$ ($10\%$).
+          <ol>
+            <li>How many instances with large gradients are kept deterministically?</li>
+            <li>How many instances with small gradients are randomly sampled?</li>
+            <li>By what multiplicative factor must the gradients of the sampled small-gradient instances be scaled to guarantee that the expected gradient sum remains mathematically unbiased?</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Algorithmic Solution</div>
+
+          <p class="step"><strong>Step 1: Top Large-Gradient Subset ($A$):</strong>
+          $$N_A = a \times N = 0.20 \times 100 = \mathbf{20 \text{ instances}}$$
+          All 20 instances with the largest absolute gradients $|g_i|$ are kept deterministically.</p>
+
+          <p class="step"><strong>Step 2: Sampled Small-Gradient Subset ($B$):</strong><br>
+          Remaining small-gradient pool: $N - N_A = 100 - 20 = 80$ instances.<br>
+          Sample count:
+          $$N_B = b \times (N - N_A) = 0.10 \times 80 = \mathbf{8 \text{ instances}}$$
+          Total training subset size: $N_A + N_B = 20 + 8 = 28$ instances ($72\%$ reduction in compute!).</p>
+
+          <p class="step"><strong>Step 3: Importance Weighting Scale Factor:</strong><br>
+          Since 8 instances are chosen uniformly from a pool of 80, the sampling probability is $p = \frac{N_B}{N - N_A} = \frac{8}{80} = 0.10 = b$.<br>
+          By the Horvitz-Thompson estimator, to keep the expectation unbiased ($\mathbb{E}[\tilde{G}] = G$), each sampled instance must be scaled by the inverse sampling ratio:
+          $$\text{Scale Factor} = \frac{1 - a}{b} = \frac{1 - 0.20}{0.10} = \frac{0.80}{0.10} = \mathbf{8.00\times}$$
+          <strong>Result: Each sampled small-gradient instance is multiplied by $8.0\times$ during split score accumulation, preserving exact gradient expectations.</strong></p>
+        </div>
+      </div>
+
+      <!-- TIER 3: FAANG / RESEARCH LAB CHALLENGES -->
+      <h4>Tier 3: FAANG &amp; Research Lab Challenges</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5B.5</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-google">Google DeepMind</span>
+          <span class="company-tag company-meta">Meta</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Prove that AdaBoost's update rule for classifier weights:
+          $$\alpha_m = \frac{1}{2} \ln\left( \frac{1 - \text{err}_m}{\text{err}_m} \right)$$
+          is the exact analytical solution that minimizes the <strong>Exponential Loss</strong> $\mathcal{L}(\alpha) = \sum_{i=1}^N w_i \exp(-y_i \alpha G_m(\mathbf{x}_i))$ with respect to $\alpha \in \mathbb{R}$, where $y_i, G_m(\mathbf{x}_i) \in \{-1, +1\}$.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+          <p class="step"><strong>Step 1: Partition the Loss Sum into Correct and Incorrect Sets:</strong><br>
+          For any sample $i$, the product $y_i G_m(\mathbf{x}_i)$ takes one of two values:
+          <ul>
+            <li>If $G_m(\mathbf{x}_i) = y_i$ (correct classification): $y_i G_m(\mathbf{x}_i) = +1 \implies e^{-y_i \alpha G_m} = e^{-\alpha}$.</li>
+            <li>If $G_m(\mathbf{x}_i) \neq y_i$ (incorrect classification): $y_i G_m(\mathbf{x}_i) = -1 \implies e^{-y_i \alpha G_m} = e^{+\alpha}$.</li>
+          </ul>
+          Split the exponential loss summation:
+          $$\mathcal{L}(\alpha) = \sum_{y_i = G_m(\mathbf{x}_i)} w_i e^{-\alpha} + \sum_{y_i \neq G_m(\mathbf{x}_i)} w_i e^{+\alpha}$$
+          $$= e^{-\alpha} \sum_{y_i = G_m(\mathbf{x}_i)} w_i + e^{+\alpha} \sum_{y_i \neq G_m(\mathbf{x}_i)} w_i$$</p>
+
+          <p class="step"><strong>Step 2: Express in Terms of Weighted Error $\text{err}_m$:</strong><br>
+          Assume normalized weights $\sum_{i=1}^N w_i = 1$. The weighted error is:
+          $$\text{err}_m = \sum_{y_i \neq G_m(\mathbf{x}_i)} w_i \implies \sum_{y_i = G_m(\mathbf{x}_i)} w_i = 1 - \text{err}_m$$
+          Substitute these into the objective:
+          $$\mathcal{L}(\alpha) = (1 - \text{err}_m) e^{-\alpha} + \text{err}_m e^{+\alpha}$$</p>
+
+          <p class="step"><strong>Step 3: Differentiate and Solve for $\alpha^*$:</strong><br>
+          $$\frac{d\mathcal{L}}{d\alpha} = -(1 - \text{err}_m) e^{-\alpha} + \text{err}_m e^{+\alpha} = 0$$
+          $$\text{err}_m e^{+\alpha} = (1 - \text{err}_m) e^{-\alpha}$$
+          Multiply both sides by $e^{+\alpha}$:
+          $$\text{err}_m e^{2\alpha} = 1 - \text{err}_m \implies e^{2\alpha} = \frac{1 - \text{err}_m}{\text{err}_m}$$
+          Take the natural logarithm:
+          $$2\alpha = \ln\left( \frac{1 - \text{err}_m}{\text{err}_m} \right) \implies \mathbf{\alpha^* = \frac{1}{2} \ln\left( \frac{1 - \text{err}_m}{\text{err}_m} \right)}$$
+          <strong>Q.E.D. The AdaBoost coefficient $\alpha_m$ is the exact line-search minimizer of the exponential loss!</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5B.6</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-openai">OpenAI</span>
+          <span class="company-tag company-anthropic">Anthropic</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In GBDT for binary classification under Binary Cross-Entropy loss:
+          $$\mathcal{L}(y_i, F_i) = \ln(1 + e^{F_i}) - y_i F_i, \quad y_i \in \{0, 1\}$$
+          <ol>
+            <li>Prove that the first derivative (gradient) is $g_i = p_i - y_i$, where $p_i = \sigma(F_i)$.</li>
+            <li>Prove that the second derivative (Hessian) is $h_i = p_i (1 - p_i)$.</li>
+            <li>Derive the optimal XGBoost leaf weight formula for binary classification, and explain why instances near the decision boundary ($p_i \approx 0.5$) contribute $4\times$ more to the Hessian than confident instances ($p_i \approx 0.99$).</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
+
+          <p class="step"><strong>Step 1: Compute First Derivative (Gradient $g_i$):</strong>
+          $$\frac{\partial \mathcal{L}}{\partial F_i} = \frac{e^{F_i}}{1 + e^{F_i}} - y_i = \sigma(F_i) - y_i = \mathbf{p_i - y_i}$$</p>
+
+          <p class="step"><strong>Step 2: Compute Second Derivative (Hessian $h_i$):</strong>
+          $$h_i = \frac{\partial g_i}{\partial F_i} = \frac{d}{dF_i} [\sigma(F_i) - y_i] = \sigma'(F_i) = \sigma(F_i)(1 - \sigma(F_i)) = \mathbf{p_i (1 - p_i)}$$</p>
+
+          <p class="step"><strong>Step 3: Optimal Leaf Weight and Curvature Analysis:</strong><br>
+          Substituting $g_i$ and $h_i$ into the XGBoost leaf weight formula:
+          $$w_j^* = -\frac{\sum_{i \in I_j} (p_i - y_i)}{\sum_{i \in I_j} p_i(1 - p_i) + \lambda}$$
+          Notice the Hessian term $h_i = p_i(1 - p_i)$:
+          <ul>
+            <li>At borderline points ($p_i = 0.50$): $h_i = 0.5(0.5) = \mathbf{0.250}$.</li>
+            <li>At confident points ($p_i = 0.99$): $h_i = 0.99(0.01) = \mathbf{0.0099}$.</li>
+          </ul>
+          $$\frac{h_{\text{borderline}}}{h_{\text{confident}}} = \frac{0.250}{0.0099} \approx \mathbf{25.25\times}$$
+          <em>Engineering Insight:</em> Confident points have virtually zero Hessian curvature ($h_i \to 0$); the tree split search is dominated by ambiguous, borderline samples near the decision boundary!</p>
+        </div>
+      </div>
+
+      <!-- TIER 4: CONCEPTUAL TRAP MCQS -->
+      <h4>Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5B.7</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> What is the primary difference in tree growth strategy between XGBoost's default mode and LightGBM's default mode, and how does this affect overfitting?</p>
+          <ol type="A">
+            <li>XGBoost grows trees leaf-wise (best-first), whereas LightGBM grows trees depth-wise (level-wise).</li>
+            <li>LightGBM grows trees leaf-wise (best-first), which achieves lower loss for the same leaf count but is more prone to overfitting on small datasets without `max_depth` limits; XGBoost defaults to depth-wise growth.</li>
+            <li>XGBoost uses random sampling of features, whereas LightGBM cannot sample features.</li>
+            <li>LightGBM requires sorting features at every split, making it significantly slower than XGBoost.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: B</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of All Options:</strong>
+          <ul>
+            <li><strong>Option B is TRUE:</strong> Traditional XGBoost grows trees level-by-level (depth-wise), producing balanced trees. LightGBM splits the single leaf that offers the largest loss reduction regardless of depth (leaf-wise). Leaf-wise growth is more asymmetric and converges faster to lower loss, but on small datasets ($N &lt; 10,000$), deep narrow branches can easily overfit if `num_leaves` or `max_depth` is unconstrained.</li>
+            <li><strong>Option A is FALSE:</strong> Exactly inverted.</li>
+            <li><strong>Option C is FALSE:</strong> Both frameworks support feature subsampling (`colsample_bytree`).</li>
+            <li><strong>Option D is FALSE:</strong> LightGBM uses histogram binning and is much faster than pre-sorted XGBoost.</li>
+          </ul></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5B.8</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-deepmind">DeepMind</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Consider the following Assertion (A) and Reason (R):</p>
+          <p><strong>Assertion (A):</strong> When tuning Gradient Boosted Decision Trees, reducing the shrinkage learning rate $\eta$ (e.g. from $0.1$ to $0.01$) consistently improves out-of-sample generalization, provided the number of estimators $B$ is increased proportionally.</p>
+          <p><strong>Reason (R):</strong> Shrinkage acts as an implicit regularizer in functional gradient descent, reducing the variance contribution of each individual tree and preventing the greedy sequential optimizer from committing prematurely to sub-optimal functional directions.</p>
+          <ol type="A">
+            <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+            <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+            <li>(A) is true, but (R) is false.</li>
+            <li>(A) is false, but (R) is true.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: A</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of Assertion &amp; Reason:</strong>
+          <ul>
+            <li><strong>Assertion (A) is TRUE:</strong> In GBDT, the product $\eta \times B$ governs learning. A smaller $\eta$ takes conservative, incremental steps, allowing downstream trees to correct errors with fine granularity, almost universally yielding superior generalization test scores.</li>
+            <li><strong>Reason (R) is TRUE:</strong> In functional gradient descent, taking a full unscaled step ($\eta = 1.0$) means the first tree captures a massive chunk of variance, including spurious noise correlations. Multiplying by small $\eta$ leaves room for future orthogonal trees to correct the residual, directly explaining Assertion (A).</li>
+          </ul></p>
+        </div>
       </div>
     </div>
 
     <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 2.5B: Minimal Gradient Boosting Regressor</h3>
+    <h3>5. Production Code Lab 2.5B: Minimal Gradient Boosting Regressor</h3>
     <p>Below is an educational implementation of a Gradient Boosting Regressor in pure Python fitting pseudo-residuals via functional gradient descent.</p>
 
     <div class="code-lab">
@@ -164,12 +476,12 @@ if __name__ == "__main__":
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 2.5B Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 2.5B: Industrial Click-Through &amp; Conversion Rate GBDT Engine</h3>
-        <p class="project-desc">Architect and implement an end-to-end industrial GBDT ranking service using LightGBM and XGBoost, implementing custom second-order focal loss objectives, monotonic feature constraints, and automated early stopping.</p>
+        <h3 class="project-title">Project 2.5B: Industrial E-Commerce Click-Through Rate &amp; Conversion Engine</h3>
+        <p class="project-desc">Architect and deploy a high-scale tabular ranking pipeline using LightGBM and XGBoost with GOSS sampling, categorical target encoding, and automated Bayesian hyperparameter tuning.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch25b_gradient_boosting/gbdt_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch25b_gradient_boosting/gbdt_scratch.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In e-commerce search ranking (Amazon, Walmart), tabular features (product price, rating, seller trust, user click recency) dominate model predictions. In this project, you build an industrial GBDT serving pipeline that enforces monotonic business constraints (e.g. higher product prices must never increase predicted conversion probability all else equal) and handles millions of real-time queries per second.</p>
+        <p><strong>Case Study Architecture:</strong> In e-commerce personalization (Amazon, Shopify), models rank millions of products per second. In this project, you construct an industrial tabular scoring service that ingests streaming search interactions, evaluates XGBoost second-order split gains against LightGBM histogram binning, and optimizes multi-objective NDCG ranking metrics under sub-10ms latency SLAs.</p>
       </div>
     </div>
   </div>

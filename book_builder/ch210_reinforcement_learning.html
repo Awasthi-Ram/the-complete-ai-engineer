@@ -1,0 +1,592 @@
+<!-- ======================================================================
+     CHAPTER 2.10 — REINFORCEMENT LEARNING: FROM BELLMAN EQUATIONS TO DEEP Q-NETWORKS
+     ====================================================================== -->
+<div class="chapter" id="chapter-2-10">
+  <div class="chapter-header">
+    <span class="chapter-number">Chapter 2.10</span>
+    <h2 class="chapter-title">Reinforcement Learning: From Bellman Equations to Deep Q-Networks</h2>
+    <span class="chapter-subtitle">MDPs, Bellman Contraction Mapping, Policy Gradients, DQN &amp; PPO</span>
+    <span class="chapter-ornament">✦</span>
+  </div>
+
+  <div class="epigraph">
+    <p>"The hallmark of intelligence is not whether you can learn from a teacher, but whether you can learn from trial and error."</p>
+    <p class="attribution">— Richard Sutton &amp; Andrew Barto, Reinforcement Learning: An Introduction</p>
+  </div>
+
+  <div class="chapter-body">
+    <span class="level-badge level-foundation">Foundation • Core Pillar</span>
+
+    <!-- SECTION 1: THE THIRD PARADIGM -->
+    <h3>1. The Third Paradigm of Machine Learning</h3>
+    <p>Supervised learning requires ground-truth labels $(\mathbf{x}, y)$; unsupervised learning discovers latent geometric structure without labels. <strong>Reinforcement Learning (RL)</strong> is the third fundamental paradigm: an agent learns an optimal sequence of decisions by <em>interacting with an environment</em>, receiving <strong>scalar rewards</strong> for favorable actions and <strong>penalties</strong> for mistakes, without any external teacher specifying the exact optimal action.</p>
+
+    <!-- SECTION 2: MARKOV DECISION PROCESSES -->
+    <h3>2. Markov Decision Processes (MDPs)</h3>
+    <p>The formal mathematical framework for reinforcement learning is the <strong>Markov Decision Process (MDP)</strong>, defined by the 5-tuple $(\mathcal{S}, \mathcal{A}, P, R, \gamma)$:</p>
+
+    <!-- FIGURE 2.10.1: rl_agent_environment.jpg -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="rl_agent_environment.jpg" alt="Figure 2.10.1: rl_agent_environment.jpg" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 2.10.1:</em> The canonical Reinforcement Learning interaction cycle. The agent observes current state $S_t$, takes action $A_t$ sampled from policy $\pi$, and receives scalar reward $R_{t+1}$ and next state $S_{t+1}$ from the environment transition dynamics $\mathcal{P}$.
+      </p>
+    </div>
+
+    <ul>
+      <li>$\mathcal{S}$: <strong>State Space</strong> — the set of all environment configurations.</li>
+      <li>$\mathcal{A}$: <strong>Action Space</strong> — the set of all legal agent actions.</li>
+      <li>$P(s' \mid s, a)$: <strong>Transition Probability</strong> — $P(s_{t+1} = s' \mid s_t = s, a_t = a)$.</li>
+      <li>$R(s, a, s')$: <strong>Reward Function</strong> — scalar feedback $r_{t+1} \in \mathbb{R}$.</li>
+      <li>$\gamma \in [0, 1)$: <strong>Discount Factor</strong> — exponential temporal weighting for future rewards.</li>
+    </ul>
+
+    <div class="key-insight">
+      <p><strong>The Markov Property:</strong><br>
+      The future transition depends exclusively on the current state and action, completely conditional on the immediate present:
+      $$P(s_{t+1} \mid s_t, a_t, s_{t-1}, a_{t-1}, \dots, s_0, a_0) = P(s_{t+1} \mid s_t, a_t)$$
+      State $s_t$ is a <strong>sufficient statistic</strong> for the entire interaction history. The agent does not need to memorize past trajectories to make optimal decisions.</p>
+    </div>
+
+    <h4>Cumulative Discounted Return</h4>
+    <p>The objective of the agent is to select actions that maximize the expected <strong>cumulative discounted return</strong> $G_t$:</p>
+    $$G_t = \sum_{k=0}^{\infty} \gamma^k r_{t+k+1} = r_{t+1} + \gamma r_{t+2} + \gamma^2 r_{t+3} + \dots$$
+    <p>Because $\gamma &lt; 1$ and rewards are bounded ($|r| \le R_{\max}$), the infinite geometric series is guaranteed to converge: $G_t \le \frac{R_{\max}}{1 - \gamma}$.</p>
+
+    <!-- SECTION 3: VALUE FUNCTIONS & BELLMAN EQUATIONS -->
+    <h3>3. Value Functions &amp; The Bellman Equations</h3>
+    <p>A <strong>policy</strong> $\pi(a \mid s)$ defines the probability distribution over actions given state $s$. We evaluate policies using two value functions:</p>
+    <ul>
+      <li><strong>State-Value Function $V^\pi(s)$</strong>: Expected return starting from state $s$ following policy $\pi$:
+      $$V^\pi(s) = \mathbb{E}_\pi [G_t \mid s_t = s]$$</li>
+      <li><strong>Action-Value Function $Q^\pi(s, a)$</strong>: Expected return starting from state $s$, taking action $a$, and thereafter following $\pi$:
+      $$Q^\pi(s, a) = \mathbb{E}_\pi [G_t \mid s_t = s, a_t = a]$$</li>
+    </ul>
+
+    <div class="real-world-box">
+      <h4>🏆 The Bellman Expectation and Optimality Equations</h4>
+      <p>Decomposing $G_t = r_{t+1} + \gamma G_{t+1}$ yields the recursive <strong>Bellman Expectation Equations</strong>:</p>
+      $$V^\pi(s) = \sum_{a \in \mathcal{A}} \pi(a|s) \sum_{s' \in \mathcal{S}} P(s'|s,a) \left[ R(s,a,s') + \gamma V^\pi(s') \right]$$
+      $$Q^\pi(s, a) = \sum_{s' \in \mathcal{S}} P(s'|s,a) \left[ R(s,a,s') + \gamma \sum_{a'} \pi(a'|s') Q^\pi(s', a') \right]$$
+      <p>For the optimal policy $\pi^* = \arg\max_\pi V^\pi(s)$, the value satisfies the non-linear <strong>Bellman Optimality Equations</strong>:</p>
+      $$V^*(s) = \max_{a \in \mathcal{A}} \sum_{s' \in \mathcal{S}} P(s'|s,a) \left[ R(s,a,s') + \gamma V^*(s') \right]$$
+      $$Q^*(s, a) = \sum_{s' \in \mathcal{S}} P(s'|s,a) \left[ R(s,a,s') + \gamma \max_{a' \in \mathcal{A}} Q^*(s', a') \right]$$
+      <p>Once $Q^*(s, a)$ is determined, the optimal deterministic policy is simply greedy: $\pi^*(s) = \arg\max_{a} Q^*(s, a)$.</p>
+    </div>
+
+    <!-- SECTION 4: Q-LEARNING -->
+    <h3>4. Model-Free Temporal Difference: Q-Learning</h3>
+    <p>When the transition model $P(s' \mid s, a)$ is unknown, <strong>Q-Learning (Watkins, 1989)</strong> learns $Q^*(s, a)$ directly from transition samples $(s_t, a_t, r_{t+1}, s_{t+1})$ via Temporal Difference (TD) updates:</p>
+    $$Q(s_t, a_t) \leftarrow Q(s_t, a_t) + \alpha \left[ \underbrace{r_{t+1} + \gamma \max_{a'} Q(s_{t+1}, a')}_{\text{TD Target}} - \underbrace{Q(s_t, a_t)}_{\text{Current Estimate}} \right]$$
+    <p>Where $\delta_t = r_{t+1} + \gamma \max_{a'} Q(s_{t+1}, a') - Q(s_t, a_t)$ is the <strong>TD Error</strong>.</p>
+    <p><strong>Off-Policy Nature:</strong> Q-Learning is an <em>off-policy</em> algorithm because the update target evaluates the greedy action $\max_{a'} Q(s_{t+1}, a')$ under the target policy $\pi^*$, regardless of which action $a_{t+1}$ the agent actually executes using its $\epsilon$-greedy exploratory behavior policy.</p>
+
+    <!-- SECTION 5: DQN -->
+    <h3>5. Deep Q-Networks (DQN): Mnih et al., DeepMind 2015</h3>
+    <p>When state spaces are continuous or high-dimensional (such as raw video frames $84 \times 84 \times 4$), tabular representations become impossible. DQN parameterizes $Q(s, a; \theta)$ with a deep neural network. Naive gradient descent on consecutive transitions causes catastrophic divergence due to the <strong>Deadly Triad</strong> (Function Approximation + Bootstrapping + Off-Policy Learning). DQN resolves this with two architectural breakthroughs:</p>
+    <ol>
+      <li><strong>Experience Replay Buffer $\mathcal{D}$:</strong> Transitions $(s_t, a_t, r_{t+1}, s_{t+1})$ are stored in a circular buffer. Mini-batches are uniformly sampled at random during training, breaking temporal correlations and restoring i.i.d. SGD assumptions.</li>
+      <li><strong>Separate Target Network $Q(s, a; \theta^-)$:</strong> A separate parameter set $\theta^-$ is held fixed and only synchronized periodically ($\theta^- \leftarrow \theta$ every $C$ steps). The loss function is:
+      $$\mathcal{L}(\theta) = \mathbb{E}_{(s, a, r, s') \sim \mathcal{D}} \left[ \left( r + \gamma \max_{a'} Q(s', a'; \theta^-) - Q(s, a; \theta) \right)^2 \right]$$</li>
+    </ol>
+
+    <!-- SECTION 6: POLICY GRADIENTS & PPO -->
+    <h3>6. Policy Gradients &amp; Proximal Policy Optimization (PPO)</h3>
+    <p>Value-based methods struggle with continuous action spaces (e.g., robotic joint torques $\mathcal{A} \subset \mathbb{R}^6$). <strong>Policy Gradient methods</strong> directly parameterize $\pi_\theta(a \mid s)$ and perform gradient ascent on expected return $J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} [R(\tau)]$.</p>
+
+    <h4>The Policy Gradient Theorem (Sutton et al., 2000)</h4>
+    $$\nabla_\theta J(\theta) = \mathbb{E}_{\pi_\theta} \left[ \sum_{t=0}^T \nabla_\theta \ln \pi_\theta(a_t \mid s_t) \cdot A^{\pi_\theta}(s_t, a_t) \right]$$
+    <p>Where $A(s, a) = Q(s, a) - V(s)$ is the <strong>Advantage Function</strong>, which drastically reduces gradient variance compared to raw returns $G_t$.</p>
+
+    <h4>Proximal Policy Optimization (PPO): Schulman et al., 2017</h4>
+    <p>Standard policy gradient steps can destructively collapse policy entropy. PPO constrains policy drift using the <strong>Clipped Surrogate Objective</strong>:</p>
+    $$r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}$$
+    $$\mathcal{L}^{\text{CLIP}}(\theta) = \hat{\mathbb{E}}_t \left[ \min\left( r_t(\theta) \hat{A}_t, \; \operatorname{clip}(r_t(\theta), 1 - \epsilon, 1 + \epsilon) \hat{A}_t \right) \right]$$
+    <p>This clipped objective acts as a pessimistic bound, preventing large updates when the probability ratio $r_t(\theta)$ deviates beyond $[1-\epsilon, 1+\epsilon]$ (typically $\epsilon = 0.2$). PPO is the workhorse algorithm behind RLHF in modern LLMs (Chapter 5.6).</p>
+
+    <!-- SECTION 7: 4-TIER PRACTICE SUITE -->
+    <h3>Reinforcement Learning Practice Suite &amp; Complete Worked Solutions</h3>
+
+    <!-- PROBLEM 2.10.1 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.10.1</span>
+        <span class="difficulty difficulty-easy">Level 1 • Direct Formula &amp; Discounted Return Drill</span>
+        <span class="company-tag company-google">Google DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An autonomous agent interacts with an episodic environment with discount factor $\gamma = 0.8$. An episode terminates after $4$ steps, generating the following sequence of rewards:
+        $$r_1 = -1.0, \quad r_2 = 0.0, \quad r_3 = +2.0, \quad r_4 = +10.0$$
+        Calculate the exact discounted cumulative return $G_t = \sum_{k=0}^{T-t-1} \gamma^k r_{t+k+1}$ for all timesteps $t = 0, 1, 2, 3$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
+
+        <p class="step"><strong>Step 1: Backward Recursive Formula:</strong><br>
+        Recall that returns satisfy the backward recursion:
+        $$G_t = r_{t+1} + \gamma G_{t+1}, \quad \text{with } G_T = G_4 = 0$$</p>
+
+        <p class="step"><strong>Step 2: Calculate Returns from $t = 3$ back to $t = 0$:</strong><br>
+        <ul>
+          <li>For $t = 3$:
+          $$G_3 = r_4 = +10.0$$</li>
+          <li>For $t = 2$:
+          $$G_2 = r_3 + \gamma G_3 = 2.0 + (0.8)(10.0) = 2.0 + 8.0 = +10.0$$</li>
+          <li>For $t = 1$:
+          $$G_1 = r_2 + \gamma G_2 = 0.0 + (0.8)(10.0) = 0.0 + 8.0 = +8.0$$</li>
+          <li>For $t = 0$:
+          $$G_0 = r_1 + \gamma G_1 = -1.0 + (0.8)(8.0) = -1.0 + 6.4 = +5.4$$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 3: Verification via Direct Expansion:</strong><br>
+        $$G_0 = r_1 + \gamma r_2 + \gamma^2 r_3 + \gamma^3 r_4$$
+        $$G_0 = -1.0 + (0.8)(0.0) + (0.64)(2.0) + (0.512)(10.0) = -1.0 + 0.0 + 1.28 + 5.12 = 5.40$$
+        The results match identically: $G_0 = 5.4, G_1 = 8.0, G_2 = 10.0, G_3 = 10.0$.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 2.10.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.10.2</span>
+        <span class="difficulty difficulty-easy">Level 1 • Direct Formula Drill</span>
+        <span class="company-tag company-openai">OpenAI</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An agent in state $s_t = A$ executes action $a_t = \text{Right}$. The current value in the Q-table is $Q(A, \text{Right}) = 3.50$. The agent observes reward $r_{t+1} = +2.0$ and transitions to state $s_{t+1} = B$.<br>
+        The Q-table values for state $B$ are:
+        $$Q(B, \text{Up}) = 4.0, \quad Q(B, \text{Down}) = 6.0, \quad Q(B, \text{Left}) = 1.5, \quad Q(B, \text{Right}) = 5.0$$
+        Given learning rate $\alpha = 0.20$ and discount factor $\gamma = 0.90$:</p>
+        <ol>
+          <li>Identify $\max_{a'} Q(B, a')$.</li>
+          <li>Calculate the TD target $y_t = r_{t+1} + \gamma \max_{a'} Q(s_{t+1}, a')$.</li>
+          <li>Calculate the TD error $\delta_t = y_t - Q(s_t, a_t)$.</li>
+          <li>Compute the updated Q-value $Q_{\text{new}}(A, \text{Right})$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+
+        <p class="step"><strong>Step 1: Find Maximum Q-Value in State B:</strong><br>
+        $$\max_{a'} Q(B, a') = \max(4.0, 6.0, 1.5, 5.0) = Q(B, \text{Down}) = 6.00$$</p>
+
+        <p class="step"><strong>Step 2: Compute TD Target:</strong><br>
+        $$y_t = r_{t+1} + \gamma \max_{a'} Q(B, a') = 2.0 + (0.90 \times 6.00) = 2.0 + 5.40 = 7.40$$</p>
+
+        <p class="step"><strong>Step 3: Compute TD Error:</strong><br>
+        $$\delta_t = y_t - Q(A, \text{Right}) = 7.40 - 3.50 = +3.90$$</p>
+
+        <p class="step"><strong>Step 4: Update Q-Value:</strong><br>
+        $$Q_{\text{new}}(A, \text{Right}) = Q(A, \text{Right}) + \alpha \delta_t = 3.50 + (0.20 \times 3.90) = 3.50 + 0.78 = 4.28$$
+        The action-value increases from $3.50 \to 4.28$, reflecting the high expected future reward in state $B$.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 2.10.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.10.3</span>
+        <span class="difficulty difficulty-medium">Level 2 • Applied Engineering Trace</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Consider a 3-state deterministic chain MDP with states $\mathcal{S} = \{s_1, s_2, s_3\}$ where $s_3$ is an absorbing terminal state. Two actions are available from non-terminal states $\mathcal{A} = \{\text{Stay}, \text{Move}\}$:</p>
+        <ul>
+          <li>In $s_1$: $\text{Stay}$ yields $r = 0, s' = s_1$; $\text{Move}$ yields $r = 0, s' = s_2$.</li>
+          <li>In $s_2$: $\text{Stay}$ yields $r = 0, s' = s_2$; $\text{Move}$ yields $r = +10, s' = s_3$ (terminal).</li>
+          <li>In $s_3$: Absorbing, $V(s_3) = 0$.</li>
+        </ul>
+        <p>With discount factor $\gamma = 0.50$ and initial value estimates $V_0(s_1) = 0, V_0(s_2) = 0, V_0(s_3) = 0$:</p>
+        <ol>
+          <li>Perform iteration 1 of Value Iteration to compute $V_1(s_1)$ and $V_1(s_2)$.</li>
+          <li>Perform iteration 2 of Value Iteration to compute $V_2(s_1)$ and $V_2(s_2)$.</li>
+          <li>Extract the greedy policy $\pi_2(s)$ derived from $V_2$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Algorithmic Trace</div>
+
+        <p class="step"><strong>Step 1: Iteration 1 of Value Iteration:</strong><br>
+        Bellman optimality update: $V_{k+1}(s) = \max_a [R(s, a) + \gamma V_k(s')]$.
+        <ul>
+          <li>For state $s_1$:
+          $$Q_1(s_1, \text{Stay}) = 0 + 0.5 V_0(s_1) = 0 + 0 = 0$$
+          $$Q_1(s_1, \text{Move}) = 0 + 0.5 V_0(s_2) = 0 + 0 = 0$$
+          $$V_1(s_1) = \max(0, 0) = 0.0$$</li>
+          <li>For state $s_2$:
+          $$Q_1(s_2, \text{Stay}) = 0 + 0.5 V_0(s_2) = 0 + 0 = 0$$
+          $$Q_1(s_2, \text{Move}) = 10 + 0.5 V_0(s_3) = 10 + 0 = 10.0$$
+          $$V_1(s_2) = \max(0, 10.0) = 10.0$$</li>
+        </ul>
+        Value vector after iteration 1: $V_1 = [0.0, 10.0, 0.0]$.</p>
+
+        <p class="step"><strong>Step 2: Iteration 2 of Value Iteration:</strong><br>
+        Using $V_1 = [0.0, 10.0, 0.0]$:
+        <ul>
+          <li>For state $s_1$:
+          $$Q_2(s_1, \text{Stay}) = 0 + 0.5 V_1(s_1) = 0 + 0.5(0) = 0$$
+          $$Q_2(s_1, \text{Move}) = 0 + 0.5 V_1(s_2) = 0 + 0.5(10.0) = 5.0$$
+          $$V_2(s_1) = \max(0, 5.0) = 5.0$$</li>
+          <li>For state $s_2$:
+          $$Q_2(s_2, \text{Stay}) = 0 + 0.5 V_1(s_2) = 0 + 0.5(10.0) = 5.0$$
+          $$Q_2(s_2, \text{Move}) = 10 + 0.5 V_1(s_3) = 10 + 0 = 10.0$$
+          $$V_2(s_2) = \max(5.0, 10.0) = 10.0$$</li>
+        </ul>
+        Value vector after iteration 2: $V_2 = [5.0, 10.0, 0.0]$.</p>
+
+        <p class="step"><strong>Step 3: Greedy Policy Extraction:</strong><br>
+        $$\pi_2(s_1) = \arg\max_a Q_2(s_1, a) = \arg\max(0, 5.0) = \mathbf{\text{Move}}$$
+        $$\pi_2(s_2) = \arg\max_a Q_2(s_2, a) = \arg\max(5.0, 10.0) = \mathbf{\text{Move}}$$
+        In just 2 iterations, the information about the $+10$ goal reward has backpropagated across the chain to state $s_1$, yielding the optimal policy $\pi^* = \{\text{Move}, \text{Move}\}$.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 2.10.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.10.4</span>
+        <span class="difficulty difficulty-medium">Level 2 • Algorithmic Tracing</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An agent is running reinforcement learning on a cliff-walking environment with $\gamma = 1.0$ and $\alpha = 0.5$. From current state $s$, the agent takes action $a$, receives reward $r = -1$, and lands in state $s'$.<br>
+        In state $s'$, two actions are available:
+        $$Q(s', \text{Safe}) = 0.0, \quad Q(s', \text{Cliff}) = -100.0$$
+        Under an $\epsilon$-greedy exploratory policy with $\epsilon = 0.3$, the agent rolls a random exploration action and picks $a' = \text{Cliff}$.<br>
+        Given $Q(s, a) = -5.0$:</p>
+        <ol>
+          <li>Compute the updated value $Q_{\text{SARSA}}(s, a)$ under on-policy SARSA.</li>
+          <li>Compute the updated value $Q_{\text{QLearning}}(s, a)$ under off-policy Q-Learning.</li>
+          <li>Explain why SARSA learns a more cautious path than Q-Learning in dangerous environments.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Algorithmic Comparison</div>
+
+        <p class="step"><strong>Step 1: SARSA (On-Policy) Update:</strong><br>
+        SARSA updates using the actual action $a'$ executed by the behavior policy:
+        $$\text{TD Target}_{\text{SARSA}} = r + \gamma Q(s', a') = -1 + 1.0 \times Q(s', \text{Cliff}) = -1 + (-100.0) = -101.0$$
+        $$Q_{\text{SARSA}}(s, a) = Q(s, a) + \alpha \left[ \text{TD Target}_{\text{SARSA}} - Q(s, a) \right]$$
+        $$Q_{\text{SARSA}}(s, a) = -5.0 + 0.5 \left[ -101.0 - (-5.0) \right] = -5.0 + 0.5(-96.0) = -5.0 - 48.0 = \mathbf{-53.0}$$</p>
+
+        <p class="step"><strong>Step 2: Q-Learning (Off-Policy) Update:</strong><br>
+        Q-Learning updates using the maximum Q-value in $s'$, ignoring the exploration mistake $a'$:
+        $$\text{TD Target}_{\text{QLearn}} = r + \gamma \max_{b} Q(s', b) = -1 + 1.0 \times \max(0.0, -100.0) = -1 + 0.0 = -1.0$$
+        $$Q_{\text{QLearn}}(s, a) = Q(s, a) + \alpha \left[ \text{TD Target}_{\text{QLearn}} - Q(s, a) \right]$$
+        $$Q_{\text{QLearn}}(s, a) = -5.0 + 0.5 \left[ -1.0 - (-5.0) \right] = -5.0 + 0.5(+4.0) = -5.0 + 2.0 = \mathbf{-3.0}$$</p>
+
+        <p class="step"><strong>Step 3: Behavioral Implication:</strong><br>
+        <ul>
+          <li><strong>Q-Learning</strong> assumes the agent will act completely greedily in the future ($\max_b Q$). It learns the mathematically shortest path right along the cliff edge, because that path is optimal under a deterministic policy. However, during online execution with $\epsilon &gt; 0$, random exploration occasionally causes it to fall off the cliff!</li>
+          <li><strong>SARSA</strong> accounts for the agent's exploratory nature ($\epsilon$-greedy). Because it penalizes actions that lead to states where exploration might trigger a catastrophic drop ($Q \to -53$), SARSA learns a wide, cautious path away from the cliff edge!</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 2.10.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.10.5</span>
+        <span class="difficulty difficulty-hard">Level 3 • FAANG / Research Lab Proof</span>
+        <span class="company-tag company-google">Google DeepMind</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Define the Bellman Optimality Operator $\mathcal{T}$ acting on the space of bounded value functions $\mathcal{V} = \{V : \mathcal{S} \to \mathbb{R}\}$ equipped with the supremum norm $\|V\|_\infty = \max_{s \in \mathcal{S}} |V(s)|$ as:
+        $$(\mathcal{T} V)(s) = \max_{a \in \mathcal{A}} \left[ R(s, a) + \gamma \sum_{s' \in \mathcal{S}} P(s' \mid s, a) V(s') \right]$$
+        Prove that $\mathcal{T}$ is a <strong>$\gamma$-contraction mapping</strong>:
+        $$\|\mathcal{T} V - \mathcal{T} U\|_\infty \le \gamma \|V - U\|_\infty$$
+        And invoke Banach's Fixed-Point Theorem to prove that Value Iteration converges uniquely to the optimal value function $V^*$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Mathematical Proof of the Contraction Mapping Theorem</div>
+
+        <p class="step"><strong>Step 1: Useful Algebraic Lemma on $\max$:</strong><br>
+        Let $f(a)$ and $g(a)$ be real-valued functions defined on a set $\mathcal{A}$.<br>
+        For any $a \in \mathcal{A}$: $f(a) = f(a) - g(a) + g(a) \le g(a) + \max_{a'} |f(a') - g(a')|$.<br>
+        Taking the maximum over $a$ on the left:
+        $$\max_{a} f(a) \le \max_{a} g(a) + \max_{a} |f(a) - g(a)| \implies \max_a f(a) - \max_a g(a) \le \max_a |f(a) - g(a)|$$
+        By swapping $f$ and $g$, we obtain the reverse inequality:
+        $$\left| \max_{a} f(a) - \max_{a} g(a) \right| \le \max_{a} |f(a) - g(a)|$$</p>
+
+        <p class="step"><strong>Step 2: Apply the Lemma to $(\mathcal{T} V)(s) - (\mathcal{T} U)(s)$:</strong><br>
+        For an arbitrary state $s \in \mathcal{S}$:
+        $$|(\mathcal{T} V)(s) - (\mathcal{T} U)(s)| = \left| \max_{a \in \mathcal{A}} \left[ R(s, a) + \gamma \sum_{s'} P(s'|s,a) V(s') \right] - \max_{a \in \mathcal{A}} \left[ R(s, a) + \gamma \sum_{s'} P(s'|s,a) U(s') \right] \right|$$
+        Applying the algebraic lemma from Step 1:
+        $$\le \max_{a \in \mathcal{A}} \left| \left( R(s, a) + \gamma \sum_{s'} P(s'|s,a) V(s') \right) - \left( R(s, a) + \gamma \sum_{s'} P(s'|s,a) U(s') \right) \right|$$
+        The immediate reward term $R(s, a)$ cancels out completely:
+        $$= \max_{a \in \mathcal{A}} \gamma \left| \sum_{s'} P(s'|s,a) (V(s') - U(s')) \right|$$</p>
+
+        <p class="step"><strong>Step 3: Bound via the Supremum Norm:</strong><br>
+        By the triangle inequality and non-negativity of probabilities $P(s'|s, a) \ge 0$:
+        $$\left| \sum_{s'} P(s'|s,a) (V(s') - U(s')) \right| \le \sum_{s'} P(s'|s,a) |V(s') - U(s')|$$
+        Since $|V(s') - U(s')| \le \max_{s''} |V(s'') - U(s'')| = \|V - U\|_\infty$:
+        $$\le \sum_{s'} P(s'|s,a) \|V - U\|_\infty = \|V - U\|_\infty \sum_{s'} P(s'|s,a)$$
+        Since transition probabilities sum to $1$ ($\sum_{s'} P(s'|s,a) = 1$):
+        $$= \|V - U\|_\infty$$
+        Substituting this back:
+        $$|(\mathcal{T} V)(s) - (\mathcal{T} U)(s)| \le \gamma \|V - U\|_\infty, \quad \forall s \in \mathcal{S}$$</p>
+
+        <p class="step"><strong>Step 4: Take the Supremum Over All States $s$:</strong><br>
+        Taking the maximum over all $s \in \mathcal{S}$ on the left-hand side:
+        $$\|\mathcal{T} V - \mathcal{T} U\|_\infty = \max_{s \in \mathcal{S}} |(\mathcal{T} V)(s) - (\mathcal{T} U)(s)| \le \gamma \|V - U\|_\infty$$
+        Since $\gamma \in [0, 1)$, $\mathcal{T}$ is a <strong>strict contraction mapping</strong> on the Banach space $(\mathcal{V}, \|\cdot\|_\infty)$.</p>
+
+        <p class="step"><strong>Step 5: Invocation of Banach's Fixed-Point Theorem:</strong><br>
+        By Banach's Fixed-Point Theorem:
+        <ol>
+          <li>There exists a <strong>unique fixed point</strong> $V^* \in \mathcal{V}$ such that $\mathcal{T} V^* = V^*$.</li>
+          <li>For <em>any</em> arbitrary initial value function $V_0 \in \mathcal{V}$, the sequence generated by repeated application $V_{k+1} = \mathcal{T} V_k$ converges exponentially to $V^*$:
+          $$\|V_k - V^*\|_\infty \le \frac{\gamma^k}{1 - \gamma} \|V_1 - V_0\|_\infty \to 0 \quad \text{as } k \to \infty$$</li>
+        </ol>
+        This guarantees that Value Iteration is mathematically guaranteed to converge to the exact optimal value function, with zero dependence on initialization! $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 2.10.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.10.6</span>
+        <span class="difficulty difficulty-hard">Level 3 • FAANG / Research Lab Proof</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-google">Google DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Starting from the trajectory formulation $P(\tau; \theta) = \mu(s_0) \prod_{t=0}^T \pi_\theta(a_t \mid s_t) P(s_{t+1} \mid s_t, a_t)$ and expected return $J(\theta) = \int P(\tau; \theta) R(\tau) \, d\tau$, derive the <strong>Policy Gradient Theorem</strong>:
+        $$\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \sum_{t=0}^T \nabla_\theta \ln \pi_\theta(a_t \mid s_t) \cdot G_t \right]$$
+        Explicitly show why the unknown environment transition dynamics $P(s_{t+1} \mid s_t, a_t)$ vanish from the gradient computation.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete First-Principles Mathematical Derivation</div>
+
+        <p class="step"><strong>Step 1: Expand the Objective Function:</strong><br>
+        The expected cumulative reward of trajectories $\tau = (s_0, a_0, s_1, a_1, \dots, s_T, a_T)$ is:
+        $$J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} [R(\tau)] = \int P(\tau; \theta) R(\tau) \, d\tau$$
+        Differentiating with respect to policy parameters $\theta$:
+        $$\nabla_\theta J(\theta) = \nabla_\theta \int P(\tau; \theta) R(\tau) \, d\tau = \int \nabla_\theta P(\tau; \theta) R(\tau) \, d\tau$$</p>
+
+        <p class="step"><strong>Step 2: The Log-Derivative (Likelihood-Ratio) Trick:</strong><br>
+        Notice that $\nabla_\theta \ln P(\tau; \theta) = \frac{\nabla_\theta P(\tau; \theta)}{P(\tau; \theta)} \implies \nabla_\theta P(\tau; \theta) = P(\tau; \theta) \nabla_\theta \ln P(\tau; \theta)$.<br>
+        Substituting this into the integral:
+        $$\nabla_\theta J(\theta) = \int P(\tau; \theta) \nabla_\theta \ln P(\tau; \theta) R(\tau) \, d\tau = \mathbb{E}_{\tau \sim \pi_\theta} [\nabla_\theta \ln P(\tau; \theta) R(\tau)]$$</p>
+
+        <p class="step"><strong>Step 3: Expand the Trajectory Log-Probability:</strong><br>
+        The probability of trajectory $\tau$ is:
+        $$P(\tau; \theta) = \mu(s_0) \prod_{t=0}^T \pi_\theta(a_t \mid s_t) P(s_{t+1} \mid s_t, a_t)$$
+        Taking the natural logarithm:
+        $$\ln P(\tau; \theta) = \ln \mu(s_0) + \sum_{t=0}^T \ln \pi_\theta(a_t \mid s_t) + \sum_{t=0}^T \ln P(s_{t+1} \mid s_t, a_t)$$
+        Now take the gradient with respect to $\theta$:
+        <ul>
+          <li>The initial state distribution $\mu(s_0)$ is determined by the environment, so $\nabla_\theta \ln \mu(s_0) = \mathbf{0}$.</li>
+          <li>The transition dynamics $P(s_{t+1} \mid s_t, a_t)$ depend only on physics/environment rules, completely independent of policy parameters $\theta$, so $\nabla_\theta \ln P(s_{t+1} \mid s_t, a_t) = \mathbf{0}$!</li>
+        </ul>
+        Therefore:
+        $$\nabla_\theta \ln P(\tau; \theta) = \sum_{t=0}^T \nabla_\theta \ln \pi_\theta(a_t \mid s_t)$$
+        <strong>The unknown environment dynamics vanish completely!</strong></p>
+
+        <p class="step"><strong>Step 4: Causality and Return-to-Go $G_t$:</strong><br>
+        Substituting back:
+        $$\nabla_\theta J(\theta) = \mathbb{E}_{\tau} \left[ \sum_{t=0}^T \nabla_\theta \ln \pi_\theta(a_t \mid s_t) \left( \sum_{t'=0}^T r_{t'+1} \right) \right]$$
+        By the law of causality, actions taken at time $t$ cannot affect rewards received in the past ($t' &lt; t$). Formally, for all $t' &lt; t$:
+        $$\mathbb{E}_{\tau} [\nabla_\theta \ln \pi_\theta(a_t \mid s_t) r_{t'+1}] = \mathbf{0}$$
+        Removing past rewards leaves only future returns from step $t$ onward (the return-to-go $G_t = \sum_{t'=t}^T \gamma^{t'-t} r_{t'+1}$):
+        $$\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \sum_{t=0}^T \nabla_\theta \ln \pi_\theta(a_t \mid s_t) \cdot G_t \right]$$
+        This completes the derivation of the REINFORCE Policy Gradient. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 2.10.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.10.7</span>
+        <span class="difficulty difficulty-medium">Level 4 • Conceptual Trap MCQ</span>
+        <span class="company-tag company-google">Google DeepMind</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In reinforcement learning theory (Sutton &amp; Barto), the <strong>Deadly Triad</strong> refers to the combination of three algorithmic properties that, when present simultaneously, can cause value function estimates to diverge uncontrollably. What are the three components of the Deadly Triad?</p>
+        <ol type="A">
+          <li>Stochastic Policies, Continuous Actions, and Sparse Rewards.</li>
+          <li>Function Approximation, Bootstrapping, and Off-Policy Learning.</li>
+          <li>High Learning Rate, Low Discount Factor, and Deep Replay Buffers.</li>
+          <li>Markov Property, Stationary Transitions, and Greedy Action Selection.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: B • Comprehensive Distractor Analysis</div>
+
+        <p class="step"><strong>Detailed Analysis:</strong><br>
+        The <strong>Deadly Triad</strong> consists of:
+        <ol>
+          <li><strong>Function Approximation:</strong> Parameterizing value functions using scalable function approximators (deep neural networks, linear basis expansion) rather than tabular lookup.</li>
+          <li><strong>Bootstrapping:</strong> Updating value targets using existing estimated value predictions (TD learning: $r + \gamma V(s')$ or $r + \gamma \max Q(s', a')$) rather than complete Monte Carlo rollouts ($G_t$).</li>
+          <li><strong>Off-Policy Learning:</strong> Learning about a target policy (such as greedy $\pi^*$) from transitions generated by a different behavior policy (such as $\epsilon$-greedy exploration).</li>
+        </ol>
+        When all three are present (as in standard naive Q-learning with deep networks), the Bellman contraction mapping property is broken. Errors in overestimating Q-values get bootstrapped into target labels, function approximation generalizes the error across the entire state space, and off-policy distribution mismatch compounds the divergence, causing Q-values to explode to infinity.<br>
+        DQN stabilizes the deadly triad through <strong>Experience Replay</strong> (correcting off-policy distribution shifts) and <strong>Target Networks</strong> (freezing bootstrapping targets).</p>
+
+        <p class="step"><strong>Why Other Options are False:</strong><br>
+        <ul>
+          <li><strong>A is FALSE:</strong> Continuous actions and sparse rewards create optimization and exploration difficulty, but do not mathematically cause value divergence.</li>
+          <li><strong>C is FALSE:</strong> Replay buffers stabilize training; they are the solution to the triad, not part of the problem.</li>
+          <li><strong>D is FALSE:</strong> The Markov property and stationary transitions are the very axioms that make RL theoretically tractable.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 2.10.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 2.10.8</span>
+        <span class="difficulty difficulty-hard">Level 4 • Assertion-Reasoning &amp; PPO Clipping Trap</span>
+        <span class="company-tag company-openai">OpenAI</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Evaluate the following Assertion and Reason regarding Proximal Policy Optimization (PPO):</p>
+        <p><strong>Assertion (A):</strong> In the PPO clipped objective $\mathcal{L}^{\text{CLIP}}(\theta) = \hat{\mathbb{E}}_t \left[ \min\left( r_t(\theta) \hat{A}_t, \; \operatorname{clip}(r_t(\theta), 1 - \epsilon, 1 + \epsilon) \hat{A}_t \right) \right]$, when the advantage is negative ($\hat{A}_t &lt; 0$, indicating an action worse than average), the objective places a strict lower bound on how much the policy can reduce the action's probability, preventing catastrophic gradient collapse.</p>
+        <p><strong>Reason (R):</strong> When $\hat{A}_t &lt; 0$, multiplying the clipped interval $[1 - \epsilon, 1 + \epsilon]$ by a negative number inverts the order of terms: if the new policy makes the action much less likely ($r_t(\theta) &lt; 1 - \epsilon$), the clipped product $(1 - \epsilon)\hat{A}_t$ is mathematically larger than the unclipped product $r_t(\theta)\hat{A}_t$, causing the $\min$ operator to select the unclipped term and allow gradients to pass freely.</p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct mathematical explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: C • Comprehensive Mathematical Dissection</div>
+
+        <p class="step"><strong>Detailed Analysis:</strong><br>
+        Let us carefully evaluate the mathematics of the PPO objective when $\hat{A}_t &lt; 0$ (a bad action):<br>
+        We want the policy to reduce the probability of this action, meaning $\pi_\theta(a_t \mid s_t) &lt; \pi_{\theta_{\text{old}}}(a_t \mid s_t) \implies r_t(\theta) &lt; 1.0$.<br>
+        The objective is:
+        $$\mathcal{L}(r_t) = \min\left( r_t \hat{A}_t, \; \operatorname{clip}(r_t, 1 - \epsilon, 1 + \epsilon) \hat{A}_t \right)$$
+        Let $\hat{A}_t = -|A|$. Then:
+        $$\mathcal{L}(r_t) = \min\left( -r_t |A|, \; -\operatorname{clip}(r_t, 1 - \epsilon, 1 + \epsilon) |A| \right) = - \max\left( r_t |A|, \; \operatorname{clip}(r_t, 1 - \epsilon, 1 + \epsilon) |A| \right)$$</p>
+
+        <p class="step"><strong>Case Analysis for $\hat{A}_t &lt; 0$:</strong><br>
+        <ul>
+          <li><strong>Case 1: $1 - \epsilon \le r_t \le 1 + \epsilon$:</strong> Here $\operatorname{clip}(r_t) = r_t$. Both terms are identical, and gradient $\nabla_\theta r_t \hat{A}_t$ updates the policy normally.</li>
+          <li><strong>Case 2: The policy decreases probability too drastically ($r_t &lt; 1 - \epsilon$):</strong><br>
+          Here $\operatorname{clip}(r_t, 1 - \epsilon, 1 + \epsilon) = 1 - \epsilon$.<br>
+          Comparing the two terms:
+          Since $r_t &lt; 1 - \epsilon$, multiplying by negative $\hat{A}_t$ gives:
+          $$r_t \hat{A}_t &gt; (1 - \epsilon) \hat{A}_t$$
+          The $\min$ operator selects the <strong>smaller value</strong>:
+          $$\min(r_t \hat{A}_t, (1 - \epsilon)\hat{A}_t) = (1 - \epsilon)\hat{A}_t$$
+          Notice that $(1 - \epsilon)\hat{A}_t$ is a <strong>constant with respect to $\theta$</strong>! Its gradient $\nabla_\theta [(1 - \epsilon)\hat{A}_t] = \mathbf{0}$!</li>
+        </ul></p>
+
+        <p class="step"><strong>Conclusion on Assertion and Reason:</strong><br>
+        <ul>
+          <li><strong>Assertion (A) is TRUE:</strong> When $r_t &lt; 1 - \epsilon$, the objective becomes constant and the gradient drops to zero. This halts further reduction of the action's probability, preventing the policy from over-correcting and driving probabilities to absolute zero.</li>
+          <li><strong>Reason (R) is FALSE:</strong> Reason (R) claims that when $r_t &lt; 1 - \epsilon$, the $\min$ selects the unclipped term $r_t \hat{A}_t$. As shown above, because $(1 - \epsilon)\hat{A}_t$ is more negative, the $\min$ selects the <em>clipped</em> term $(1 - \epsilon)\hat{A}_t$, thereby zeroing out the gradient. Reason (R) has the inequality backwards!</li>
+        </ul>
+        Therefore, (A) is true, but (R) is false. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- SECTION 8: CODE LAB -->
+    <h3>8. Production Code Lab 2.10: Tabular Q-Learning from Scratch</h3>
+    <p>Below is a complete, educational implementation of tabular Q-Learning with $\epsilon$-greedy exploration, solving a grid-world navigation problem.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 2.10 — Q-Learning Agent from First Principles</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch210_reinforcement_learning/q_learning_scratch.py" target="_blank">🔗 View in GitHub: part2_classical_ml/ch210_reinforcement_learning/q_learning_scratch.py</a></p>
+<pre><code>import numpy as np
+from collections import defaultdict
+
+class GridWorld:
+    """Simple 4x4 Grid World MDP with goal and trap states."""
+    def __init__(self, size=4):
+        self.size = size
+        self.goal = (size - 1, size - 1)
+        self.traps = [(1, 1), (2, 3)]
+        self.state = (0, 0)
+
+    def reset(self):
+        self.state = (0, 0)
+        return self.state
+
+    def step(self, action):
+        """Actions: 0=Up, 1=Down, 2=Left, 3=Right"""
+        r, c = self.state
+        if action == 0: r = max(r - 1, 0)
+        elif action == 1: r = min(r + 1, self.size - 1)
+        elif action == 2: c = max(c - 1, 0)
+        elif action == 3: c = min(c + 1, self.size - 1)
+
+        self.state = (r, c)
+
+        if self.state == self.goal:
+            return self.state, +10.0, True    # Goal reward
+        elif self.state in self.traps:
+            return self.state, -5.0, True     # Trap penalty
+        else:
+            return self.state, -0.1, False    # Step cost
+
+class QLearningAgent:
+    def __init__(self, n_actions=4, alpha=0.1, gamma=0.95, epsilon=1.0):
+        self.q_table = defaultdict(lambda: np.zeros(n_actions))
+        self.alpha = alpha
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.n_actions = n_actions
+
+    def choose_action(self, state):
+        """Epsilon-greedy action selection"""
+        if np.random.random() < self.epsilon:
+            return np.random.randint(self.n_actions)
+        return int(np.argmax(self.q_table[state]))
+
+    def learn(self, state, action, reward, next_state, done):
+        """Q-Learning TD update: Q(s, a) <- Q(s, a) + alpha * [r + gamma * max Q(s', a') - Q(s, a)]"""
+        td_target = reward + (0.0 if done else self.gamma * np.max(self.q_table[next_state]))
+        td_error = td_target - self.q_table[state][action]
+        self.q_table[state][action] += self.alpha * td_error
+        return td_error
+
+if __name__ == "__main__":
+    env = GridWorld(size=4)
+    agent = QLearningAgent(n_actions=4, alpha=0.1, gamma=0.95, epsilon=1.0)
+
+    n_episodes = 2000
+    rewards_per_episode = []
+
+    for episode in range(n_episodes):
+        state = env.reset()
+        total_reward = 0
+
+        for step in range(100):
+            action = agent.choose_action(state)
+            next_state, reward, done = env.step(action)
+            agent.learn(state, action, reward, next_state, done)
+            state = next_state
+            total_reward += reward
+            if done:
+                break
+
+        rewards_per_episode.append(total_reward)
+        agent.epsilon = max(0.01, agent.epsilon * 0.998)
+
+    last_100 = rewards_per_episode[-100:]
+    print(f"Average Reward (last 100 episodes): {np.mean(last_100):.2f}")
+    print(f"Success Rate (last 100 episodes)  : {sum(1 for r in last_100 if r > 0) / 100:.0%}")
+    print(f"\nLearned Q-Values for start state (0,0):")
+    actions = ["Up", "Down", "Left", "Right"]
+    for i, a in enumerate(actions):
+        print(f"  {a:6s}: Q = {agent.q_table[(0,0)][i]:.4f}")</code></pre>
+    </div>
+
+    <!-- SECTION 9: END OF CHAPTER PROJECT -->
+    <div class="project-section">
+      <div class="project-header">
+        <span class="project-tag">Chapter 2.10 Dedicated Project &amp; Case Study</span>
+        <h3 class="project-title">Project 2.10: Deep Q-Network Atari Game Agent with Experience Replay</h3>
+        <p class="project-desc">Architect and train a complete DQN agent with convolutional state encoder, experience replay buffer, target network synchronization, and epsilon-greedy exploration to play Atari games (CartPole, LunarLander) from raw pixel observations in PyTorch.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch210_reinforcement_learning/q_learning_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch210_reinforcement_learning/q_learning_scratch.py</a></p>
+      </div>
+      <div class="project-body">
+        <p><strong>Case Study Architecture:</strong> In 2013, DeepMind demonstrated that a single DQN architecture could achieve superhuman performance on 49 different Atari 2600 games, learning directly from raw screen pixels with no game-specific engineering. In this project, you construct the complete DQN pipeline: preprocessing raw frames (grayscale, resize, frame stacking), building a 3-layer CNN state encoder, implementing a circular experience replay buffer with prioritized sampling, synchronized target network updates every 10,000 steps, and training to convergence on CartPole-v1 and LunarLander-v2. You visualize training curves (reward vs. episodes), Q-value distributions, and epsilon decay schedules.</p>
+      </div>
+    </div>
+  </div>
+</div>

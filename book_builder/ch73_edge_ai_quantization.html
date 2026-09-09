@@ -5,12 +5,21 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 7.3</span>
     <h2 class="chapter-title">Edge AI, Model Compression &amp; Quantization</h2>
-    <span class="chapter-subtitle">Quantization-Aware Training (QAT), Straight-Through Estimators, MobileNet &amp; ONNX</span>
+    <span class="chapter-subtitle">MobileNet Depthwise Convolutions, Uniform Affine INT8 Quantization, QAT, Straight-Through Estimators &amp; 2:4 Sparsity</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
     <p>"Anyone can run a 70-billion parameter model in an air-conditioned datacenter consuming 500 Watts of power. An AI engineer makes neural networks run on a 3-Watt smartphone battery without making the device hot to the touch."</p>
+
+    <!-- FIGURE 7.3.1: quantization_mapping_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="quantization_mapping_diagram.png" alt="Figure 7.3.1: quantization_mapping_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 7.3.1:</em> Uniform affine quantization mapping continuous 32-bit floating-point weights into 8-bit integer grids. Calculating the optimal scale $S$ and zero-point $Z$ preserves network dynamic range while slashing memory bandwidth and VRAM requirements by 75%.
+      </p>
+    </div>
+
     <p class="attribution">— Edge AI Maxim</p>
   </div>
 
@@ -22,15 +31,16 @@
     <p>Deploying AI models to edge devices (Apple iPhones, Android smartphones, DJI drones, Raspberry Pi microcontrollers, and VR headsets) requires engineering under severe physical constraints:</p>
     <ul>
       <li><strong>Thermal Envelopes:</strong> Edge devices have passive cooling with zero fans. Sustained compute exceeding <strong>$3$ to $5 \text{ Watts}$</strong> causes thermal throttling, rapidly draining batteries and degrading user experience.</li>
-      <li><strong>Memory Bandwidth &amp; Capacity:</strong> While cloud servers feature 80GB HBM3 memory running at 3.35 TB/s, smartphones share 4GB to 8GB of low-power LPDDR5 RAM across the operating system and camera pipeline.</li>
+      <li><strong>Memory Bandwidth &amp; Capacity:</strong> While cloud servers feature 80GB HBM3 memory running at 3.35 TB/s, smartphones share 4GB to 8GB of low-power LPDDR5 RAM ($50-100\text{ GB/s}$) across the operating system and camera pipeline.</li>
+      <li><strong>Dedicated Neural Accelerators:</strong> Modern edge SoCs deploy specialized NPUs (Apple Neural Engine ANE, Qualcomm Hexagon NPU, Google Tensor TPU) that deliver peak TOPS only when computations are mapped strictly to 8-bit or 16-bit integer SIMD tensors.</li>
     </ul>
 
     <!-- SECTION 2: DEPTHWISE SEPARABLE CONVOLUTIONS -->
     <h3>2. MobileNet: Depthwise Separable Convolutions (Howard et al., Google 2017)</h3>
     <p>Standard 2D convolutions perform spatial filtering and channel combination simultaneously in a single heavy operation. <strong>MobileNet</strong> factors this into two decoupled steps:</p>
     <ol>
-      <li><strong>Depthwise Convolution:</strong> Applies a single $K \times K$ convolutional filter per input channel independently (computes spatial features with zero inter-channel communication).</li>
-      <li><strong>Pointwise Convolution:</strong> Applies a $1 \times 1$ convolution across all channels, linearly combining features into $N$ output channels.</li>
+      <li><strong>Depthwise Convolution:</strong> Applies a single $D_K \times D_K$ convolutional filter per input channel independently (computes spatial features with zero inter-channel communication).</li>
+      <li><strong>Pointwise Convolution:</strong> Applies a $1 \times 1$ convolution across all channels, linearly combining spatial features into $N$ output channels.</li>
     </ol>
 
     <div class="real-world-box">
@@ -45,121 +55,635 @@
       <p>Compute the ratio of computation:</p>
       $$\text{Ratio} = \frac{D_K^2 \cdot M \cdot D_F^2 + M \cdot N \cdot D_F^2}{D_K^2 \cdot M \cdot N \cdot D_F^2} = \frac{D_K^2 \cdot M + M \cdot N}{D_K^2 \cdot M \cdot N} = \mathbf{\frac{1}{N} + \frac{1}{D_K^2}}$$
       <p>For standard $3 \times 3$ filters ($D_K = 3$) with $N = 512$ channels:</p>
-      $$\text{Ratio} = \frac{1}{512} + \frac{1}{9} \approx 0.0019 + 0.1111 \approx \mathbf{0.113} \implies \mathbf{88.7\% \text{ Reduction in FLOPs!}}$$
-      <p><em>Depthwise Separable Convolutions deliver a nearly $9\times$ reduction in computational operations and parameter count with virtually zero loss in visual accuracy!</em></p>
+      $$\text{Ratio} = \frac{1}{512} + \frac{1}{9} \approx 0.00195 + 0.11111 \approx \mathbf{0.113} \implies \mathbf{88.7\% \text{ Reduction in FLOPs!}}$$
+      <p><em>Depthwise Separable Convolutions deliver an $8.8\times$ reduction in computational operations and parameter count with virtually zero loss in visual accuracy!</em></p>
     </div>
 
-    <!-- SECTION 3: QUANTIZATION-AWARE TRAINING -->
-    <h3>3. Quantization-Aware Training (QAT) &amp; Straight-Through Estimators</h3>
-    <p>Converting a trained 32-bit floating point model to 8-bit integers via Post-Training Quantization (PTQ) frequently causes severe accuracy degradation on compact edge models. <strong>Quantization-Aware Training (QAT)</strong> solves this by simulating 8-bit fixed-point quantization noise directly during model training.</p>
-
-    <h4>Uniform Affine Quantization Formula</h4>
-    <p>Maps continuous real float $r \in [r_{\min}, r_{\max}]$ to an 8-bit unsigned integer $q \in [0, 255]$:</p>
-    $$q = \text{clamp}\left( \left\lfloor \frac{r}{S} \right\rceil + Z, 0, 255 \right)$$
+    <!-- SECTION 3: QUANTIZATION THEORY -->
+    <h3>3. Uniform Affine Quantization &amp; Integer GEMM</h3>
+    <p>Converting a 32-bit floating point tensor $r \in [r_{\min}, r_{\max}]$ to an 8-bit unsigned integer $q \in [0, 255]$ maps continuous values to discrete grid steps:</p>
+    $$q = \text{clamp}\left( \left\lfloor \frac{r}{S} \right\rceil + Z, \; 0, \; 255 \right)$$
     $$S = \frac{r_{\max} - r_{\min}}{255}, \quad Z = \text{round}\left( -\frac{r_{\min}}{S} \right)$$
-    <p>Where $S$ is the positive real Scale Factor and $Z$ is the integer Zero-Point.</p>
+    <p>where $S > 0$ is the real Scale Factor and $Z \in \mathbb{Z}$ is the integer Zero-Point that maps real zero to an exact integer representation.</p>
 
-    <div class="key-insight">
-      <p><strong>The Straight-Through Estimator (STE)</strong><br>
-      The rounding function $\lfloor \cdot \rceil$ is a step function: its derivative is zero everywhere, and undefined at half-integers ($\frac{d}{dx} \lfloor x \rceil = 0$). Standard backpropagation would result in exact zero gradients, freezing the network.</p>
-      <p>The <strong>Straight-Through Estimator (STE)</strong> bypasses this non-differentiable operator during backpropagation by treating the derivative of rounding as the identity:</p>
-      $$\frac{\partial \lfloor x \rceil}{\partial x} \approx 1, \quad \text{for } x \in [\text{clip}_{\min}, \text{clip}_{\max}]$$
-      <p><em>The forward pass experiences realistic 8-bit fixed-point rounding noise, while the backward pass propagates smooth FP32 gradients, allowing weights to adapt and preserve 99.8% of full accuracy!</em></p>
-    </div>
+    <h4>Integer Arithmetic in Matrix Multiplication (GEMM)</h4>
+    <p>When computing $Y = X W$, the dequantized approximation is:</p>
+    $$\hat{Y}_{i, k} = \sum_{j=1}^D S_X(q_{X, i, j} - Z_X) \cdot S_W(q_{W, j, k} - Z_W) = S_X S_W \sum_{j=1}^D (q_{X, i, j} - Z_X)(q_{W, j, k} - Z_W)$$
+    <p>Expanding the product:</p>
+    $$\hat{Y}_{i, k} = S_X S_W \left( \sum_{j=1}^D q_{X, i, j} q_{W, j, k} - Z_W \sum_{j=1}^D q_{X, i, j} - Z_X \sum_{j=1}^D q_{W, j, k} + D \cdot Z_X Z_W \right)$$
+    <p><em>The Hardware Miracle:</em> The core summation $\sum q_X q_W$ is computed using fast 8-bit integer dot products (ARM NEON <code>SDOT</code>, Intel VNNI <code>VPDPBUSD</code>, NVIDIA <code>DP4A</code>) with 32-bit accumulation. The weight sum $\sum q_W$ and offset $D \cdot Z_X Z_W$ are <strong>pre-computed offline</strong> once!</p>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Edge AI</h3>
+    <!-- SECTION 4: QAT AND STE -->
+    <h3>4. Quantization-Aware Training (QAT) &amp; Straight-Through Estimators</h3>
+    <p>Post-Training Quantization (PTQ) often degrades compact edge networks. <strong>Quantization-Aware Training (QAT)</strong> models quantization noise during backprop using <strong>Fake-Quantization</strong>:</p>
+    $$\hat{r} = S \cdot \left( \text{clamp}\left( \left\lfloor \frac{r}{S} \right\rceil + Z, \; q_{\min}, \; q_{\max} \right) - Z \right)$$
+    <p>Because the rounding function $\lfloor x \rceil$ has derivative zero almost everywhere, standard backpropagation fails. The <strong>Straight-Through Estimator (STE - Bengio et al., 2013)</strong> models the gradient as an identity pass-through within dynamic range bounds:</p>
+    $$\frac{\partial \hat{r}}{\partial r} = \begin{cases} 1 & \text{if } r_{\min} \le r \le r_{\max} \\ 0 & \text{otherwise} \end{cases}$$
 
+    <!-- ======================================================================
+         SECTION 5: 4-TIER GRADED PRACTICE SUITE
+         ====================================================================== -->
+    <h3>4-Tier Graded Practice Suite — Edge AI &amp; Quantization</h3>
+    <p>Eight rigorous problems spanning MobileNet FLOPs arithmetic, uniform affine quantization calibration, integer GEMM offset tracing, STE backward propagation traces, Knowledge Distillation temperature proofs, 2:4 structured sparsity derivations, per-channel quantization traps, and bottleneck quantization collapses.</p>
+
+    <!-- TIER 1: NUMERICAL DRILLS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+    <!-- Problem 7.3.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 7.3.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="difficulty difficulty-medium">Medium</span>
         <span class="company-tag company-apple">Apple</span>
-        <span class="company-tag company-qualcomm">Qualcomm</span>
+        <span class="company-tag company-google">Google</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> You are deploying an image classification model to the Apple Neural Engine (ANE) on an iPhone 16. The model must have a binary weight footprint under $25 \text{ MB}$ and execute inference in $<4 \text{ ms}$. Compare <strong>Structured Channel Pruning</strong> vs. <strong>Unstructured Weight Pruning</strong> for hardware acceleration on mobile Neural Processing Units (NPUs).</p>
+        <p><strong>QUESTION:</strong> A computer vision model on an Apple Neural Engine (ANE) processes an intermediate feature map of dimensions $H = 56$, $W = 56$, and $M = 128$ input channels. The layer produces $N = 256$ output channels using a $3 \times 3$ filter ($D_K = 3$) with stride 1 and padding 1 (preserving spatial dimensions $56 \times 56$).</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the parameter count and Multiply-Accumulate (MAC) operations for a standard 2D convolution layer.</li>
+          <li>Calculate the parameter count and MAC operations for a Depthwise Separable Convolution layer (Depthwise $3 \times 3$ + Pointwise $1 \times 1$).</li>
+          <li>Compute the exact percentage reduction in parameter count and computational operations.</li>
+          <li>Calculate the memory bandwidth traffic required to read model weights from LPDDR5 RAM during a single forward inference pass in FP16 (2 bytes/param) for standard vs separable convolution.</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Hardware Acceleration Audit</div>
+        <div class="solution-label">✓ Step-by-Step MobileNet Arithmetic Solution</div>
 
-        <p class="step"><strong>Step 1: Unstructured (Fine-Grained) Pruning:</strong><br>
-        Individually sets weights to zero if $|w_{i, j}| &lt; \tau$. While this achieves 80% weight sparsity, the zero entries are scattered randomly across the weight matrix.<br>
-        <strong>The Hardware Penalty:</strong> Mobile NPUs and SIMD vector engines execute matrix multiplications using dense, wide vector registers (e.g. 128-bit or 256-bit registers). Loading scattered non-zero elements requires complex indirect memory index addressing and branching logic, causing CPU/NPU pipeline stalls. On standard mobile hardware, <strong>unstructured sparsity results in ZERO speedup or even runs SLOWER than dense matrices!</strong></p>
+        <p class="step"><strong>Step 1: Standard Convolution Calculations:</strong><br>
+        Weights parameter count:
+        $$P_{\text{std}} = D_K \times D_K \times M \times N = 3 \times 3 \times 128 \times 256 = \mathbf{294,912\text{ parameters}}$$
+        Multiply-Accumulate (MAC) operations ($H \times W$ spatial output locations):
+        $$\text{MACs}_{\text{std}} = H \times W \times P_{\text{std}} = 56 \times 56 \times 294,912 = 3,136 \times 294,912 = \mathbf{924,844,032\text{ MACs} \approx 924.84\text{ MMACs}}$$</p>
 
-        <p class="step"><strong>Step 2: Structured (Coarse-Grained) Channel Pruning:</strong><br>
-        Removes entire convolutional filter channels or linear neuron columns based on $L_1$-norm importance.<br>
-        <strong>The Hardware Advantage:</strong> When a channel is removed, the weight matrix is physically resized into a smaller, contiguous dense matrix ($W \in \mathbb{R}^{C_{\text{new}} \times C_{\text{in}}}$). The mobile NPU executes standard contiguous dense GEMM instructions at maximum hardware clock speed, delivering a <strong>direct $2\times$ to $4\times$ real-world speedup with zero special hardware requirements!</strong></p>
+        <p class="step"><strong>Step 2: Depthwise Separable Convolution Calculations:</strong><br>
+        <strong>(a) Depthwise Convolution ($3 \times 3$ spatial filter per channel):</strong><br>
+        Parameters:
+        $$P_{\text{dw}} = D_K \times D_K \times M = 3 \times 3 \times 128 = 1,152\text{ parameters}$$
+        MACs:
+        $$\text{MACs}_{\text{dw}} = H \times W \times P_{\text{dw}} = 3,136 \times 1,152 = 3,612,672\text{ MACs} \approx 3.61\text{ MMACs}$$<br>
+        <strong>(b) Pointwise Convolution ($1 \times 1$ channel projection):</strong><br>
+        Parameters:
+        $$P_{\text{pw}} = 1 \times 1 \times M \times N = 128 \times 256 = 32,768\text{ parameters}$$
+        MACs:
+        $$\text{MACs}_{\text{pw}} = H \times W \times P_{\text{pw}} = 3,136 \times 32,768 = 102,760,448\text{ MACs} \approx 102.76\text{ MMACs}$$<br>
+        <strong>Total Depthwise Separable Metrics:</strong>
+        $$P_{\text{sep}} = P_{\text{dw}} + P_{\text{pw}} = 1,152 + 32,768 = \mathbf{33,920\text{ parameters}}$$
+        $$\text{MACs}_{\text{sep}} = \text{MACs}_{\text{dw}} + \text{MACs}_{\text{pw}} = 3,612,672 + 102,760,448 = \mathbf{106,373,120\text{ MACs} \approx 106.37\text{ MMACs}}$$</p>
+
+        <p class="step"><strong>Step 3: Percentage Reductions:</strong><br>
+        Theoretical ratio from formula $\frac{1}{N} + \frac{1}{D_K^2}$:
+        $$\text{Ratio} = \frac{1}{256} + \frac{1}{9} \approx 0.003906 + 0.111111 = 0.115017 \quad (11.50\%)$$
+        Direct parameter reduction:
+        $$\text{Param Reduction} = \left(1 - \frac{33,920}{294,912}\right) \times 100\% = (1 - 0.115017) \times 100\% = \mathbf{88.50\% \text{ Reduction}}$$
+        Direct compute reduction:
+        $$\text{Compute Reduction} = \left(1 - \frac{106,373,120}{924,844,032}\right) \times 100\% = \mathbf{88.50\% \text{ Reduction}}$$</p>
+
+        <p class="step"><strong>Step 4: LPDDR5 Memory Traffic:</strong><br>
+        In FP16 precision ($2\text{ bytes per parameter}$):
+        <ul>
+          <li>Standard Conv: $294,912 \times 2\text{ bytes} = 589,824\text{ bytes} = \mathbf{589.82\text{ KB}}$</li>
+          <li>Separable Conv: $33,920 \times 2\text{ bytes} = 67,840\text{ bytes} = \mathbf{67.84\text{ KB}}$</li>
+        </ul>
+        $$\text{Bandwidth Traffic Saved} = 589.82\text{ KB} - 67.84\text{ KB} = 521.98\text{ KB per forward pass (88.5\% saved!)}$$</p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 7.3: Depthwise Separable Convolutions &amp; Knowledge Distillation</h3>
-    <p>Below is a production-grade PyTorch implementation of a Depthwise Separable Convolution block and Hinton's Knowledge Distillation loss function.</p>
+    <!-- Problem 7.3.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-qualcomm">Qualcomm</span>
+        <span class="company-tag company-arm">ARM</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An activation tensor in an edge Vision Transformer exhibits dynamic range $r \in [-2.40, +6.20]$. You are calibrating an 8-bit unsigned uniform affine quantizer ($q \in [0, 255]$).</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the exact scale factor $S$ to 8 decimal places and the integer zero-point $Z$.</li>
+          <li>Quantize the following real floating-point values into 8-bit integers:
+            $$r_1 = -2.40, \quad r_2 = 0.00, \quad r_3 = +4.15$$
+          </li>
+          <li>Dequantize the resulting integer values back to real floating-point representations $\hat{r}_1, \hat{r}_2, \hat{r}_3$, and calculate the absolute quantization error $|r_i - \hat{r}_i|$ for each.</li>
+          <li>Explain why preserving an exact integer representation for real zero ($r = 0.0$) is mathematically mandatory in deep learning inference.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Affine Quantization Arithmetic</div>
 
-    <div class="code-lab">
-      <div class="code-lab-header">Code Lab 7.3 — Depthwise Separable Block &amp; Distillation Loss</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch73_edge_ai/mobilenet_block.py" target="_blank">🔗 View in GitHub: part7_system_design/ch73_edge_ai/mobilenet_block.py</a></p>
-<pre><code>import torch
-import torch.nn as nn
-import torch.nn.functional as F
+        <p class="step"><strong>Step 1: Scale Factor and Zero-Point Calculation:</strong><br>
+        The scale factor maps the continuous span to 255 discrete bins:
+        $$S = \frac{r_{\max} - r_{\min}}{q_{\max} - q_{\min}} = \frac{6.20 - (-2.40)}{255 - 0} = \frac{8.60}{255} \approx \mathbf{0.03372549}$$
+        The integer zero-point maps real $0.0$ to the discrete grid:
+        $$Z = \text{round}\left( -\frac{r_{\min}}{S} \right) = \text{round}\left( -\frac{-2.40}{0.03372549} \right) = \text{round}(71.1628) = \mathbf{71}$$</p>
 
-class DepthwiseSeparableConv(nn.Module):
-    """
-    MobileNet Depthwise Separable Convolution:
-    Depthwise (groups=in_ch) + Pointwise (1x1 Conv)
-    """
-    def __init__(self, in_channels, out_channels, stride=1):
-        super().__init__()
-        # 1. Depthwise Conv: groups=in_channels (1 filter per channel)
-        self.depthwise = nn.Conv2d(
-            in_channels, in_channels, kernel_size=3, stride=stride, padding=1, groups=in_channels, bias=False
-        )
-        self.bn1 = nn.BatchNorm2d(in_channels)
-        self.relu = nn.ReLU(inplace=True)
+        <p class="step"><strong>Step 2: Quantization of Values:</strong><br>
+        Quantization formula: $q = \text{clamp}\left( \text{round}(r / S) + Z, \; 0, \; 255 \right)$.<br><br>
+        <strong>For $r_1 = -2.40$:</strong>
+        $$q_1 = \text{round}\left( \frac{-2.40}{0.03372549} \right) + 71 = \text{round}(-71.1628) + 71 = -71 + 71 = \mathbf{0}$$
+        <strong>For $r_2 = 0.00$:</strong>
+        $$q_2 = \text{round}\left( \frac{0.00}{0.03372549} \right) + 71 = 0 + 71 = \mathbf{71}$$
+        <strong>For $r_3 = +4.15$:</strong>
+        $$q_3 = \text{round}\left( \frac{4.15}{0.03372549} \right) + 71 = \text{round}(123.052) + 71 = 123 + 71 = \mathbf{194}$$</p>
 
-        # 2. Pointwise Conv: 1x1 Conv across all channels
-        self.pointwise = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(out_channels)
+        <p class="step"><strong>Step 3: Dequantization and Quantization Error:</strong><br>
+        Dequantization formula: $\hat{r} = S \cdot (q - Z)$.<br><br>
+        <strong>For $q_1 = 0$:</strong>
+        $$\hat{r}_1 = 0.03372549 \times (0 - 71) = 0.03372549 \times (-71) \approx \mathbf{-2.39451}$$
+        $$\text{Error}_1 = |-2.40 - (-2.39451)| = \mathbf{0.00549}$$
+        <strong>For $q_2 = 71$:</strong>
+        $$\hat{r}_2 = 0.03372549 \times (71 - 71) = 0.03372549 \times 0 = \mathbf{0.00000}$$
+        $$\text{Error}_2 = |0.00 - 0.00000| = \mathbf{0.00000\text{ (Zero Error!)}}$$
+        <strong>For $q_3 = 194$:</strong>
+        $$\hat{r}_3 = 0.03372549 \times (194 - 71) = 0.03372549 \times 123 \approx \mathbf{4.14824}$$
+        $$\text{Error}_3 = |4.15 - 4.14824| = \mathbf{0.00176}$$</p>
 
-    def forward(self, x):
-        x = self.relu(self.bn1(self.depthwise(x)))
-        x = self.relu(self.bn2(self.pointwise(x)))
-        return x
-
-def knowledge_distillation_loss(student_logits, teacher_logits, labels, T=4.0, alpha=0.7):
-    """
-    Hinton Knowledge Distillation Loss:
-    L_total = (1 - alpha) * CrossEntropy + alpha * T^2 * KL_Divergence
-    """
-    # 1. Hard Cross-Entropy Loss with true ground truth
-    hard_loss = F.cross_entropy(student_logits, labels)
-
-    # 2. Soft KL Divergence Loss with softened teacher predictions
-    soft_student = F.log_softmax(student_logits / T, dim=-1)
-    soft_teacher = F.softmax(teacher_logits / T, dim=-1)
-    soft_loss = F.kl_div(soft_student, soft_teacher, reduction="batchmean") * (T ** 2)
-
-    return (1.0 - alpha) * hard_loss + alpha * soft_loss
-
-if __name__ == "__main__":
-    block = DepthwiseSeparableConv(in_channels=64, out_channels=128)
-    x = torch.randn(2, 64, 32, 32)
-    out = block(x)
-    print(f"Input Shape : {x.shape}")
-    print(f"Output Shape: {out.shape} (Channels expanded from 64 to 128!)")</code></pre>
+        <p class="step"><strong>Step 4: Architectural Importance of Exact Zero Representation:</strong><br>
+        In neural networks, zero values occur with high frequency due to:
+        <ul>
+          <li>ReLU activations: $\text{ReLU}(x) = \max(0, x)$ produces exact zeroes for 50%+ of neurons.</li>
+          <li>Zero-padding in convolutions: Boundaries of images are padded with exact zeroes.</li>
+        </ul>
+        If real $0.0$ did not map to an exact integer ($Z \notin \mathbb{Z}$), padding borders would map to non-zero values (e.g. $0.004$), corrupting spatial boundary convolutions, increasing energy consumption, and creating systemic activation drift!</p>
+      </div>
     </div>
 
-    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <!-- TIER 2: APPLIED ENGINEERING TRACES -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+    <!-- Problem 7.3.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-arm">ARM</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In high-performance mobile inference (ARM NEON / Apple Neural Engine), quantized matrix multiplication between an input activation vector $\mathbf{x} \in \mathbb{R}^4$ and a weight column $\mathbf{w} \in \mathbb{R}^4$ is evaluated using integer SIMD arithmetic.</p>
+        <p>The quantization parameters are:</p>
+        <ul>
+          <li>Activations (Asymmetric): $S_X = 0.05$, $Z_X = 120$. Quantized vector: $\mathbf{q}_X = [140, 110, 135, 120]$.</li>
+          <li>Weights (Symmetric): $S_W = 0.02$, $Z_W = 0$. Quantized vector: $\mathbf{q}_W = [25, -40, 15, -10]$.</li>
+        </ul>
+        <p>Construct an algorithmic trace table documenting the integer execution pipeline: (a) Direct SIMD dot-product accumulation $\sum q_X q_W$, (b) Offline pre-computed bias correction term, (c) 32-bit integer accumulation, (d) Re-scaling multiplier and bit-shift to produce output float $\hat{y}$, and (e) Verification against floating-point ground truth.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Algorithmic Integer GEMM Execution Trace</div>
+
+        <p class="step"><strong>Step 1: Mathematical Linearization of Terms:</strong><br>
+        The real value product is:
+        $$\hat{y} = S_X S_W \sum_{j=1}^4 (q_{X, j} - Z_X)(q_{W, j} - Z_W)$$
+        Since weights are symmetrically quantized ($Z_W = 0$), the formula simplifies:
+        $$\hat{y} = S_X S_W \left( \sum_{j=1}^4 q_{X, j} q_{W, j} - Z_X \sum_{j=1}^4 q_{W, j} \right)$$
+        Notice: $\sum q_{W, j}$ is completely independent of runtime activations and is <strong>pre-computed at model compilation time</strong>!</p>
+
+        <p class="step"><strong>Step 2: Algorithmic Step-by-Step Execution Trace:</strong></p>
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Phase</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Operation Description</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Hardware Subsystem</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Arithmetic Calculation</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Result Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1. Offline</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Weight Summation</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Model Compiler (AOT)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\sum q_W = 25 + (-40) + 15 + (-10)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$K_W = -10$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2. Offline</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Zero-Point Correction Offset</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Model Compiler (AOT)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-Z_X \times K_W = -120 \times (-10)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C_{\text{offset}} = +1,200$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3. Runtime</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Integer SIMD Dot Product</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">ARM NEON <code>SDOT</code> (4-way INT8)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(140 \times 25) + (110 \times -40) + (135 \times 15) + (120 \times -10)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$3500 - 4400 + 2025 - 1200 = \mathbf{-75}$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>4. Runtime</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Integer Accumulation</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">32-bit Integer ALU</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\text{Accumulator} = -75 + C_{\text{offset}} = -75 + 1,200$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{1,125}$ (INT32)</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>5. Runtime</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Re-scaling to Real Domain</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Fixed-Point Multiplier</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\hat{y} = S_X \times S_W \times 1,125 = (0.05 \times 0.02) \times 1,125 = 0.001 \times 1,125$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{+1.125\text{ (Output Float)}}$</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="step"><strong>Step 3: Verification against True Dequantized Dot Product:</strong><br>
+        Dequantize activation vector:
+        $$\mathbf{x} = S_X (\mathbf{q}_X - Z_X) = 0.05 \times [140-120, 110-120, 135-120, 120-120] = 0.05 \times [20, -10, 15, 0] = [1.0, -0.5, 0.75, 0.0]$$
+        Dequantize weight vector:
+        $$\mathbf{w} = S_W (\mathbf{q}_W - 0) = 0.02 \times [25, -40, 15, -10] = [0.50, -0.80, 0.30, -0.20]$$
+        Compute direct dot product:
+        $$\mathbf{x} \cdot \mathbf{w} = (1.0 \times 0.50) + (-0.5 \times -0.80) + (0.75 \times 0.30) + (0.0 \times -0.20) = 0.50 + 0.40 + 0.225 + 0.0 = \mathbf{+1.125}$$
+        <em>Exact match verified! The entire inner product ran using 8-bit integer SIMD with zero floating-point operations.</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 7.3.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Quantization-Aware Training (QAT), weight tensors undergo simulated fake-quantization during the forward pass, and gradients propagate during backward pass using the <strong>Straight-Through Estimator (STE)</strong>.</p>
+        <p>Consider a 5-element weight vector undergoing symmetric 2-bit quantization ($q \in \{-2, -1, 0, 1\}$) with clipping threshold $C = 1.0$ (scale $S = 1.0 / 2 = 0.5$):</p>
+        $$\mathbf{w} = [-1.8, \; -0.4, \; +0.2, \; +0.9, \; +1.6]$$
+        <p>The upstream loss gradient received during backward pass is:</p>
+        $$\mathbf{g}_{\text{upstream}} = \frac{\partial \mathcal{L}}{\partial \hat{\mathbf{w}}} = [+1.5, \; -2.0, \; +0.5, \; +3.0, \; -1.0]$$
+        <p>Construct an algorithmic trace table documenting: (a) Element index, (b) Initial weight $w_i$, (c) Clipped weight, (d) Discrete quantized grid point, (e) Fake-quantized output $\hat{w}_i$, (f) STE gradient filter mask $\mathbb{I}_{[-1, 1]}(w_i)$, and (g) Final passed gradient $\frac{\partial \mathcal{L}}{\partial w_i}$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Algorithmic STE Forward/Backward Propagation Trace</div>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">$i$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Weight ($w_i$)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Clipped $w_{\text{clip}}$ ($[-1, 1]$)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Quantized $q = \lfloor w / S \rceil$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Fake-Quant $\hat{w} = S \cdot q$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Upstream Gradient</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">STE Filter $\mathbb{I}_{[-1, 1]}$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Passed Gradient $\frac{\partial \mathcal{L}}{\partial w_i}$</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-1.8$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-1.0$ (Clipped)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\lfloor -1.0 / 0.5 \rceil = -2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.5 \times (-2) = -1.0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+1.5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0$ (Out of bounds)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{0.0}$ (Zeroed out!)</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-0.4$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-0.4$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\lfloor -0.4 / 0.5 \rceil = -1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.5 \times (-1) = -0.5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-2.0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1$ (Inside bounds)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{-2.0}$ (Passed through)</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\lfloor +0.2 / 0.5 \rceil = 0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.5 \times 0 = 0.0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1$ (Inside bounds)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{+0.5}$ (Passed through)</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>4</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.9$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.9$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\lfloor +0.9 / 0.5 \rceil = +2 \to +1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.5 \times 1 = +0.5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+3.0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1$ (Inside bounds)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{+3.0}$ (Passed through)</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>5</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+1.6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+1.0$ (Clipped)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\lfloor +1.0 / 0.5 \rceil = +2 \to +1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.5 \times 1 = +0.5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-1.0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0$ (Out of bounds)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{0.0}$ (Zeroed out!)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p><em>Conclusion: The Straight-Through Estimator allows interior weights to update smoothly while zeroing out gradients for weights outside the clipping envelope, preventing catastrophic gradient explosion!</em></p>
+      </div>
+    </div>
+
+    <!-- TIER 3: MATHEMATICAL PROOFS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 3: FAANG Tier-1 / Research Lab Mathematical Proofs</h4>
+
+    <!-- Problem 7.3.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.5</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-toronto">Univ. of Toronto</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Hinton's Knowledge Distillation (Hinton et al., 2015), a compact student model with logits $\mathbf{z}_S \in \mathbb{R}^C$ is trained to match the softened probability distribution of a large teacher model with logits $\mathbf{z}_T \in \mathbb{R}^C$.</p>
+        <p>The soft distillation cross-entropy loss with distillation temperature $T > 0$ is:</p>
+        $$\mathcal{L}_{\text{KD}} = -\sum_{i=1}^C q_i(T) \ln p_i(T)$$
+        <p>where $q_i(T) = \frac{\exp(z_{T, i} / T)}{\sum_k \exp(z_{T, k} / T)}$ and $p_i(T) = \frac{\exp(z_{S, i} / T)}{\sum_k \exp(z_{S, k} / T)}$.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Derive the gradient of $\mathcal{L}_{\text{KD}}$ with respect to student logit $z_{S, i}$.</li>
+          <li>Using the Taylor expansion of the exponential function $\exp(x) \approx 1 + x$ for large $T$ (where $z_i / T \to 0$), prove that in the high-temperature limit ($T \to \infty$):
+            $$\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z_{S, i}} \approx \frac{1}{C T^2} \left( (z_{S, i} - \bar{z}_S) - (z_{T, i} - \bar{z}_T) \right)$$
+            where $\bar{z}_S = \frac{1}{C}\sum_k z_{S, k}$ and $\bar{z}_T = \frac{1}{C}\sum_k z_{T, k}$.
+          </li>
+          <li>Prove that minimizing distillation loss at high temperature is mathematically equivalent to minimizing Mean Squared Error (MSE) between zero-meaned teacher and student logits, and explain why multiplying $\mathcal{L}_{\text{KD}}$ by $T^2$ is mathematically essential.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Proof of High-Temperature KD Equivalence to Logit MSE</div>
+
+        <p class="step"><strong>Step 1: Gradient with Respect to Student Logits:</strong><br>
+        Recall that for softmax probabilities with temperature $T$, the derivative $\frac{\partial p_j(T)}{\partial z_{S, i}}$ is:
+        $$\frac{\partial p_j(T)}{\partial z_{S, i}} = \frac{1}{T} p_i(T)(\delta_{i, j} - p_j(T))$$
+        Differentiating $\mathcal{L}_{\text{KD}}$:
+        $$\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z_{S, i}} = -\sum_{j=1}^C \frac{q_j(T)}{p_j(T)} \frac{\partial p_j(T)}{\partial z_{S, i}} = -\sum_{j=1}^C \frac{q_j(T)}{p_j(T)} \left[ \frac{1}{T} p_i(T)(\delta_{i, j} - p_j(T)) \right]$$
+        $$= -\frac{1}{T} \left( q_i(T) - p_i(T) \sum_{j=1}^C q_j(T) \right)$$
+        Since $\sum_{j=1}^C q_j(T) = 1$:
+        $$\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z_{S, i}} = \mathbf{\frac{1}{T} \big( p_i(T) - q_i(T) \big)}$$</p>
+
+        <p class="step"><strong>Step 2: Taylor Expansion in High-Temperature Limit ($T \to \infty$):</strong><br>
+        When $T \gg |z_k|$, the exponent $z_k / T$ is close to zero. We apply the first-order Taylor expansion $e^x \approx 1 + x$:
+        $$\exp\left(\frac{z_{S, i}}{T}\right) \approx 1 + \frac{z_{S, i}}{T}$$
+        Summing across all $C$ classes:
+        $$\sum_{k=1}^C \exp\left(\frac{z_{S, k}}{T}\right) \approx \sum_{k=1}^C \left(1 + \frac{z_{S, k}}{T}\right) = C + \frac{1}{T}\sum_{k=1}^C z_{S, k} = C \left( 1 + \frac{\bar{z}_S}{T} \right)$$
+        where $\bar{z}_S = \frac{1}{C}\sum z_{S, k}$.<br>
+        Now expand the student softmax probability:
+        $$p_i(T) = \frac{1 + \frac{z_{S, i}}{T}}{C\left(1 + \frac{\bar{z}_S}{T}\right)} \approx \frac{1}{C} \left(1 + \frac{z_{S, i}}{T}\right)\left(1 - \frac{\bar{z}_S}{T}\right) \approx \frac{1}{C}\left(1 + \frac{z_{S, i} - \bar{z}_S}{T}\right)$$
+        Applying the exact same Taylor expansion to the teacher probabilities:
+        $$q_i(T) \approx \frac{1}{C}\left(1 + \frac{z_{T, i} - \bar{z}_T}{T}\right)$$
+        Subtracting the two probabilities:
+        $$p_i(T) - q_i(T) \approx \frac{1}{C} \left(1 + \frac{z_{S, i} - \bar{z}_S}{T} - 1 - \frac{z_{T, i} - \bar{z}_T}{T}\right) = \frac{1}{C T} \left( (z_{S, i} - \bar{z}_S) - (z_{T, i} - \bar{z}_T) \right)$$
+        Substituting back into the gradient from Step 1:
+        $$\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z_{S, i}} = \frac{1}{T} \big( p_i(T) - q_i(T) \big) \approx \mathbf{\frac{1}{C T^2} \Big( (z_{S, i} - \bar{z}_S) - (z_{T, i} - \bar{z}_T) \Big)} \quad \text{Q.E.D.}$$</p>
+
+        <p class="step"><strong>Step 3: Equivalence to Logit MSE &amp; Necessity of $T^2$:</strong><br>
+        Consider the Mean Squared Error loss between zero-meaned logits:
+        $$\mathcal{L}_{\text{MSE}} = \frac{1}{2 C} \sum_{i=1}^C \left( (z_{S, i} - \bar{z}_S) - (z_{T, i} - \bar{z}_T) \right)^2$$
+        The gradient is:
+        $$\frac{\partial \mathcal{L}_{\text{MSE}}}{\partial z_{S, i}} = \frac{1}{C} \left( (z_{S, i} - \bar{z}_S) - (z_{T, i} - \bar{z}_T) \right)$$
+        Comparing with our derivation in Step 2:
+        $$\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z_{S, i}} \approx \frac{1}{T^2} \frac{\partial \mathcal{L}_{\text{MSE}}}{\partial z_{S, i}}$$
+        <strong>Why the $T^2$ multiplier is essential:</strong><br>
+        Notice that the gradient of $\mathcal{L}_{\text{KD}}$ scales as $1/T^2$! If $T = 5$, the gradient magnitude is suppressed by $25\times$. If $T = 10$, gradients are suppressed by $100\times$!<br>
+        To prevent the distillation loss from being drowned out by the hard ground-truth label cross-entropy loss $\mathcal{L}_{\text{CE}}$, Hinton multiplies $\mathcal{L}_{\text{KD}}$ by $T^2$:
+        $$\mathcal{L}_{\text{total}} = (1 - \alpha)\mathcal{L}_{\text{CE}} + \alpha \mathbf{T^2} \mathcal{L}_{\text{KD}}$$
+        <em>This cancels the $1/T^2$ suppression, ensuring stable, balanced gradient updates regardless of temperature!</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 7.3.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.6</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-nvidia">NVIDIA</span>
+        <span class="company-tag company-stanford">Stanford</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> NVIDIA Ampere, Ada Lovelace, and Hopper architectures feature hardware acceleration for <strong>2:4 Structured Sparsity</strong>: in every contiguous block of 4 weight values, at least 2 must be zero.</p>
+        <p>Let $\mathbf{w} = [w_1, w_2, w_3, w_4] \in \mathbb{R}^4$ be an arbitrary block of 4 weights. We seek the sparse projection $\hat{\mathbf{w}} \in \mathbb{R}^4$ that minimizes the Euclidean approximation error:</p>
+        $$\min_{\hat{\mathbf{w}}} \|\mathbf{w} - \hat{\mathbf{w}}\|_2^2 \quad \text{subject to } \|\hat{\mathbf{w}}\|_0 \le 2$$
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Prove that the optimal projection $\hat{\mathbf{w}}^*$ is obtained by sorting the absolute values $|w_{(1)}| \le |w_{(2)}| \le |w_{(3)}| \le |w_{(4)}|$ and zeroing out the two smallest magnitudes:
+            $$\hat{w}_i^* = \begin{cases} w_i & \text{if } |w_i| \in \{|w_{(3)}|, |w_{(4)}|\} \\ 0 & \text{otherwise} \end{cases}$$
+          </li>
+          <li>For weight block $\mathbf{w} = [0.45, \; -0.82, \; 0.12, \; -0.95]$, compute the optimal sparse vector $\hat{\mathbf{w}}^*$ and calculate the exact squared approximation error $\|\mathbf{w} - \hat{\mathbf{w}}^*\|_2^2$.</li>
+          <li>Explain the microarchitectural mechanism by which 2:4 structured sparsity delivers an exact $2\times$ throughput speedup on NVIDIA Tensor Cores without incurring sparse matrix indexing overhead.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Derivation of Optimal 2:4 Structured Sparsity</div>
+
+        <p class="step"><strong>Step 1: Proof of Optimal Projection via Component Analysis:</strong><br>
+        Let $\hat{\mathbf{w}}$ have at most 2 non-zero elements. Let index set $\mathcal{I} \subset \{1, 2, 3, 4\}$ with $|\mathcal{I}| = 2$ denote the indices of the zeroed elements ($\hat{w}_j = 0$ for $j \in \mathcal{I}$).<br>
+        For elements not zeroed ($k \notin \mathcal{I}$), setting $\hat{w}_k = w_k$ trivially minimizes $(w_k - \hat{w}_k)^2 = 0$.<br>
+        Therefore, the squared error is:
+        $$\|\mathbf{w} - \hat{\mathbf{w}}\|_2^2 = \sum_{j \in \mathcal{I}} (w_j - 0)^2 + \sum_{k \notin \mathcal{I}} (w_k - w_k)^2 = \sum_{j \in \mathcal{I}} w_j^2 = \sum_{j \in \mathcal{I}} |w_j|^2$$
+        To minimize the squared error, we must choose the 2-element index set $\mathcal{I}$ that minimizes $\sum_{j \in \mathcal{I}} |w_j|^2$.<br>
+        Because the objective is a separable sum of non-negative terms $|w_j|^2$, the global minimum is uniquely achieved by selecting the indices corresponding to the two smallest magnitudes in $\mathbf{w}$:
+        $$\mathcal{I}^* = \arg\min_{|\mathcal{I}|=2} \sum_{j \in \mathcal{I}} |w_j|^2 = \big\{ \text{indices of } |w_{(1)}| \text{ and } |w_{(2)}| \big\} \quad \text{Q.E.D.}$$</p>
+
+        <p class="step"><strong>Step 2: Numerical Projection Computation:</strong><br>
+        Given $\mathbf{w} = [0.45, \; -0.82, \; 0.12, \; -0.95]$:<br>
+        Compute absolute magnitudes:
+        $$|w_1| = 0.45, \quad |w_2| = 0.82, \quad |w_3| = 0.12, \quad |w_4| = 0.95$$
+        Sorting magnitudes in ascending order:
+        $$|w_{(1)}| = 0.12\ (w_3), \quad |w_{(2)}| = 0.45\ (w_1), \quad |w_{(3)}| = 0.82\ (w_2), \quad |w_{(4)}| = 0.95\ (w_4)$$
+        Zero out the two smallest elements ($w_1$ and $w_3$):
+        $$\hat{\mathbf{w}}^* = [\mathbf{0.0}, \; \mathbf{-0.82}, \; \mathbf{0.0}, \; \mathbf{-0.95}]$$
+        Squared approximation error:
+        $$\|\mathbf{w} - \hat{\mathbf{w}}^*\|_2^2 = |w_1|^2 + |w_3|^2 = (0.45)^2 + (0.12)^2 = 0.2025 + 0.0144 = \mathbf{0.2169}$$</p>
+
+        <p class="step"><strong>Step 3: Hardware Acceleration Mechanism:</strong><br>
+        In general unstructured sparsity, skipping zero multiplications requires pointer-based sparse formats (CSR / CSC) with high memory indirection overhead that destroys GPU SIMD parallelism.<br>
+        <strong>NVIDIA 2:4 Sparse Tensor Cores:</strong>
+        <ol>
+          <li>The model weights are compressed by $50\%$ in VRAM: each 4-element block stores only the 2 non-zero FP16 values ($2 \times 2\text{ bytes} = 4\text{ bytes}$) plus a 4-bit metadata index (2 bits per non-zero value, specifying original indices $0, 1, 2,$ or $3$).</li>
+          <li>At execution time, the Sparse Matrix Multiply unit uses the 4-bit index to multiplex and fetch the exact 2 matching activations from the dense input vector.</li>
+          <li>A modified MAC tree evaluates the two multiplications in parallel on half-sized hardware, <strong>doubling math throughput ($2\times$ TFLOPS) while cutting memory bandwidth traffic in half</strong>!</li>
+        </ol></p>
+      </div>
+    </div>
+
+    <!-- TIER 4: CONCEPTUAL TRAPS & ASSERTION-REASONING -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+    <!-- Problem 7.3.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.7</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-qualcomm">Qualcomm</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An engineer quantizes a convolutional neural network from FP32 to INT8 using symmetric quantization. For a depthwise convolution layer with 128 channels, the engineer evaluates two calibration strategies:</p>
+        <ul>
+          <li><strong>Strategy 1 (Per-Tensor Quantization):</strong> A single global scale factor $S = \frac{\max_{c, i, j} |w_{c, i, j}|}{127}$ is shared across all 128 channels.</li>
+          <li><strong>Strategy 2 (Per-Channel Quantization):</strong> Each of the 128 channels receives its own private scale factor $S_c = \frac{\max_{i, j} |w_{c, i, j}|}{127}$.</li>
+        </ul>
+        <p>In this layer, Channel 4 has extreme outlier weights reaching $\pm 8.5$, while all other 127 channels have weights strictly bounded within $\pm 0.3$. Which of the following correctly characterizes the outcome of Strategy 1 versus Strategy 2?</p>
+        <ol type="A">
+          <li>Strategy 1 achieves identical accuracy to Strategy 2 because batch normalization re-scales all channels prior to quantization.</li>
+          <li>In Strategy 1, the single outlier channel forces the global scale factor to $S = 8.5 / 127 \approx 0.067$. For the other 127 channels where weights are bounded by $\pm 0.3$, all weights are quantized to $\lfloor 0.3 / 0.067 \rceil \le 4$ discrete bins out of 255, destroying precision and zeroing out subtle features. Strategy 2 isolates Channel 4's scale ($S_4 = 0.067$) while preserving fine-grained scales ($S_c \approx 0.0024$) across the other 127 channels, maintaining full dynamic resolution.</li>
+          <li>Strategy 2 is physically impossible on ARM and mobile NPUs because SIMD registers cannot execute multiple scale factors simultaneously.</li>
+          <li>Strategy 1 causes integer overflow in the ALU accumulator because $8.5 \times 127 > 255$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: B (Exhaustive Distractor Analysis)</div>
+
+        <p class="step"><strong>Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Option A is False:</strong> While batch normalization is folded into weights during compilation, folded weights still exhibit significant inter-channel variance.</li>
+          <li><strong>Option B is Correct:</strong>
+            <ul>
+              <li>In Per-Tensor Quantization, the global grid step is dictated by the maximum absolute element across the entire tensor:
+                $$S = \frac{8.5}{127} \approx 0.0669$$
+              </li>
+              <li>For the other 127 channels with weights in $[-0.3, +0.3]$:
+                $$\text{Max quantized integer} = \text{round}\left( \frac{0.3}{0.0669} \right) = \mathbf{4}$$
+              </li>
+              <li>Instead of using the full 255 integer range $[-127, +127]$, 99% of the layer's weights are squashed into only 9 discrete values $\{-4, -3, -2, -1, 0, 1, 2, 3, 4\}$. This massive loss of precision completely destroys visual feature filters!</li>
+              <li><strong>Per-Channel Quantization</strong> assigns 128 independent scale factors: Channel 4 uses $S_4 = 0.0669$, while normal channels use $S_c = 0.3 / 127 \approx 0.00236$, using all 255 integer levels across all channels.</li>
+            </ul>
+          </li>
+          <li><strong>Option C is False:</strong> Per-channel *weight* quantization is natively supported by virtually all modern hardware (TFLite, ONNX Runtime, TensorRT, CoreML, Qualcomm QNN). Because each output channel corresponds to a separate row of the GEMM, the per-channel scale factor is simply multiplied into the final scalar accumulator after the integer dot product completes!</li>
+          <li><strong>Option D is False:</strong> Integer accumulation occurs in 32-bit registers, which can hold values up to $\pm 2.14 \times 10^9$.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Problem 7.3.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-apple">Apple</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>ASSERTION-REASONING:</strong></p>
+        <p><strong>Assertion (A):</strong> When deploying MobileNetV2 to edge microcontrollers, applying naive Post-Training Quantization (PTQ) causes severe, non-recoverable accuracy collapse on the narrow <strong>Linear Bottleneck Layers</strong> unless Quantization-Aware Training (QAT) with learnable clipping bounds (PACT) is utilized.</p>
+        <p><strong>Reason (R):</strong> MobileNetV2's linear bottlenecks deliberately omit non-linear ReLU activations to prevent manifold information destruction in low-dimensional space ($D = 16$ or $24$); consequently, bottleneck activations exhibit unbounded, heavy-tailed distributions with high dynamic range, making standard min-max PTQ calibration squash the majority of feature signals into a handful of quantization bins.</p>
+        <p><strong>Options:</strong></p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A (Comprehensive Linear Bottleneck Analysis)</div>
+
+        <p class="step"><strong>Deep Architectural Analysis:</strong></p>
+        <p><strong>Evaluation of Assertion (A): True.</strong><br>
+        MobileNetV2 is notoriously difficult to quantize using standard PTQ. On ImageNet, naive INT8 PTQ drops top-1 accuracy from 72.0% down to under 50% (or even single digits). In contrast, QAT recovers full 71.8% accuracy.</p>
+
+        <p class="step"><strong>Evaluation of Reason (R): True &amp; Explanatory.</strong><br>
+        In MobileNetV2 (Sandler et al., Google 2018):
+        <ul>
+          <li>The inverted residual block expands channels by $6\times$ ($16 \to 96$), applies Depthwise Conv with ReLU6, and then projects back down to a narrow bottleneck ($96 \to 16$) using a linear projection layer with <strong>NO non-linearity</strong>.</li>
+          <li>The authors proved that applying non-linearities (like ReLU) in low-dimensional manifolds destroys information by zeroing out negative coordinates.</li>
+          <li>However, because there is no ReLU or ReLU6 capping the bottleneck activations, the distribution is unbounded and contains extreme positive and negative outliers.</li>
+          <li>Standard PTQ calibrators (like Min-Max or Percentile) observe these rare outliers and set a wide dynamic range $[r_{\min}, r_{\max}]$. This makes the scale factor $S = (r_{\max} - r_{\min}) / 255$ very large, squashing the dense cluster of core activations near zero into only 2 or 3 quantization levels!</li>
+          <li><strong>QAT with PACT (Parameterized Activation Clipping):</strong> Adds a learnable clipping parameter $\alpha$ trained via backpropagation. PACT finds the mathematically optimal trade-off between clipping outliers and preserving resolution in the central distribution, allowing MobileNetV2 to run in INT8 with zero accuracy degradation!</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- SECTION 6: PRODUCTION CODE LAB -->
+    <h3>5. Production Code Lab 7.3: Quantization-Aware Training (QAT) with STE in PyTorch</h3>
+    <p>Below is a clean, industrial PyTorch implementation of a custom Fake-Quantization module implementing the Straight-Through Estimator (STE) for uniform affine quantization.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 7.3 — Quantization-Aware Training with Custom STE Autograd Function</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch73_edge_ai/qat_ste.py" target="_blank">🔗 View in GitHub: part7_system_design/ch73_edge_ai/qat_ste.py</a></p>
+<pre><code>import torch
+import torch.nn as nn
+
+class StraightThroughEstimator(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, r: torch.Tensor, scale: torch.Tensor, zero_point: torch.Tensor, qmin: int = 0, qmax: int = 255):
+        ctx.save_for_backward(r, scale, zero_point)
+        ctx.qmin = qmin
+        ctx.qmax = qmax
+
+        # 1. Quantize: q = clamp(round(r / S) + Z)
+        q = torch.clamp(torch.round(r / scale) + zero_point, qmin, qmax)
+        # 2. Dequantize: r_hat = S * (q - Z)
+        r_hat = scale * (q - zero_point)
+        return r_hat
+
+    @staticmethod
+    def backward(ctx, grad_output: torch.Tensor):
+        r, scale, zero_point = ctx.saved_tensors
+        qmin, qmax = ctx.qmin, ctx.qmax
+
+        # Straight-Through Estimator: Pass gradient strictly inside [r_min, r_max]
+        r_min = scale * (qmin - zero_point)
+        r_max = scale * (qmax - zero_point)
+        mask = (r >= r_min) & (r <= r_max)
+
+        grad_r = grad_output * mask.float()
+        return grad_r, None, None, None, None
+
+class FakeQuantizeAffine(nn.Module):
+    def __init__(self, num_bits: int = 8):
+        super().__init__()
+        self.qmin = 0
+        self.qmax = 2**num_bits - 1
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.training:
+            # Dynamically compute scale and zero-point
+            r_min = x.detach().min()
+            r_max = x.detach().max()
+            scale = (r_max - r_min) / (self.qmax - self.qmin)
+            scale = torch.clamp(scale, min=1e-8)
+            zero_point = torch.round(-r_min / scale)
+            zero_point = torch.clamp(zero_point, self.qmin, self.qmax)
+            return StraightThroughEstimator.apply(x, scale, zero_point, self.qmin, self.qmax)
+        else:
+            return x
+
+if __name__ == "__main__":
+    torch.manual_seed(42)
+    fake_quant = FakeQuantizeAffine(num_bits=8)
+    
+    # Input tensor with gradient tracking
+    x = torch.tensor([-2.5, -0.8, 0.0, 1.5, 4.2], requires_grad=True)
+    out = fake_quant(x)
+    loss = out.sum()
+    loss.backward()
+
+    print(f"Original Tensor      : {x.data}")
+    print(f"Fake-Quantized Output: {out.data}")
+    print(f"STE Gradients Passed : {x.grad}")</code></pre>
+    </div>
+
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 7.3 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 7.3: Sub-50MB Edge Visual Perception &amp; Classification Engine</h3>
-        <p class="project-desc">Architect, compress, and deploy an ultra-lightweight edge visual classification engine, applying Depthwise Separable Convolutions, Quantization-Aware Training (QAT) to INT8, Knowledge Distillation from a heavy ResNet-101 teacher, and exporting to ONNX Runtime for sub-5ms mobile execution.</p>
-        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch73_edge_ai/mobilenet_block.py" target="_blank">🔗 Full Project Code: part7_system_design/ch73_edge_ai/mobilenet_block.py</a></p>
+        <h3 class="project-title">Project 7.3: Mobile Edge Vision Classifier with QAT, ONNX &amp; CoreML Export</h3>
+        <p class="project-desc">Architect, train, and deploy an ultra-compact MobileNetV3 image classification model, performing Quantization-Aware Training with Straight-Through Estimators, folding batch normalization layers, and benchmarking INT8 execution on mobile NPUs with sub-5ms latency.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch73_edge_ai/qat_ste.py" target="_blank">🔗 Full Project Code: part7_system_design/ch73_edge_ai/qat_ste.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In autonomous aerial robotics (Skydio, military UAVs), onboard obstacle avoidance models must process 4K stereo camera streams on low-power NVIDIA Jetson Nano or Qualcomm Snapdragon chips. In this project, you construct a quantized visual perception pipeline that fits in under 25MB of RAM, consumes less than 3 Watts of power, and achieves 60 FPS real-time execution with zero cloud dependency.</p>
+        <p><strong>Case Study Architecture:</strong> In autonomous aerial robotics (DJI drones), onboard microcontrollers must run real-time obstacle avoidance models at 60 FPS under a strict 4-Watt power budget. In this project, you build an automated edge compression pipeline that trains a MobileNet backbone with 2:4 structured sparsity and 8-bit QAT, converts the graph to ONNX/TensorRT, and profiles latency, thermal dissipation, and memory bandwidth consumption.</p>
       </div>
     </div>
   </div>

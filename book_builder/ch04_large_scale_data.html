@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="data_lakehouse_medallion.png" alt="Figure 0.4.1: data lakehouse medallion">
+        <div class="diagram-caption"><strong>Figure 0.4.1:</strong> The Medallion Lakehouse Architecture for Enterprise AI Pipelines. Raw telemetry streams and batch dumps enter the Bronze tier in append-only mode, pass through deduplication, validation, and schema enforcement into the Silver Parquet tier, and are aggregated into the Gold tier for feature stores, vector embeddings, and training-ready dataset splits.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 0.4 — LARGE-SCALE DATA SYSTEMS FOR AI
      ====================================================================== -->
@@ -57,38 +63,183 @@
       <li><strong>The Plasma Object Store:</strong> An immutable, shared-memory object store on every node enabling zero-copy data reads across worker processes.</li>
     </ul>
 
-    <!-- SECTION 5: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Large-Scale Data Systems</h3>
+    <!-- SECTION 5: THE 4-TIER GRADED PRACTICE SUITE -->
+    <div class="practice-set">
+      <h3>The 4-Tier Graded Practice Suite — Chapter 0.4</h3>
+      <p class="section-intro">Master large-scale data ingestion, columnar compression calculations, predicate pushdown mechanics, and distributed Ray compute architecture through graded problems.</p>
 
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 0.4.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
-        <span class="company-tag company-netflix">Netflix</span>
-        <span class="company-tag company-amazon">Amazon</span>
+      <!-- ==================== TIER 1: FORMULA DRILLS ==================== -->
+      <h4>Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 0.4.1</span>
+          <span class="difficulty difficulty-easy">Level 1: Formula Drill</span>
+          <span class="company-tag company-amazon">Amazon</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> A tabular training dataset contains $10,000,000$ (10 million) rows. One column represents user country code (e.g. <code>"US"</code>, <code>"IN"</code>, <code>"DE"</code>), with exactly 16 unique country strings. Each string occupies an average of 3 bytes of ASCII text.
+          <ol>
+            <li>Calculate the uncompressed storage memory required to store this column as raw strings.</li>
+            <li>Calculate the storage memory required if the column is Dictionary-Encoded using a 1-byte unsigned integer (<code>uint8</code>) dictionary code per row plus the dictionary lookup table.</li>
+            <li>Compute the exact compression ratio and percentage bandwidth saved.</li>
+          </ol></p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Solution</div>
+          <p class="step"><strong>Step 1: Uncompressed Storage:</strong><br>
+          For $N = 10^7$ rows at 3 bytes per string:
+          $$\text{Uncompressed Size} = 10^7 \times 3 \text{ bytes} = 30,000,000 \text{ bytes} \approx \mathbf{28.61 \text{ MB}}$$</p>
+
+          <p class="step"><strong>Step 2: Dictionary-Encoded Storage:</strong><br>
+          With 16 unique values, each entry can be represented by an index in $[0, 15]$, fitting easily in a 1-byte <code>uint8</code> ($0 \text{ to } 255$):<br>
+          - Dictionary Table: 16 strings $\times$ 3 bytes = 48 bytes.<br>
+          - Encoded Array: $10^7 \times 1 \text{ byte} = 10,000,000 \text{ bytes}$.<br>
+          $$\text{Total Encoded Size} = 10,000,048 \text{ bytes} \approx \mathbf{9.54 \text{ MB}}$$</p>
+
+          <p class="step"><strong>Step 3: Compression Ratio &amp; Bandwidth Saved:</strong><br>
+          $$\text{Compression Ratio} = \frac{30,000,000}{10,000,048} \approx \mathbf{3.0\times}$$
+          $$\text{Bandwidth Saved} = \frac{30 \text{ MB} - 10 \text{ MB}}{30 \text{ MB}} = \mathbf{66.67\% \text{ reduction}}$$</p>
+        </div>
       </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> You are architecting the training data pipeline for a video recommendation model training on 50 Terabytes of user watch history stored as Parquet files on Amazon S3.</p>
-        <ol>
-          <li>Explain the "Small Files Problem" in distributed storage and how it degrades cloud training throughput.</li>
-          <li>Define the optimal Parquet Row Group size and file size for saturating S3 network throughput while preventing GPU starvation.</li>
-          <li>Explain how <strong>Predicate Pushdown</strong> utilizes Parquet file footer metadata to skip 90% of file reads without downloading the underlying column data.</li>
-        </ol>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 0.4.2</span>
+          <span class="difficulty difficulty-easy">Level 1: Formula Drill</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> A 100GB Parquet dataset on disk is split into 200 Row Groups (500MB each). Each Row Group's footer metadata records the min and max timestamp for that chunk. You run a training query filtering for timestamps in the range $[T_1, T_2]$. The query engine inspects the footer metadata and finds that only 8 Row Groups have timestamp ranges overlapping with $[T_1, T_2]$.
+          How many gigabytes of data does the storage engine skip reading from disk?</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Solution</div>
+          <p class="step"><strong>Step 1: Compute Total and Active Row Groups:</strong><br>
+          Total Row Groups = $200$.<br>
+          Active Row Groups overlapping $[T_1, T_2]$ = $8$.<br>
+          Skipped Row Groups = $200 - 8 = 192$ Row Groups.</p>
+
+          <p class="step"><strong>Step 2: Calculate Skipped Data Volume:</strong><br>
+          $$\text{Skipped Volume} = 192 \text{ Row Groups} \times 500 \text{ MB} = 96,000 \text{ MB} = \mathbf{96.0 \text{ GB}}$$
+          $$\text{Percentage Skipped} = \frac{96 \text{ GB}}{100 \text{ GB}} = \mathbf{96\% \text{ of I/O eliminated!}}$$
+          The engine reads only 4GB of data instead of scanning 100GB.</p>
+        </div>
       </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
 
-        <p class="step"><strong>Step 1: The Small Files Problem:</strong><br>
-        If 50TB of data is partitioned into millions of tiny 1MB files, every single file read requires an HTTPS request to S3 (introducing 20–50ms of TLS handshake, authentication, and HTTP header overhead). The GPU training cluster spends 80% of its time waiting on HTTP metadata overhead rather than receiving data chunks. Furthermore, object stores enforce per-prefix request rate limits (e.g., S3 limits 3,500 PUT and 5,500 GET requests per second per prefix), leading to <code>HTTP 503 Slow Down</code> throttling.</p>
+      <!-- ==================== TIER 2: APPLIED TRACES ==================== -->
+      <h4>Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
 
-        <p class="step"><strong>Step 2: Optimal File &amp; Row Group Sizing:</strong><br>
-        The industry standard rule is to compact datasets into individual Parquet files between <strong>128MB and 512MB</strong>. Inside each Parquet file, data is divided into <strong>Row Groups</strong> of approximately <strong>64MB to 128MB</strong> (typically 1,000,000 to 2,000,000 rows). This size perfectly balances column compression ratios, aligns with distributed filesystem block sizes, and fits comfortably within CPU L3 cache during decompression.</p>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 0.4.3</span>
+          <span class="difficulty difficulty-medium">Level 2: Execution Trace</span>
+          <span class="company-tag company-uber">Uber</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Trace the physical memory operations and CPU overhead of passing a 2GB tabular dataset between two Python processes using:
+          <ol>
+            <li>Standard Python <code>pickle</code> over an IPC Unix socket.</li>
+            <li>Apache Arrow over POSIX shared memory (<code>/dev/shm</code>).</li>
+          </ol></p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Solution</div>
+          <p class="step"><strong>Step 1: Trace Standard Pickle over IPC Socket:</strong><br>
+          1. <strong>Serialization:</strong> Process 1 traverses Python objects in RAM, inspecting types and packing fields into a serialized byte stream. Costs extensive CPU cycles and allocates a temporary 2GB serialized buffer in Process 1 RAM (total RAM = 4GB).<br>
+          2. <strong>Kernel Copy:</strong> The bytes are written to an IPC socket, causing an OS kernel context switch and copying 2GB into the kernel buffer.<br>
+          3. <strong>Socket Read:</strong> Process 2 reads from the socket, copying 2GB into Process 2's temporary read buffer.<br>
+          4. <strong>Deserialization:</strong> Process 2 parses the byte stream, allocating millions of individual <code>PyObject</code> instances on its heap.<br>
+          <strong>Total Memory Allocated:</strong> $\approx 8\text{ GB}$. Total latency: 4–8 seconds.</p>
 
-        <p class="step"><strong>Step 3: Predicate Pushdown Mechanics:</strong><br>
-        In Parquet, the file footer contains compact metadata recording the <strong>exact minimum and maximum values for every column within every Row Group</strong>:
-        $$\text{Metadata for Row Group } i: \quad \min(x) = 15, \quad \max(x) = 45$$
-        If a training query requires <code>WHERE age &gt; 50</code>, the query engine reads only the tiny file footer (a few kilobytes). It observes that $\max(\text{age}) = 45 &lt; 50$, concludes that zero rows in Row Group $i$ can satisfy the condition, and <strong>completely skips downloading or reading the underlying multi-megabyte column chunk</strong>! This cuts network and I/O traffic by up to 90%.</p>
+          <p class="step"><strong>Step 2: Trace Apache Arrow Zero-Copy Shared Memory:</strong><br>
+          1. <strong>Direct Mapping:</strong> Process 1 writes data into an Arrow RecordBatch residing inside a POSIX shared memory block (<code>/dev/shm/arrow_buffer</code>).<br>
+          2. <strong>Descriptor Passing:</strong> Process 1 sends only a lightweight 64-byte pointer descriptor (memory address + schema metadata) to Process 2 over a Unix domain socket.<br>
+          3. <strong>Zero-Copy Ingestion:</strong> Process 2 maps the shared memory segment using <code>mmap()</code>. It reads the tensor columns directly from the same physical RAM pages without copying a single byte!<br>
+          <strong>Total Memory Allocated:</strong> Exactly $2\text{ GB}$ (no duplicates). Total latency: under <strong>2 milliseconds</strong> ($2,000\times$ faster!).</p>
+        </div>
       </div>
+
+      <!-- ==================== TIER 3: FAANG INTERVIEWS ==================== -->
+      <h4>Tier 3: FAANG &amp; Tier-1 AI Interview Challenges</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 0.4.4</span>
+          <span class="difficulty difficulty-hard">Level 3: FAANG Challenge</span>
+          <span class="company-tag company-netflix">Netflix</span>
+          <span class="company-tag company-amazon">Amazon</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> You are architecting the training data pipeline for a video recommendation model training on 50 Terabytes of user watch history stored as Parquet files on Amazon S3.</p>
+          <ol>
+            <li>Explain the "Small Files Problem" in distributed storage and how it degrades cloud training throughput.</li>
+            <li>Define the optimal Parquet Row Group size and file size for saturating S3 network throughput while preventing GPU starvation.</li>
+            <li>Explain how <strong>Predicate Pushdown</strong> utilizes Parquet file footer metadata to skip 90% of file reads without downloading the underlying column data.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+          <p class="step"><strong>Step 1: The Small Files Problem:</strong><br>
+          If 50TB of data is partitioned into millions of tiny 1MB files, every single file read requires an HTTPS request to S3 (introducing 20–50ms of TLS handshake, authentication, and HTTP header overhead). The GPU training cluster spends 80% of its time waiting on HTTP metadata overhead rather than receiving data chunks. Furthermore, object stores enforce per-prefix request rate limits (e.g., S3 limits 3,500 PUT and 5,500 GET requests per second per prefix), leading to <code>HTTP 503 Slow Down</code> throttling.</p>
+
+          <p class="step"><strong>Step 2: Optimal File &amp; Row Group Sizing:</strong><br>
+          The industry standard rule is to compact datasets into individual Parquet files between <strong>128MB and 512MB</strong>. Inside each Parquet file, data is divided into <strong>Row Groups</strong> of approximately <strong>64MB to 128MB</strong> (typically 1,000,000 to 2,000,000 rows). This size perfectly balances column compression ratios, aligns with distributed filesystem block sizes, and fits comfortably within CPU L3 cache during decompression.</p>
+
+          <p class="step"><strong>Step 3: Predicate Pushdown Mechanics:</strong><br>
+          In Parquet, the file footer contains compact metadata recording the <strong>exact minimum and maximum values for every column within every Row Group</strong>:
+          $$\text{Metadata for Row Group } i: \quad \min(x) = 15, \quad \max(x) = 45$$
+          If a training query requires <code>WHERE age &gt; 50</code>, the query engine reads only the tiny file footer (a few kilobytes). It observes that $\max(\text{age}) = 45 &lt; 50$, concludes that zero rows in Row Group $i$ can satisfy the condition, and <strong>completely skips downloading or reading the underlying multi-megabyte column chunk</strong>! This cuts network and I/O traffic by up to 90%.</p>
+        </div>
+      </div>
+
+      <!-- ==================== TIER 4: CONCEPTUAL MCQS ==================== -->
+      <h4>Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 0.4.5</span>
+          <span class="difficulty difficulty-medium">Level 4: Conceptual MCQ</span>
+          <span class="company-tag company-apple">Apple</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> When building data pipelines using Polars, why does executing operations on a <code>LazyFrame</code> (e.g. <code>lf.filter(...).select(...)</code>) run significantly faster than the identical operations executed on an eager <code>DataFrame</code>?</p>
+          <ol type="A">
+            <li>LazyFrame automatically quantizes all floating-point numbers into 8-bit integers.</li>
+            <li>The LazyFrame query optimizer inspects the entire compute graph, pushing filter operations before joins and pruning unused columns before memory is allocated.</li>
+            <li>LazyFrame transfers execution directly to the GPU via PyTorch CUDA streams.</li>
+            <li>LazyFrame runs inside a single C++ thread to eliminate multithreading context switches.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Correct Answer: [B] &amp; Detailed Explanation</div>
+          <p class="step"><strong>Analysis:</strong> In an eager DataFrame (like Pandas), every function call immediately computes and creates a full intermediate table in RAM. If you select 2 columns after a 50-column join, the eager engine wastefully joins all 50 columns. In Polars LazyFrames, operations build an execution plan. The optimizer applies <strong>Projection Pushdown</strong> (reading only the required 2 columns from disk) and <strong>Predicate Pushdown</strong> (filtering rows before joining), slashing I/O, memory, and CPU operations.</p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 0.4.6</span>
+          <span class="difficulty difficulty-medium">Level 4: Assertion-Reasoning</span>
+          <span class="company-tag company-anthropic">Anthropic</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Read the following Assertion and Reason carefully, then choose the correct option:</p>
+          <p><strong>Assertion (A):</strong> When scaling distributed deep learning data preprocessing across 64 worker processes on a single 64-core machine using Ray, passing large read-only tensors via <code>ray.put(tensor)</code> avoids memory duplication across workers.</p>
+          <p><strong>Reason (R):</strong> The Ray Plasma object store is implemented as a shared-memory segment that allows worker processes on the same physical host to read objects via zero-copy memory pointers.</p>
+          <ol type="A">
+            <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+            <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+            <li>(A) is true, but (R) is false.</li>
+            <li>Both (A) and (R) are false.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Correct Answer: [A] &amp; Detailed Explanation</div>
+          <p class="step"><strong>Analysis:</strong> Both (A) and (R) are completely true, and (R) explains (A). Ray's Plasma object store uses shared memory (<code>/dev/shm</code> on Linux). When an object is placed in the object store via <code>ray.put()</code>, all local worker processes access the identical physical memory pages directly using Apache Arrow zero-copy deserialization, completely eliminating inter-process serialization overhead and memory duplication.</p>
+        </div>
+      </div>
+
     </div>
 
     <!-- SECTION 6: CODE LAB -->
@@ -103,55 +254,53 @@ import os
 import polars as pl
 import numpy as np
 
-def run_columnar_benchmark():
-    N = 2_000_000
-    print(f"Generating synthetic dataset of {N:,} rows...")
-    
+def generate_benchmark_data(num_rows=5_000_000, filename="benchmark.parquet"):
+    print(f"Generating {num_rows:,} records...")
     df = pl.DataFrame({
-        "user_id": np.random.randint(1, 100_000, N),
-        "feature_1": np.random.randn(N).astype(np.float32),
-        "feature_2": np.random.randn(N).astype(np.float32),
-        "category": np.random.choice(["action", "comedy", "drama", "sci-fi"], N)
+        "user_id": np.random.randint(1, 1_000_000, size=num_rows),
+        "age": np.random.randint(18, 80, size=num_rows),
+        "click_prob": np.random.rand(num_rows).astype(np.float32),
+        "category": np.random.choice(["electronics", "clothing", "home", "books"], size=num_rows)
     })
+    
+    # Save as Parquet with Snappy compression
+    df.write_parquet(filename, compression="snappy")
+    file_size_mb = os.path.getsize(filename) / (1024**2)
+    print(f"Saved {filename} ({file_size_mb:.2f} MB)")
+    return filename
 
-    # Save to Parquet
-    parquet_path = "benchmark_data.parquet"
-    df.write_parquet(parquet_path, compression="snappy")
-    file_size_mb = os.path.getsize(parquet_path) / (1024**2)
-    print(f"Saved Parquet file: {file_size_mb:.2f} MB")
-
-    # Benchmark Polars Lazy Query with Predicate Pushdown
+def benchmark_polars_lazy(filename):
     t0 = time.perf_counter()
+    
+    # Lazy execution with predicate pushdown and column projection
     result = (
-        pl.scan_parquet(parquet_path)
-        .filter(pl.col("feature_1") > 1.0)
+        pl.scan_parquet(filename)
+        .filter(pl.col("age") > 30)
+        .select(["category", "click_prob"])
         .group_by("category")
-        .agg(pl.col("feature_2").mean().alias("avg_feat2"))
+        .agg(pl.col("click_prob").mean().alias("avg_click_prob"))
         .collect()
     )
-    t_polars = time.perf_counter() - t0
-
-    print(f"\nPolars Query Latency : {t_polars * 1000:.2f} ms")
-    print("Aggregation Results:\n", result)
-
-    # Cleanup
-    if os.path.exists(parquet_path):
-        os.remove(parquet_path)
+    
+    latency = time.perf_counter() - t0
+    print(f"Polars Lazy Query Latency: {latency*1000:.2f} ms")
+    print(result)
 
 if __name__ == "__main__":
-    run_columnar_benchmark()</code></pre>
+    fn = generate_benchmark_data(1_000_000)
+    benchmark_polars_lazy(fn)</code></pre>
     </div>
 
     <!-- SECTION 7: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 0.4 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 0.4: High-Throughput Streaming Parquet Sharder &amp; DataLoader</h3>
-        <p class="project-desc">Architect and implement a multi-threaded streaming data ingestion pipeline that ingests raw telemetry records, partitions them into optimal 128MB Parquet chunks with Snappy compression, builds min/max metadata statistics, and streams batches directly into PyTorch tensors using zero-copy Apache Arrow memory mapping.</p>
+        <h3 class="project-title">Project 0.4: Distributed Out-of-Core Feature Engineering Pipeline with Ray</h3>
+        <p class="project-desc">Build a production-grade distributed feature engineering pipeline that streams 100GB+ of compressed Parquet data from object storage, applies windowed statistical aggregations using Polars LazyFrames, and generates zero-copy Arrow memory buffers for PyTorch GPU data loaders.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part0_foundations/ch04_large_scale_data/columnar_data_benchmark.py" target="_blank">🔗 Full Project Code: part0_foundations/ch04_large_scale_data/columnar_data_benchmark.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> Training next-generation foundation models requires ingesting hundreds of millions of multimodal samples without causing operating system memory thrashing or CPU stalls. In this project, you construct an end-to-end data pipeline combining Polars lazy evaluation, PyArrow memory-mapped files, and Ray workers to stream batches directly to GPU memory, saturating PCIe bus throughput.</p>
+        <p><strong>Case Study Architecture:</strong> In high-frequency recommendation systems (e.g. TikTok, YouTube), features like "user click rate in the last 15 minutes" must be computed over terabytes of event logs without overwhelming worker node memory. In this project, you build a Ray Data pipeline that splits data across Ray actors, applies predicate pushdown to skip unneeded row groups, and streams normalized tensor batches directly into GPU pinned memory.</p>
       </div>
     </div>
   </div>

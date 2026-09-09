@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="bpe_tokenization_flow.png" alt="Figure 5.2.1: bpe tokenization flow">
+        <div class="diagram-caption"><strong>Figure 5.2.1:</strong> Byte-Pair Encoding (BPE) iterative subword merge hierarchy. Starting from raw character bytes, the tokenizer greedily merges the highest-frequency adjacent bigrams into subwords, balancing fixed vocabulary size against out-of-vocabulary representation and compact sequence lengths.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 5.2 — TOKENIZATION & THE HUGGING FACE ECOSYSTEM
      ====================================================================== -->
@@ -23,7 +29,7 @@
 
     <h4>The Two Historic Failures</h4>
     <ul>
-      <li><strong>Character-Level Tokenization:</strong> Every character is a token (e.g. <code>['c', 'a', 't']</code>). While vocabulary is tiny ($~256$ ASCII/Unicode characters), sequence length explodes by $4\times$. Because Transformer self-attention scales quadratically with sequence length ($O(N^2)$), a $4\times$ increase in length causes a <strong>$16\times$ explosion in compute and memory</strong>!</li>
+      <li><strong>Character-Level Tokenization:</strong> Every character is a token (e.g. <code>['c', 'a', 't']</code>). While vocabulary is tiny ($~256$ ASCII/Unicode characters), sequence length explodes by $4\times$ to $6\times$. Because Transformer self-attention scales quadratically with sequence length ($O(N^2)$), a $4\times$ increase in length causes a <strong>$16\times$ explosion in compute and memory</strong>!</li>
       <li><strong>Word-Level Tokenization:</strong> Splitting by whitespace. English contains over 1,000,000 words. Rare morphological variants (<code>"unconstitutionality"</code>) become Out-Of-Vocabulary (<code>[UNK]</code>) tokens. Furthermore, storing an embedding matrix for 1,000,000 words across 4,096 dimensions consumes 8 Gigabytes of VRAM before a single layer is even computed!</li>
     </ul>
 
@@ -40,12 +46,47 @@
         <li><strong>Count Co-occurrences:</strong> Scan the entire corpus and count the frequency of all adjacent symbol pairs.</li>
         <li><strong>Merge Most Frequent Pair:</strong> Identify the single pair of adjacent symbols $(A, B)$ with the highest frequency. Merge them into a new single vocabulary symbol $AB$.</li>
         <li><strong>Update Corpus:</strong> Replace all occurrences of $A, B$ with $AB$ across the dataset.</li>
-        <li><strong>Repeat:</strong> Continue steps 2–4 until the vocabulary reaches the predetermined target size $V$ (e.g. $32,000$ merges).</li>
+        <li><strong>Repeat:</strong> Continue steps 2–4 until the vocabulary reaches the predetermined target size $V$ (e.g. $32,000$ to $128,000$ merges).</li>
       </ol>
     </div>
 
-    <!-- SECTION 3: DECODING & SAMPLING STRATEGIES -->
-    <h3>3. Text Generation Strategies: Temperature, Top-$k$ &amp; Top-$p$ (Nucleus)</h3>
+    <!-- SECTION 3: THE TOKENIZER TRINITY -->
+    <h3>3. The Tokenizer Trinity: BPE, WordPiece &amp; SentencePiece</h3>
+    <div class="table-container" style="overflow-x: auto; margin: 1.5em 0;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em;">
+        <thead>
+          <tr style="background-color: #1b4965; color: #ffffff;">
+            <th style="padding: 10px; border: 1px solid #ccc;">Tokenizer</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Merge / Pruning Criteria</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Whitespace Handling</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Production Models</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Byte-Pair Encoding (BPE)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Frequency count of adjacent symbol pairs: $\arg\max \operatorname{count}(u, v)$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Pre-tokenization (whitespace split) or raw UTF-8 bytes (BBPE)</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">GPT-2, GPT-4, LLaMA 1/2/3, Mistral</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>WordPiece</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Likelihood ratio: $\arg\max \frac{\operatorname{count}(u, v)}{\operatorname{count}(u) \operatorname{count}(v)}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Prefix marker <code>##</code> for continuation subwords</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">BERT, DistilBERT, Electra</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>SentencePiece (Unigram)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Top-down pruning: removes tokens causing minimal increase in unigram loss $\Delta \mathcal{L}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Treats whitespace as regular meta-character <code>_</code> (lossless reversal)</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">T5, ALBERT, Gemma</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SECTION 4: DECODING & SAMPLING STRATEGIES -->
+    <h3>4. Text Generation Strategies: Temperature, Top-$k$ &amp; Top-$p$ (Nucleus)</h3>
     <p>When an LLM outputs logits $\mathbf{z} \in \mathbb{R}^V$ for the next token, how should the engineer sample from this distribution?</p>
 
     <h4>Temperature Scaling</h4>
@@ -62,83 +103,21 @@
     $$\sum_{w \in V^{(p)}} P(w) \ge p$$
     <p>The distribution is then re-normalized across $V^{(p)}$ and sampled. If the model is confident ($P(\text{"York"}) = 0.98$ after <code>"New"</code>), the nucleus contains only 1 token. If the context is ambiguous, the nucleus expands to 50 tokens!</p>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Tokenization &amp; Generation</h3>
-
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 5.2.1</span>
-        <span class="difficulty difficulty-medium">Medium</span>
-        <span class="company-tag company-openai">OpenAI</span>
-        <span class="company-tag company-google">Google</span>
-      </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> You are given a training corpus containing the following word frequencies:</p>
-        <ul>
-          <li><code>"low"</code> : 5 times</li>
-          <li><code>"lower"</code> : 2 times</li>
-          <li><code>"newest"</code> : 6 times</li>
-          <li><code>"widest"</code> : 3 times</li>
-        </ul>
-        <p>Trace the Byte-Pair Encoding (BPE) algorithm step-by-step and determine the <strong>first three merged tokens</strong> added to the vocabulary.</p>
-      </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
-
-        <p class="step"><strong>Step 1: Character Splitting:</strong><br>
-        Append end-of-word marker <code>_</code>:
-        <ul>
-          <li><code>l o w _</code> : 5</li>
-          <li><code>l o w e r _</code> : 2</li>
-          <li><code>n e w e s t _</code> : 6</li>
-          <li><code>w i d e s t _</code> : 3</li>
-        </ul>
-        Initial vocabulary: <code>{d, e, i, l, n, o, r, s, t, w, _}</code>.</p>
-
-        <p class="step"><strong>Step 2: Iteration 1 (Find Most Frequent Pair):</strong><br>
-        Count adjacent pair frequencies:
-        <ul>
-          <li><code>('l', 'o')</code>: $5 + 2 = 7$</li>
-          <li><code>('o', 'w')</code>: $5 + 2 = 7$</li>
-          <li><code>('e', 's')</code>: $6 + 3 = 9$</li>
-          <li><code>('s', 't')</code>: $6 + 3 = 9$</li>
-          <li><code>('t', '_')</code>: $6 + 3 = 9$</li>
-        </ul>
-        The pairs <code>('e', 's')</code>, <code>('s', 't')</code>, and <code>('t', '_')</code> tie at 9. Choose <code>('e', 's')</code>.<br>
-        <strong>Merge 1: <code>'es'</code></strong>. New vocabulary contains <code>'es'</code>.</p>
-
-        <p class="step"><strong>Step 3: Iteration 2:</strong><br>
-        Corpus is now:
-        <ul>
-          <li><code>l o w _</code> : 5</li>
-          <li><code>l o w e r _</code> : 2</li>
-          <li><code>n e w es t _</code> : 6</li>
-          <li><code>w i d es t _</code> : 3</li>
-        </ul>
-        Count adjacent pairs:
-        <ul>
-          <li><code>('es', 't')</code>: $6 + 3 = 9$</li>
-          <li><code>('t', '_')</code>: $6 + 3 = 9$</li>
-          <li><code>('l', 'o')</code>: $7$</li>
-        </ul>
-        <strong>Merge 2: <code>'est'</code></strong> (merging <code>'es'</code> and <code>'t'</code>).<br>
-        Corpus becomes: <code>n e w est _</code> : 6, <code>w i d est _</code> : 3.</p>
-
-        <p class="step"><strong>Step 4: Iteration 3:</strong><br>
-        Pair <code>('est', '_')</code> occurs $6 + 3 = 9$ times.<br>
-        <strong>Merge 3: <code>'est_'</code></strong> (merging <code>'est'</code> and <code>'_'</code>).<br>
-        <strong>Result: The first three BPE merges are <code>'es'</code>, <code>'est'</code>, and <code>'est_'</code>!</strong></p>
-      </div>
+    <!-- SECTION 5: FAANG INTERVIEW PROBLEM -->
+    <h3>5. Silicon Valley / FAANG Interview Challenge</h3>
+    <div class="interview-question">
+      <p><strong>OpenAI / Google Systems Interview:</strong><br>
+      <em>"Trace the Byte-Pair Encoding algorithm from first principles on a multi-frequency text corpus. Then explain why naive right-padding causes silent generation degradation during batched auto-regressive decoding in Hugging Face pipelines."</em></p>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 5.2: BPE Tokenizer from First Principles</h3>
+    <!-- SECTION 6: PRODUCTION CODE LAB -->
+    <h3>6. Production Code Lab: BPE Tokenizer from First Principles</h3>
     <p>Below is a clean, production-grade Byte-Pair Encoding tokenizer implementation in pure Python.</p>
 
     <div class="code-lab">
       <div class="code-lab-header">Code Lab 5.2 — Byte-Pair Encoding (BPE) from Scratch</div>
       <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_transformers_llms/ch52_tokenization/bpe_scratch.py" target="_blank">🔗 View in GitHub: part5_transformers_llms/ch52_tokenization/bpe_scratch.py</a></p>
-<pre><code>from collections import Counter, defaultdict
+<pre><code class="language-python">from collections import Counter, defaultdict
 
 class BPETokenizerScratch:
     def __init__(self, num_merges=10):
@@ -169,7 +148,7 @@ class BPETokenizerScratch:
         for text in texts:
             words = text.strip().split()
             for w in words:
-                corpus[" ".join(list(w)) + " &lt;/w&gt;"] += 1
+                corpus[" ".join(list(w)) + " </w>"] += 1
 
         # 2. Iteratively merge most frequent pairs
         for i in range(self.num_merges):
@@ -188,7 +167,7 @@ class BPETokenizerScratch:
     def encode(self, text):
         tokens = []
         for word in text.strip().split():
-            symbols = list(word) + ["&lt;/w&gt;"]
+            symbols = list(word) + ["</w>"]
             for pair, merged in self.merges.items():
                 i = 0
                 while i < len(symbols) - 1:
@@ -205,10 +184,11 @@ if __name__ == "__main__":
     tokenizer.fit(sample_text)
     print("Learned BPE Merges:", tokenizer.merges)
     encoded = tokenizer.encode("lowest")
-    print("Encoded 'lowest'  :", encoded)</code></pre>
+    print("Encoded 'lowest'  :", encoded)
+</code></pre>
     </div>
 
-    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 5.2 Dedicated Project &amp; Case Study</span>
@@ -219,6 +199,442 @@ if __name__ == "__main__":
       <div class="project-body">
         <p><strong>Case Study Architecture:</strong> In multinational software deployments, models like GPT-4 charge per token. A naive tokenizer that requires 3 tokens to represent one non-Latin character (e.g. Hindi or Japanese) triples operating API costs for non-English enterprise clients. In this project, you construct a token efficiency auditor that detects multi-token fragmentation and benchmarks throughput.</p>
       </div>
+    </div>
+
+    <!-- ======================================================================
+         SECTION 8: GRADED PRACTICE SUITE (8 PROBLEMS: 5.2.1 TO 5.2.8)
+         ====================================================================== -->
+    <h3>8. Graded Practice Suite: Tokenization &amp; Generation Strategies</h3>
+    <p>Mastering tokenization and text generation requires mathematical precision across softmax distribution reshaping, nucleus truncation algorithms, likelihood ratio merge heuristics, and left-padding memory mechanics.</p>
+
+    <!-- PROBLEM 5.2.1 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.2.1</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Temperature Scaling &amp; Distributional Entropy Hand-Calculation:</strong></p>
+        <p>An autoregressive language model produces the following raw logits for the next token across a 4-token candidate vocabulary $\{w_1, w_2, w_3, w_4\}$:</p>
+        $$\mathbf{z} = [4.0, 2.0, 1.0, -1.0]^\top$$
+        <ol>
+          <li>State the output probability vector under deterministic <strong>Greedy Decoding</strong> ($T \to 0^+$), and compute its Shannon entropy $H = -\sum_{i=1}^4 p_i \ln p_i$.</li>
+          <li>Calculate the exact Softmax probability distribution $\mathbf{p}$ and Shannon entropy under <strong>Standard Sampling</strong> ($T = 1.0$).</li>
+          <li>Calculate the exact probability distribution and Shannon entropy under <strong>High Temperature</strong> ($T = 2.0$).</li>
+          <li>Calculate the exact probability distribution and Shannon entropy under <strong>Low Temperature</strong> ($T = 0.5$).</li>
+          <li>Tabulate the entropies and verify numerically that predictive entropy strictly increases with temperature $T$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: Greedy Decoding ($T \to 0^+$)</strong></p>
+        <p>As temperature approaches zero, all probability mass concentrates exclusively on the token with the maximum logit ($\arg\max_i z_i = 1$ with $z_1 = 4.0$):</p>
+        $$\mathbf{p}_{T \to 0^+} = [1.0, \; 0.0, \; 0.0, \; 0.0]^\top$$
+        <p>Shannon entropy for a deterministic distribution is:</p>
+        $$H_{T \to 0^+} = -(1.0 \ln 1.0 + 0 + 0 + 0) = \mathbf{0.0000 \text{ nats}}$$
+
+        <p class="step"><strong>Step 2: Standard Sampling ($T = 1.0$)</strong></p>
+        <p>Compute exponentials $e^{z_i}$:</p>
+        $$e^{4.0} \approx 54.59815, \quad e^{2.0} \approx 7.38906, \quad e^{1.0} \approx 2.71828, \quad e^{-1.0} \approx 0.36788$$
+        <p>The normalizer sum is:</p>
+        $$\Sigma_{1.0} = 54.59815 + 7.38906 + 2.71828 + 0.36788 = 65.07337$$
+        <p>Normalized probabilities:</p>
+        $$p_1 = \frac{54.59815}{65.07337} \approx \mathbf{0.8390}, \quad p_2 = \frac{7.38906}{65.07337} \approx \mathbf{0.1135}$$
+        $$p_3 = \frac{2.71828}{65.07337} \approx \mathbf{0.0418}, \quad p_4 = \frac{0.36788}{65.07337} \approx \mathbf{0.0057}$$
+        <p>Compute entropy:</p>
+        $$H_{1.0} = -[0.8390 \ln(0.8390) + 0.1135 \ln(0.1135) + 0.0418 \ln(0.0418) + 0.0057 \ln(0.0057)]$$
+        $$= -[0.8390(-0.17555) + 0.1135(-2.17595) + 0.0418(-3.17487) + 0.0057(-5.16729)]$$
+        $$= -[-0.14729 - 0.24697 - 0.13271 - 0.02945] = \mathbf{0.5564 \text{ nats}}$$
+
+        <p class="step"><strong>Step 3: High Temperature ($T = 2.0$)</strong></p>
+        <p>Scaled logits: $\frac{\mathbf{z}}{2} = [2.0, 1.0, 0.5, -0.5]^\top$.</p>
+        $$e^{2.0} \approx 7.38906, \quad e^{1.0} \approx 2.71828, \quad e^{0.5} \approx 1.64872, \quad e^{-0.5} \approx 0.60653$$
+        $$\Sigma_{2.0} = 7.38906 + 2.71828 + 1.64872 + 0.60653 = 12.36259$$
+        $$p_1 = \frac{7.38906}{12.36259} \approx \mathbf{0.5977}, \quad p_2 = \frac{2.71828}{12.36259} \approx \mathbf{0.2199}$$
+        $$p_3 = \frac{1.64872}{12.36259} \approx \mathbf{0.1334}, \quad p_4 = \frac{0.60653}{12.36259} \approx \mathbf{0.0491}$$
+        <p>Compute entropy:</p>
+        $$H_{2.0} = -[0.5977 \ln(0.5977) + 0.2199 \ln(0.2199) + 0.1334 \ln(0.1334) + 0.0491 \ln(0.0491)]$$
+        $$= -[-0.30761 - 0.33306 - 0.26872 - 0.14798] = \mathbf{1.0574 \text{ nats}}$$
+
+        <p class="step"><strong>Step 4: Low Temperature ($T = 0.5$)</strong></p>
+        <p>Scaled logits: $\frac{\mathbf{z}}{0.5} = [8.0, 4.0, 2.0, -2.0]^\top$.</p>
+        $$e^{8.0} \approx 2980.95799, \quad e^{4.0} \approx 54.59815, \quad e^{2.0} \approx 7.38906, \quad e^{-2.0} \approx 0.13534$$
+        $$\Sigma_{0.5} = 2980.95799 + 54.59815 + 7.38906 + 0.13534 = 3043.08054$$
+        $$p_1 = \frac{2980.95799}{3043.08054} \approx \mathbf{0.9796}, \quad p_2 = \frac{54.59815}{3043.08054} \approx \mathbf{0.0179}$$
+        $$p_3 = \frac{7.38906}{3043.08054} \approx \mathbf{0.0024}, \quad p_4 = \frac{0.13534}{3043.08054} \approx \mathbf{0.00004}$$
+        <p>Compute entropy:</p>
+        $$H_{0.5} = -[0.9796 \ln(0.9796) + 0.0179 \ln(0.0179) + 0.0024 \ln(0.0024)]$$
+        $$= -[-0.02019 - 0.07201 - 0.01448] = \mathbf{0.1067 \text{ nats}}$$
+
+        <p class="step"><strong>Step 5: Entropy Monotonicity Verification</strong></p>
+        <table>
+          <thead>
+            <tr><th>Temperature ($T$)</th><th>Dominant Token Prob ($p_1$)</th><th>Predictive Entropy ($H$)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>$T \to 0^+$ (Greedy)</td><td>$100.00\%$</td><td>$0.0000$ nats</td></tr>
+            <tr><td>$T = 0.5$ (Conservative)</td><td>$97.96\%$</td><td>$0.1067$ nats</td></tr>
+            <tr><td>$T = 1.0$ (Standard)</td><td>$83.90\%$</td><td>$0.5564$ nats</td></tr>
+            <tr><td>$T = 2.0$ (Creative / High Entropy)</td><td>$59.77\%$</td><td>$1.0574$ nats</td></tr>
+            <tr><td>$T \to \infty$ (Uniform Limit)</td><td>$25.00\%$</td><td>$\ln(4) \approx 1.3863$ nats</td></tr>
+          </tbody>
+        </table>
+        <p>As shown, $0.0000 < 0.1067 < 0.5564 < 1.0574 < 1.3863$. The predictive entropy increases strictly monotonically with temperature $T$.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.2.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.2.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-anthropic">Anthropic</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Top-$k$ vs Top-$p$ (Nucleus) Dynamic Truncation Hand-Calculation:</strong></p>
+        <p>Suppose a language model outputs the following sorted probability distribution over the top 6 candidate next-tokens:</p>
+        $$P = \{w_1: 0.40, \; w_2: 0.25, \; w_3: 0.15, \; w_4: 0.10, \; w_5: 0.06, \; w_6: 0.04\}$$
+        <ol>
+          <li>Apply <strong>Top-$k$ Truncation</strong> with $k = 3$. Identify the surviving tokens and compute their re-normalized probability distribution.</li>
+          <li>Apply <strong>Top-$p$ (Nucleus) Truncation</strong> with threshold $p = 0.70$. Identify the surviving tokens and compute their re-normalized probability distribution.</li>
+          <li>Apply <strong>Top-$p$ Truncation</strong> with threshold $p = 0.92$. Identify the surviving tokens and compute their re-normalized probability distribution.</li>
+          <li>Contrast a "peaked" distribution where $P(w_1) = 0.98$ with a "flat" distribution where all $P(w_i) = 0.10$. Explain why Top-$k$ causes generation failure in both regimes while Top-$p$ adapts automatically.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: Top-$k$ Filtering ($k = 3$)</strong></p>
+        <p>Top-$k$ blindly keeps the top 3 tokens: $\{w_1, w_2, w_3\}$.</p>
+        $$\Sigma_{\text{top-}3} = 0.40 + 0.25 + 0.15 = 0.80$$
+        <p>Re-normalizing by dividing each probability by $0.80$:</p>
+        $$p'(w_1) = \frac{0.40}{0.80} = \mathbf{0.5000}$$
+        $$p'(w_2) = \frac{0.25}{0.80} = \mathbf{0.3125}$$
+        $$p'(w_3) = \frac{0.15}{0.80} = \mathbf{0.1875}$$
+        <p>Tokens $\{w_4, w_5, w_6\}$ are pruned to zero probability.</p>
+
+        <p class="step"><strong>Step 2: Top-$p$ Filtering ($p = 0.70$)</strong></p>
+        <p>Calculate cumulative probabilities from highest to lowest:</p>
+        <ul>
+          <li>Token $w_1$: $\text{CDF} = 0.40 < 0.70$ (keep)</li>
+          <li>Token $w_2$: $\text{CDF} = 0.40 + 0.25 = 0.65 < 0.70$ (keep)</li>
+          <li>Token $w_3$: $\text{CDF} = 0.65 + 0.15 = 0.80 \ge 0.70$ (keep, and STOP!)</li>
+        </ul>
+        <p>The nucleus set is $V^{(0.70)} = \{w_1, w_2, w_3\}$. The normalizer is $\Sigma = 0.80$.</p>
+        $$p'(w_1) = \mathbf{0.5000}, \quad p'(w_2) = \mathbf{0.3125}, \quad p'(w_3) = \mathbf{0.1875}$$
+
+        <p class="step"><strong>Step 3: Top-$p$ Filtering ($p = 0.92$)</strong></p>
+        <p>Calculate cumulative probabilities:</p>
+        <ul>
+          <li>$w_1$: $0.40$</li>
+          <li>$w_2$: $0.65$</li>
+          <li>$w_3$: $0.80$</li>
+          <li>$w_4$: $0.80 + 0.10 = 0.90 < 0.92$ (keep)</li>
+          <li>$w_5$: $0.90 + 0.06 = 0.96 \ge 0.92$ (keep, and STOP!)</li>
+        </ul>
+        <p>The nucleus set is $V^{(0.92)} = \{w_1, w_2, w_3, w_4, w_5\}$. The normalizer is $\Sigma = 0.96$.</p>
+        $$p'(w_1) = \frac{0.40}{0.96} \approx \mathbf{0.4167}, \quad p'(w_2) = \frac{0.25}{0.96} \approx \mathbf{0.2604}$$
+        $$p'(w_3) = \frac{0.15}{0.96} \approx \mathbf{0.1562}, \quad p'(w_4) = \frac{0.10}{0.96} \approx \mathbf{0.1042}$$
+        $$p'(w_5) = \frac{0.06}{0.96} \approx \mathbf{0.0625}$$
+
+        <p class="step"><strong>Step 4: Top-$k$ Failure Modes vs Top-$p$ Robustness</strong></p>
+        <ul>
+          <li><strong>Peaked Regime (High Confidence, e.g. $P(\text{"York"}) = 0.98$ after <code>"New"</code>):</strong> Top-$k$ with $k=50$ is forced to keep 49 absurd, low-probability distractor tokens (each with $P < 0.0004$). If sampled, the model hallucinates wildly. In contrast, Top-$p$ ($p=0.90$) halts immediately after token 1 ($0.98 \ge 0.90$), dynamically collapsing the candidate pool to size 1!</li>
+          <li><strong>Flat Regime (High Uncertainty / Creative Writing, e.g. 10 valid synonyms with $P \approx 0.10$):</strong> Top-$k$ with $k=3$ artificially kills 7 perfectly valid creative synonyms. In contrast, Top-$p$ ($p=0.90$) dynamically expands to keep all 9 or 10 valid options!</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.2.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.2.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-cohere">Cohere</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>WordPiece Likelihood-Ratio Selection vs BPE Frequency Criteria:</strong></p>
+        <p>In BPE, adjacent subwords are merged purely based on raw co-occurrence frequency: $\operatorname{Score}_{\text{BPE}}(u, v) = \operatorname{count}(u, v)$. In WordPiece (Schuster &amp; Nakajima, 2012; Devlin et al., 2018), candidates are chosen to maximize the language model likelihood increase, which simplifies to the ratio of joint probability to marginal probabilities:</p>
+        $$\operatorname{Score}_{\text{WP}}(u, v) = \frac{\operatorname{count}(u, v)}{\operatorname{count}(u) \cdot \operatorname{count}(v)}$$
+        <p>Suppose you are evaluating two candidate merges: Pair $A = (\text{"un"}, \text{"common"})$ and Pair $B = (\text{"th"}, \text{"e"})$ on a corpus where:</p>
+        <ul>
+          <li>$\operatorname{count}(\text{"un"}) = 10,000, \quad \operatorname{count}(\text{"common"}) = 2,000, \quad \operatorname{count}(\text{"un", "common"}) = 1,800$</li>
+          <li>$\operatorname{count}(\text{"th"}) = 500,000, \quad \operatorname{count}(\text{"e"}) = 1,000,000, \quad \operatorname{count}(\text{"th", "e"}) = 300,000$</li>
+        </ul>
+        <ol>
+          <li>Calculate the BPE merge score for both pairs, and state which pair BPE would merge first.</li>
+          <li>Calculate the WordPiece score for both pairs, and state which pair WordPiece would merge first.</li>
+          <li>Explain why WordPiece's normalized score prevents ultra-frequent characters from monopolizing all early vocabulary merge steps.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: BPE Score Evaluation</strong></p>
+        $$\operatorname{Score}_{\text{BPE}}(\text{"un", "common"}) = \operatorname{count}(\text{"un", "common"}) = \mathbf{1,800}$$
+        $$\operatorname{Score}_{\text{BPE}}(\text{"th", "e"}) = \operatorname{count}(\text{"th", "e"}) = \mathbf{300,000}$$
+        <p>Since $300,000 \gg 1,800$, <strong>BPE selects Pair $B$ (<code>"th", "e"</code>)</strong> by a massive margin.</p>
+
+        <p class="step"><strong>Step 2: WordPiece Score Evaluation</strong></p>
+        <p>Compute the likelihood ratio score:</p>
+        <ul>
+          <li><strong>Pair $A$ (<code>"un", "common"</code>):</strong>
+          $$\operatorname{Score}_{\text{WP}}(\text{"un", "common"}) = \frac{1,800}{10,000 \times 2,000} = \frac{1,800}{20,000,000} = \mathbf{9.0 \times 10^{-5}}$$</li>
+          <li><strong>Pair $B$ (<code>"th", "e"</code>):</strong>
+          $$\operatorname{Score}_{\text{WP}}(\text{"th", "e"}) = \frac{300,000}{500,000 \times 1,000,000} = \frac{300,000}{5.0 \times 10^{11}} = \mathbf{6.0 \times 10^{-7}}$$</li>
+        </ul>
+        <p>Comparing the two WordPiece scores:</p>
+        $$\frac{\operatorname{Score}_{\text{WP}}(A)}{\operatorname{Score}_{\text{WP}}(B)} = \frac{9.0 \times 10^{-5}}{6.0 \times 10^{-7}} = \mathbf{150\times \text{ higher!}}$$
+        <p><strong>WordPiece selects Pair $A$ (<code>"un", "common"</code>)</strong> by a factor of 150x!</p>
+
+        <p class="step"><strong>Step 3: Why WordPiece Prevents Suffix Monopolization</strong></p>
+        <p>In BPE, because letters like <code>"e"</code>, <code>"t"</code>, and <code>"s"</code> appear millions of times across a corpus, pairs involving them achieve massive raw frequencies by sheer chance even if their mutual dependency is weak. BPE spends dozens of early merges creating combinations like <code>"e_"</code>, <code>"s_"</code>, <code>"ed"</code>, <code>"in"</code>, delaying the creation of cohesive semantic morphemes.</p>
+        <p>In WordPiece, dividing by $\operatorname{count}(u) \cdot \operatorname{count}(v)$ measures <em>statistical correlation (Pointwise Mutual Information)</em>. When <code>"un"</code> and <code>"common"</code> appear together, it is not an accidental collision: <code>"common"</code> appears next to <code>"un"</code> in $1,800 / 2,000 = 90\%$ of all its occurrences! WordPiece prioritizes strong linguistic bonds over sheer unigram volume.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.2.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.2.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-huggingface">Hugging Face</span>
+        <span class="company-tag company-amazon">Amazon AWS</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>LLaMA 3 Jinja2 Chat Template Parsing &amp; Left-Padding Generation Mask Trace:</strong></p>
+        <p>Modern instruction-tuned LLMs expect input conversations formatted according to a model-specific Jinja2 chat template. Consider the following conversation:</p>
+        <ul>
+          <li>Role: <code>system</code>, Content: <code>"Be concise."</code></li>
+          <li>Role: <code>user</code>, Content: <code>"2+2?"</code></li>
+        </ul>
+        <ol>
+          <li>Format this conversation using the official <strong>LLaMA 3 Chat Template</strong> syntax with special tokens <code>&lt;|begin_of_text|&gt;</code>, <code>&lt;|start_header_id|&gt;</code>, <code>&lt;|end_header_id|&gt;</code>, and <code>&lt;|eot_id|&gt;</code>, preparing it for generation (including the assistant prompt header).</li>
+          <li>Suppose Sequence 1 tokenizes to 12 tokens, while Sequence 2 in the same batch tokenizes to 16 tokens. The batch is padded to length $T_{\max} = 16$ using <code>[PAD]</code>. Construct the $16 \times 16$ binary attention mask for Sequence 1 under <strong>Left-Padding</strong> versus <strong>Right-Padding</strong>.</li>
+          <li>Explain why Right-Padding causes generation failure during batched autoregressive decoding in Hugging Face <code>model.generate()</code>.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Solution:</div>
+        <p class="step"><strong>Step 1: LLaMA 3 Chat Template Formatting</strong></p>
+        <p>The rendered text stream is:</p>
+<pre><code>&lt;|begin_of_text|&gt;&lt;|start_header_id|&gt;system&lt;|end_header_id|&gt;
+
+Be concise.&lt;|eot_id|&gt;&lt;|start_header_id|&gt;user&lt;|end_header_id|&gt;
+
+2+2?&lt;|eot_id|&gt;&lt;|start_header_id|&gt;assistant&lt;|end_header_id|&gt;
+
+</code></pre>
+        <p>Notice the trailing <code>&lt;|start_header_id|&gt;assistant&lt;|end_header_id|&gt;\n\n</code> primes the decoder to begin generating the assistant's response directly.</p>
+
+        <p class="step"><strong>Step 2: Left-Padding vs Right-Padding Attention Mask</strong></p>
+        <p>Sequence 1 has 12 real tokens ($t_1, \dots, t_{12}$) and requires 4 padding tokens:</p>
+        <ul>
+          <li><strong>Left-Padding Sequence Layout:</strong>
+          $$[\text{PAD}, \text{PAD}, \text{PAD}, \text{PAD}, t_1, t_2, \dots, t_{12}]$$
+          The 1D attention mask vector is:
+          $$\mathbf{m}_{\text{left}} = [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]$$
+          The causal 2D attention mask sets attention to $1$ only where $j \le i$ AND $m_j = 1$. The 4 padding positions on the left are ignored by all tokens.</li>
+          <li><strong>Right-Padding Sequence Layout:</strong>
+          $$[t_1, t_2, \dots, t_{12}, \text{PAD}, \text{PAD}, \text{PAD}, \text{PAD}]$$
+          The 1D attention mask vector is:
+          $$\mathbf{m}_{\text{right}} = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0]$$</li>
+        </ul>
+
+        <p class="step"><strong>Step 3: Why Right-Padding Breaks Autoregressive Generation</strong></p>
+        <p>During autoregressive decoding, generating the next new token $t_{\text{new}}$ is performed by taking the logits from the <strong>very last position</strong> of the sequence ($i = T_{\max} = 16$).
+        <br>Under <strong>Right-Padding</strong>, position 16 contains a <code>[PAD]</code> token! The forward pass computes $\mathbf{h}_{16} = f(\text{[PAD]})$, so the model samples the next token conditioned on padding noise! Even with attention masking, position indices in RoPE rotate by position 16 instead of position 12.
+        <br>Under <strong>Left-Padding</strong>, the final prompt token $t_{12}$ sits precisely at the last index $i = 16$. The output logits at position 16 correspond exactly to the continuation of the user's prompt. Thus, <strong>Left-Padding is mathematically mandatory for batched autoregressive generation</strong>.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.2.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.2.5</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google Brain</span>
+        <span class="company-tag company-stanford">Stanford</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Mathematical Derivation of SentencePiece Unigram LM Tokenization via Viterbi EM:</strong></p>
+        <p>Unlike BPE which builds vocabularies bottom-up by merging, the <strong>Unigram Language Model</strong> tokenizer (Kudo, 2018, used in SentencePiece, T5, and Gemma) starts with a massive initial seed vocabulary $V$ and prunes it top-down using Expectation-Maximization (EM).</p>
+        <ol>
+          <li>Let sentence $\mathbf{x} = (c_1, \dots, c_N)$ have candidate subword segmentations $\mathbf{s} = (x_1, \dots, x_m) \in S(\mathbf{x})$. Under the unigram assumption, express the joint probability $P(\mathbf{x}, \mathbf{s})$.</li>
+          <li>Formulate the dynamic programming recurrence for the Viterbi algorithm to find the optimal segmentation $\mathbf{s}^* = \arg\max_{\mathbf{s} \in S(\mathbf{x})} P(\mathbf{x}, \mathbf{s})$ in $O(N^2)$ time.</li>
+          <li>Define the total corpus log-likelihood $\mathcal{L} = \sum_{k=1}^K \log P(\mathbf{x}^{(k)})$. Prove that the marginal probability of a sentence is computed via the Forward algorithm:
+          $$P(\mathbf{x}) = \sum_{\mathbf{s} \in S(\mathbf{x})} \prod_{i=1}^{|\mathbf{s}|} P(x_i)$$</li>
+          <li>Explain how the loss penalty $\Delta \mathcal{L}(x)$ for candidate token $x$ is computed to prune the vocabulary from $|V|$ down to target size $V_{\text{target}}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Derivation:</div>
+        <p class="step"><strong>Step 1: Unigram Joint Probability</strong></p>
+        <p>Assuming subwords are drawn independently from a categorical distribution $P(x)$:</p>
+        $$P(\mathbf{x}, \mathbf{s}) = \prod_{i=1}^m P(x_i)$$
+        <p>where $\sum_{v \in V} P(v) = 1$, and concatenating $(x_1, \dots, x_m) = \mathbf{x}$.</p>
+
+        <p class="step"><strong>Step 2: Viterbi Dynamic Programming Recurrence</strong></p>
+        <p>To find the most likely segmentation without evaluating all $2^{N-1}$ possible splits, let $T[i]$ be the maximum log-probability of segmenting the prefix substring $c_1 \dots c_i$:</p>
+        $$T[i] = \max_{j < i, \; c_{j+1}\dots c_i \in V} \left( T[j] + \log P(c_{j+1}\dots c_i) \right)$$
+        <p>Base case: $T[0] = 0$. By storing the argmax back-pointer at each step, the optimal segmentation $\mathbf{s}^*$ is reconstructed by backtracking from $T[N]$ in $O(N \cdot L_{\max})$ time, where $L_{\max}$ is the maximum subword length.</p>
+
+        <p class="step"><strong>Step 3: Marginal Log-Likelihood via Forward Algorithm</strong></p>
+        <p>The total probability of sentence $\mathbf{x}$ marginalizes over all valid segmentation paths $S(\mathbf{x})$:</p>
+        $$P(\mathbf{x}) = \sum_{\mathbf{s} \in S(\mathbf{x})} P(\mathbf{x}, \mathbf{s}) = \sum_{\mathbf{s} \in S(\mathbf{x})} \prod_{i=1}^{|\mathbf{s}|} P(x_i)$$
+        <p>Let $\alpha[i]$ be the forward sum over prefix $c_1 \dots c_i$:</p>
+        $$\alpha[i] = \sum_{j < i, \; c_{j+1}\dots c_i \in V} \alpha[j] \cdot P(c_{j+1}\dots c_i)$$
+        <p>Then $P(\mathbf{x}) = \alpha[N]$. The corpus objective is $\mathcal{L} = \sum_{k=1}^K \log P(\mathbf{x}^{(k)})$.</p>
+
+        <p class="step"><strong>Step 4: Top-Down Pruning Loss $\Delta \mathcal{L}(x)$</strong></p>
+        <p>At each iteration of the Unigram LM training:
+        <br>1. Run the EM algorithm to compute subword expectations: $c(x) = \sum_{k} \mathbb{E}_{\mathbf{s} \sim P(\mathbf{s}|\mathbf{x}^{(k)})} [\operatorname{count}(x \in \mathbf{s})]$.
+        <br>2. Update probabilities: $P(x) = \frac{c(x)}{\sum_{v} c(v)}$.
+        <br>3. For each token $x \in V$, compute the counterfactual loss $\mathcal{L}_{\setminus \{x\}}$ if $x$ were dropped from the vocabulary (forcing words previously segmented with $x$ to be segmented into smaller sub-units):
+        $$\Delta \mathcal{L}(x) = \mathcal{L} - \mathcal{L}_{\setminus \{x\}} \ge 0$$
+        <br>4. Rank all subwords by $\Delta \mathcal{L}(x)$, and prune the bottom $20\%$ that cause the smallest loss increase, while strictly preserving all single-character base tokens. Repeat until target vocabulary size is reached.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.2.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.2.6</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-meta">Meta FAIR</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>First-Principles Mathematical Proof of Temperature Scaling Limits and Entropy Monotonicity:</strong></p>
+        <p>Let $\mathbf{z} \in \mathbb{R}^V$ be a vector of real logits with distinct elements, sorted such that $z_1 > z_2 \ge z_3 \ge \dots \ge z_V$. Let temperature $T > 0$. The temperature-scaled Softmax probability is:</p>
+        $$P(w_i; T) = \frac{\exp(z_i / T)}{\sum_{j=1}^V \exp(z_j / T)}$$
+        <ol>
+          <li>Prove that $\lim_{T \to 0^+} P(w_1; T) = 1.0$ and $\lim_{T \to 0^+} P(w_j; T) = 0.0$ for all $j > 1$.</li>
+          <li>Prove that $\lim_{T \to \infty} P(w_i; T) = \frac{1}{V}$ for all $i \in \{1, \dots, V\}$.</li>
+          <li>Let $H(T) = -\sum_{i=1}^V P(w_i; T) \log P(w_i; T)$ be the predictive Shannon entropy. Prove that:
+          $$\frac{d H}{d T} = \frac{1}{T^2} \operatorname{Var}_{w \sim P_T}(z_w) \ge 0$$
+          and conclude that entropy increases strictly monotonically with temperature for any non-uniform logit distribution.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Proof:</div>
+        <p class="step"><strong>Step 1: Greedy Limit ($T \to 0^+$)</strong></p>
+        <p>Divide numerator and denominator by $\exp(z_1 / T)$:</p>
+        $$P(w_1; T) = \frac{\exp(z_1 / T)}{\exp(z_1 / T) + \sum_{j=2}^V \exp(z_j / T)} = \frac{1}{1 + \sum_{j=2}^V \exp\left( \frac{z_j - z_1}{T} \right)}$$
+        <p>Since $z_1 > z_j$ for all $j \ge 2$, the difference $z_j - z_1 = -\Delta_j < 0$ where $\Delta_j > 0$. As $T \to 0^+$:</p>
+        $$\lim_{T \to 0^+} \frac{-\Delta_j}{T} = -\infty \implies \lim_{T \to 0^+} \exp\left(\frac{-\Delta_j}{T}\right) = 0$$
+        $$\lim_{T \to 0^+} P(w_1; T) = \frac{1}{1 + 0} = \mathbf{1.0} \quad \blacksquare$$
+        <p>For any non-maximal index $k > 1$:</p>
+        $$P(w_k; T) = \frac{\exp\left(\frac{z_k - z_1}{T}\right)}{1 + \sum_{j=2}^V \exp\left(\frac{z_j - z_1}{T}\right)} \to \frac{0}{1} = \mathbf{0.0} \quad \blacksquare$$
+
+        <p class="step"><strong>Step 2: Uniform Limit ($T \to \infty$)</strong></p>
+        <p>As $T \to \infty$, $\frac{z_i}{T} \to 0$ for all $i \in \{1, \dots, V\}$. By continuity of the exponential function:</p>
+        $$\lim_{T \to \infty} \exp\left(\frac{z_i}{T}\right) = e^0 = 1$$
+        $$\lim_{T \to \infty} P(w_i; T) = \frac{1}{\sum_{j=1}^V 1} = \mathbf{\frac{1}{V}} \quad \blacksquare$$
+        <p>The distribution converges to the discrete uniform distribution.</p>
+
+        <p class="step"><strong>Step 3: Entropy Derivative Derivation</strong></p>
+        <p>Let $\beta = \frac{1}{T}$. The Gibbs distribution is $P_i = \frac{e^{\beta z_i}}{Z(\beta)}$, where $Z(\beta) = \sum_j e^{\beta z_j}$. Note that $\frac{d\beta}{dT} = -\frac{1}{T^2}$.</p>
+        <p>The log probability is $\ln P_i = \beta z_i - \ln Z$. The entropy is:</p>
+        $$H = -\sum_{i=1}^V P_i (\beta z_i - \ln Z) = \ln Z - \beta \sum_{i=1}^V P_i z_i = \ln Z - \beta \mathbb{E}[z]$$
+        <p>Differentiating $H$ with respect to $\beta$:</p>
+        $$\frac{d H}{d\beta} = \frac{d}{d\beta} \ln Z - \mathbb{E}[z] - \beta \frac{d}{d\beta}\mathbb{E}[z]$$
+        <p>Notice that $\frac{d}{d\beta} \ln Z = \frac{\sum z_i e^{\beta z_i}}{Z} = \mathbb{E}[z]$. Thus the first two terms cancel:</p>
+        $$\frac{d H}{d\beta} = -\beta \frac{d}{d\beta} \mathbb{E}[z]$$
+        <p>Now compute $\frac{d}{d\beta} \mathbb{E}[z] = \frac{d}{d\beta} \left(\frac{\sum z_i e^{\beta z_i}}{Z}\right)$:</p>
+        $$\frac{d}{d\beta} \mathbb{E}[z] = \frac{\left(\sum z_i^2 e^{\beta z_i}\right) Z - \left(\sum z_i e^{\beta z_i}\right)^2}{Z^2} = \mathbb{E}[z^2] - (\mathbb{E}[z])^2 = \operatorname{Var}(z)$$
+        <p>Therefore:</p>
+        $$\frac{d H}{d\beta} = -\beta \operatorname{Var}(z)$$
+        <p>Now apply the chain rule with respect to temperature $T$:</p>
+        $$\frac{d H}{d T} = \frac{d H}{d\beta} \frac{d\beta}{d T} = (-\beta \operatorname{Var}(z)) \left(-\frac{1}{T^2}\right) = \beta \frac{1}{T^2} \operatorname{Var}(z) = \mathbf{\frac{1}{T^3} \operatorname{Var}_{w \sim P_T}(z_w)} \quad \blacksquare$$
+        <p>Since variance is strictly non-negative ($\operatorname{Var}(z) \ge 0$), and $T > 0$, we have $\frac{d H}{d T} > 0$ strictly whenever the logits are not all identical. Hence, <strong>predictive entropy increases strictly monotonically with temperature $T$</strong>.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.2.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.2.7</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-bytedance">ByteDance</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap MCQ: The Non-English Tokenizer Tax &amp; Multilingual Fertility:</strong></p>
+        <p>In international software deployments of models like GPT-3.5 and early LLMs, translating a 100-word English document into Hindi or Burmese routinely caused the token count to jump from 120 tokens up to 450+ tokens ($4\times$ inflation). Which of the following statements provides the precise algorithmic cause of this <em>"tokenizer tax"</em>?</p>
+        <ol type="A">
+          <li>Pre-training tokenizers were trained on ~95% English text with character-level BPE, so non-Latin UTF-8 Unicode characters rarely co-occurred enough to be merged into words, forcing them to fragment into individual byte-level tokens (high fertility rate).</li>
+          <li>The Unicode UTF-8 standard compresses English text into 1 byte while non-Latin characters require 8 bytes per character.</li>
+          <li>Non-Latin languages have higher phonetic Shannon entropy per morpheme, requiring larger context windows.</li>
+          <li>Tokenizers deliberately fragment non-Latin scripts to prevent prompt injection and cross-lingual jailbreaks.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Analysis:</div>
+        <p class="step"><strong>Correct Answer: A</strong></p>
+        <p class="step"><strong>Deep Architectural and Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Why A is Correct:</strong> In UTF-8 encoding, standard ASCII English characters require exactly 1 byte. Characters in Devanagari (Hindi), Cyrillic, Arabic, and CJK require 2 to 4 bytes per character.
+          <br>Because early tokenizers (like GPT-2 with $|V|=50,257$) trained their BPE merge rules on over 90% English web corpora, English words like <em>"internationalization"</em> were merged into single tokens.
+          <br>In contrast, non-English words never met the statistical co-occurrence thresholds needed to earn a merge rule. As a result, a single Hindi word of 5 characters decomposes into 15 raw UTF-8 bytes, requiring 10 to 15 separate tokens!
+          <br>This phenomenon is quantified as <strong>Fertility Rate</strong> ($\frac{\text{tokens}}{\text{word}}$). High fertility triples API costs, slows generation speed by $3\times$, and cuts effective context window length to a fraction of English. Modern models (LLaMA 3, Gemma) resolved this by expanding vocabulary size to $128,000+$ and $256,000$ tokens with balanced multilingual corpora.</li>
+          <li><strong>Why B is False:</strong> UTF-8 encodes characters in at most 4 bytes, never 8 bytes.</li>
+          <li><strong>Why C is False:</strong> Information density across human languages is remarkably consistent (~39 bits/sec, Coupé et al., 2019); the disparity is purely an artifact of tokenization vocabulary bias.</li>
+          <li><strong>Why D is False:</strong> Tokenizer training is an unsupervised statistical compression algorithm; it has no adversarial security objectives.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.2.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.2.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-anthropic">Anthropic</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap MCQ: Left-Padding vs Right-Padding Autoregressive Generation Failure:</strong></p>
+        <p>When batching prompts of varying lengths in PyTorch / Hugging Face for autoregressive text generation (<code>model.generate()</code>), engineers must configure <code>tokenizer.padding_side = 'left'</code>. If an engineer forgets this setting and leaves it as the default <code>padding_side = 'right'</code>, what catastrophic failure occurs during generation?</p>
+        <ol type="A">
+          <li>With right-padding, the padding tokens sit at the end of shorter prompts, causing the model to take its next-token prediction from the padding position rather than the final prompt token, generating nonsensical tokens conditioned on padding artifacts.</li>
+          <li>Right-padding produces NaN values during the attention backward pass, causing the GPU driver to hang.</li>
+          <li>CUDA stream synchronization fails because right-padded sequences violate GPU warp scheduling.</li>
+          <li>Right-padding causes the KV cache to allocate negative memory strides in VRAM.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">Complete Step-by-Step Analysis:</div>
+        <p class="step"><strong>Correct Answer: A</strong></p>
+        <p class="step"><strong>Deep Architectural and Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Why A is Correct:</strong> During batched autoregressive generation, a batch contains sequences of different lengths (e.g., Sequence 1 has length 10, Sequence 2 has length 18). The batch tensor has fixed width 18.
+          <br>In Hugging Face's generation loop, the model extracts the logits for the next token by indexing the last column: <code>next_token_logits = logits[:, -1, :]</code>.
+          <br>If <strong>Right-Padding</strong> is used, Sequence 1 looks like:
+          $$[t_1, t_2, \dots, t_{10}, \text{[PAD]}, \text{[PAD]}, \dots, \text{[PAD]}]$$
+          The column at index $-1$ corresponds to the <code>[PAD]</code> token! The model computes the continuation of the padding token rather than token $t_{10}$, producing degraded gibberish or immediately outputting <code>&lt;|end_of_text|&gt;</code>.
+          <br>With <strong>Left-Padding</strong>:
+          $$[\text{[PAD]}, \text{[PAD]}, \dots, t_1, t_2, \dots, t_{10}]$$
+          The final column index $-1$ is guaranteed to be the true last prompt token $t_{10}$ for <em>every single sequence in the batch</em>, ensuring mathematically correct autoregressive continuation.</li>
+          <li><strong>Why B is False:</strong> Generation runs purely in inference mode (`torch.no_grad()`); there is no backward pass during generation, so no backward NaN crash occurs.</li>
+          <li><strong>Why C is False:</strong> CUDA warps handle zeros in attention masks without hardware faults.</li>
+          <li><strong>Why D is False:</strong> Memory allocations are positive scalar byte sizes; padding orientation does not create negative strides.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- CHAPTER SUMMARY -->
+    <div class="chapter-summary">
+      <h4>Chapter 5.2 Key Takeaways</h4>
+      <ul>
+        <li><strong>Subword Efficiency:</strong> Subword tokenization balances compact vocabulary ($32\text{k}-128\text{k}$) with minimal sequence expansion, preventing the $O(N^2)$ quadratic compute explosion of character models.</li>
+        <li><strong>BPE vs WordPiece vs SentencePiece:</strong> BPE merges by frequency count; WordPiece merges by likelihood ratio (PMI); SentencePiece trains a unigram language model and prunes top-down via Viterbi EM.</li>
+        <li><strong>Temperature Mechanics:</strong> $T < 1.0$ sharpens distributions toward greedy argmax; $T > 1.0$ flattens toward uniform, with entropy proven to scale monotonically with temperature.</li>
+        <li><strong>Nucleus (Top-$p$) Sampling:</strong> Dynamically adapts candidate pool size to the model's confidence, avoiding the twin failure modes of fixed Top-$k$ truncation.</li>
+        <li><strong>Left-Padding Mandate:</strong> Autoregressive batched generation strictly requires left-padding so that the final column index $-1$ aligns with the final prompt token.</li>
+      </ul>
     </div>
   </div>
 </div>

@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="modern_activation_functions.png" alt="Figure 3.2.1: modern activation functions">
+        <div class="diagram-caption"><strong>Figure 3.2.1:</strong> Comparison of modern neural activation functions. While standard ReLU suffers from dying neurons in negative saturation, modern activations like GELU and Swish/SiLU introduce smooth, non-monotonic curvature with non-zero negative gradients, stabilizing deep transformer and residual training.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 3.2 — MULTI-LAYER PERCEPTRONS & MODERN ACTIVATIONS
      ====================================================================== -->
@@ -19,33 +25,36 @@
 
     <!-- SECTION 1: BYPASSING THE LINEAR BARRIER -->
     <h3>1. Bypassing the Linear Barrier with Hidden Layers</h3>
-    <p>How did deep learning escape the XOR collapse proven by Minsky and Papert? The breakthrough was the introduction of <strong>Hidden Layers</strong>: intermediate layers of neurons between the raw input $\mathbf{x}$ and final output $\hat{y}$:</p>
-    $$\mathbf{h} = g(W^{(1)} \mathbf{x} + \mathbf{b}^{(1)})$$
-    $$\hat{y} = W^{(2)} \mathbf{h} + \mathbf{b}^{(2)}$$
-    <p>Where $g(\cdot)$ is an element-wise <strong>non-linear activation function</strong>.</p>
+    <p>How did artificial intelligence escape the historic XOR collapse proven by Minsky and Papert? The mathematical breakthrough was the introduction of <strong>Hidden Layers</strong>: intermediate representations between the raw input vector $\mathbf{x} \in \mathbb{R}^{d_{\text{in}}}$ and the final output $\hat{\mathbf{y}} \in \mathbb{R}^{d_{\text{out}}}$:</p>
+    $$\mathbf{h}^{(1)} = g\left( W^{(1)} \mathbf{x} + \mathbf{b}^{(1)} \right)$$
+    $$\mathbf{h}^{(2)} = g\left( W^{(2)} \mathbf{h}^{(1)} + \mathbf{b}^{(2)} \right)$$
+    $$\hat{\mathbf{y}} = W^{(L)} \mathbf{h}^{(L-1)} + \mathbf{b}^{(L)}$$
+    <p>Where $W^{(l)} \in \mathbb{R}^{d_l \times d_{l-1}}$ are weight matrices, $\mathbf{b}^{(l)} \in \mathbb{R}^{d_l}$ are bias vectors, and $g(\cdot)$ is an element-wise <strong>non-linear activation function</strong>.</p>
 
-    <h4>Why Non-Linearity Is Mandatory</h4>
-    <p>Suppose we set $g(z) = z$ (a linear activation). Consider a 3-layer neural network:</p>
-    $$\mathbf{h}_1 = W^{(1)} \mathbf{x} + \mathbf{b}^{(1)}$$
-    $$\mathbf{h}_2 = W^{(2)} \mathbf{h}_1 + \mathbf{b}^{(2)} = W^{(2)} (W^{(1)} \mathbf{x} + \mathbf{b}^{(1)}) + \mathbf{b}^{(2)} = (W^{(2)} W^{(1)}) \mathbf{x} + (W^{(2)} \mathbf{b}^{(1)} + \mathbf{b}^{(2)})$$
-    $$\hat{\mathbf{y}} = W^{(3)} \mathbf{h}_2 + \mathbf{b}^{(3)} = (W^{(3)} W^{(2)} W^{(1)}) \mathbf{x} + \mathbf{b}_{\text{effective}} = W_{\text{effective}} \mathbf{x} + \mathbf{b}_{\text{effective}}$$
-    <p>Because the product of linear transformation matrices is simply another linear transformation matrix, a network with <strong>1,000 linear layers has the exact same mathematical expressivity as a single linear layer</strong>! Non-linear activations warp the geometric coordinate space, allowing linear boundaries in hidden space to carve out complex, non-linear decision regions in input space.</p>
+    <h4>The Mathematical Necessity of Non-Linearity</h4>
+    <p>Suppose we set $g(z) = z$ (a linear activation function). Consider a 3-layer neural network:</p>
+    $$\mathbf{h}^{(1)} = W^{(1)} \mathbf{x} + \mathbf{b}^{(1)}$$
+    $$\mathbf{h}^{(2)} = W^{(2)} \mathbf{h}^{(1)} + \mathbf{b}^{(2)} = W^{(2)} \left( W^{(1)} \mathbf{x} + \mathbf{b}^{(1)} \right) + \mathbf{b}^{(2)} = \left( W^{(2)} W^{(1)} \right) \mathbf{x} + \left( W^{(2)} \mathbf{b}^{(1)} + \mathbf{b}^{(2)} \right)$$
+    $$\hat{\mathbf{y}} = W^{(3)} \mathbf{h}^{(2)} + \mathbf{b}^{(3)} = \left( W^{(3)} W^{(2)} W^{(1)} \right) \mathbf{x} + \left( W^{(3)} W^{(2)} \mathbf{b}^{(1)} + W^{(3)} \mathbf{b}^{(2)} + \mathbf{b}^{(3)} \right)$$
+    <p>Define $W_{\text{eff}} = W^{(3)} W^{(2)} W^{(1)} \in \mathbb{R}^{d_3 \times d_0}$ and $\mathbf{b}_{\text{eff}} = W^{(3)} W^{(2)} \mathbf{b}^{(1)} + W^{(3)} \mathbf{b}^{(2)} + \mathbf{b}^{(3)}$. The entire 3-layer network collapses to:</p>
+    $$\hat{\mathbf{y}} = W_{\text{eff}} \mathbf{x} + \mathbf{b}_{\text{eff}}$$
+    <p>Because the product of linear transformation matrices is simply another linear transformation matrix, a network with <strong>1,000 linear layers has the exact same mathematical representational capacity as a single linear regression equation</strong>! Non-linear activations warp the geometric coordinate space, allowing linear decision hyperplanes in hidden space to carve out complex, non-linear manifolds in input space.</p>
 
     <!-- SECTION 2: UNIVERSAL APPROXIMATION -->
     <h3>2. The Universal Approximation Theorem (Cybenko, 1989)</h3>
-    <p>In 1989, George Cybenko published a landmark mathematical theorem that cemented the theoretical foundation of neural networks:</p>
+    <p>In 1989, George Cybenko established the foundational theoretical pillar of neural network representation using functional analysis:</p>
 
     <div class="real-world-box">
-      <h4>🏆 The Universal Approximation Theorem</h4>
-      <p>Let $\sigma(\cdot)$ be any continuous sigmoidal non-linear activation function. Let $K \subset \mathbb{R}^d$ be a compact subset. For any continuous target function $f \in C(K)$ and any error tolerance $\epsilon &gt; 0$, there exists a finite number of hidden units $M$ and real parameters $\{v_i, \mathbf{w}_i, b_i\}_{i=1}^M$ such that:</p>
+      <h4>🏆 Cybenko's Universal Approximation Theorem</h4>
+      <p>Let $\sigma(\cdot)$ be any continuous sigmoidal non-linear activation function. Let $K \subset \mathbb{R}^d$ be any compact subset. For any continuous target function $f \in C(K)$ and any arbitrary error tolerance $\epsilon &gt; 0$, there exists a finite number of hidden units $M \in \mathbb{N}$ and real parameters $\{v_i, \mathbf{w}_i, b_i\}_{i=1}^M$ such that:</p>
       $$F(\mathbf{x}) = \sum_{i=1}^M v_i \sigma(\mathbf{w}_i^T \mathbf{x} + b_i)$$
       $$\text{satisfies: } \quad \sup_{\mathbf{x} \in K} |F(\mathbf{x}) - f(\mathbf{x})| &lt; \epsilon$$
-      <p><em>Kurt Hornik (1991) proved that this property holds for virtually any non-constant, bounded activation function, not just sigmoids.</em></p>
+      <p><em>Kurt Hornik (1991) proved that this property holds for virtually any continuous, non-polynomial activation function, including ReLU.</em></p>
     </div>
 
     <h4>Depth vs. Width: Why Modern AI Builds Deep Networks</h4>
-    <p>While the Universal Approximation Theorem guarantees that a single hidden layer <em>can</em> approximate any function, it may require an astronomically large number of neurons ($M \to \infty$).</p>
-    <p>Matus Telgarsky (2016) proved that deep networks with $\Theta(L)$ layers can express complex, highly oscillating functions that require an <strong>exponentially large width $\Omega(2^L)$</strong> in a single hidden layer! Depth enables compositional hierarchy: early layers learn edge primitives, middle layers compose parts, and deep layers represent holistic semantic concepts.</p>
+    <p>While the Universal Approximation Theorem guarantees that a single hidden layer <em>can</em> approximate any function, it may require an exponentially large number of neurons ($M \to \infty$).</p>
+    <p>Matus Telgarsky (2016) proved that deep networks with $\Theta(L)$ layers can express complex, highly oscillating compositional functions that require an <strong>exponentially large width $\Omega(2^L)$</strong> in a single hidden layer! Depth enables hierarchical representation: shallow layers learn localized edge primitives, intermediate layers compose parts, and deep layers capture abstract semantic concepts.</p>
 
     <!-- SECTION 3: ACTIVATION TAXONOMY -->
     <h3>3. The Modern Activation Function Taxonomy</h3>
@@ -55,8 +64,8 @@
         <tr>
           <th>Activation Function</th>
           <th>Mathematical Formula</th>
-          <th>Derivative Formula</th>
-          <th>Physical Failure Mode / Modern Use Case</th>
+          <th>Derivative Formula $\sigma'(z)$</th>
+          <th>Failure Modes &amp; Production Architecture</th>
         </tr>
       </thead>
       <tbody>
@@ -64,95 +73,470 @@
           <td><strong>Sigmoid</strong></td>
           <td>$\sigma(z) = \frac{1}{1 + e^{-z}}$</td>
           <td>$\sigma(z)(1 - \sigma(z))$</td>
-          <td><strong>Vanishing Gradient Catastrophe:</strong> Max derivative is $0.25$. In deep networks, gradients vanish to zero. Not zero-centered.</td>
+          <td><strong>Vanishing Gradient Catastrophe:</strong> $\max \sigma' = 0.25$. Saturates at $\pm \infty$. Non-zero centered. Used only in binary output gates.</td>
         </tr>
         <tr>
           <td><strong>Tanh</strong></td>
           <td>$\tanh(z) = \frac{e^z - e^{-z}}{e^z + e^{-z}}$</td>
           <td>$1 - \tanh^2(z)$</td>
-          <td>Zero-centered, but still saturates at $\pm 1$, causing vanishing gradients.</td>
+          <td>Zero-centered ($\max \tanh' = 1.0$), but still saturates at $|z| &gt; 3$, causing gradient vanishing in deep networks. Used in LSTM state updates.</td>
         </tr>
         <tr>
-          <td><strong>ReLU</strong> (Hinton, 2010)</td>
+          <td><strong>ReLU</strong> (Nair &amp; Hinton, 2010)</td>
           <td>$\max(0, z)$</td>
-          <td>$\begin{cases} 1 & z > 0 \\ 0 & z \le 0 \end{cases}$</td>
-          <td>Solves vanishing gradient for $z&gt;0$. Suffers from the <strong>Dying ReLU</strong> problem (neurons get permanently stuck at 0).</td>
+          <td>$\begin{cases} 1, & z &gt; 0 \\ 0, & z \le 0 \end{cases}$</td>
+          <td>Solves vanishing gradient for $z &gt; 0$. Fast $O(1)$ threshold. Suffers from the <strong>Dying ReLU</strong> problem (neurons stuck permanently at $0$). Standard in CNNs.</td>
         </tr>
         <tr>
-          <td><strong>GELU</strong> (Hendrycks, 2016)</td>
-          <td>$x \Phi(x) = x P(X \le x)$</td>
-          <td>$\Phi(x) + x \phi(x)$</td>
-          <td>Smooth non-monotonic stochastic activation. <strong>Standard in BERT, GPT-2, GPT-3, ViT</strong>.</td>
+          <td><strong>Leaky ReLU</strong> (Maas et al., 2013)</td>
+          <td>$\max(\alpha z, z), \quad \alpha \approx 0.01$</td>
+          <td>$\begin{cases} 1, & z &gt; 0 \\ \alpha, & z \le 0 \end{cases}$</td>
+          <td>Prevents dying neurons by maintaining small gradient $\alpha$ in the negative regime.</td>
+        </tr>
+        <tr>
+          <td><strong>GELU</strong> (Hendrycks &amp; Gimpel, 2016)</td>
+          <td>$z \Phi(z) = z P(X \le z), X \sim \mathcal{N}(0, 1)$</td>
+          <td>$\Phi(z) + z \phi(z)$</td>
+          <td>Smooth, non-monotonic probabilistic gating. <strong>The standard activation in BERT, GPT-2, GPT-3, and Vision Transformers (ViT)</strong>.</td>
         </tr>
         <tr>
           <td><strong>SwiGLU</strong> (Shazeer, 2020)</td>
-          <td>$\text{Swish}(xW_1) \otimes (xW_2)$</td>
-          <td>Gated product derivative</td>
-          <td><strong>The Gold Standard of Modern LLMs:</strong> Deployed in LLaMA 2/3, Mistral, Gemma. Maximizes gradient flow.</td>
+          <td>$\operatorname{Swish}(x W_{\text{gate}}) \otimes (x W_{\text{up}})$</td>
+          <td>Gated bilinear product gradient</td>
+          <td><strong>The Gold Standard of Modern Foundation LLMs:</strong> Deployed in LLaMA 1/2/3, Mistral, Gemma, and DeepSeek. Maximizes gradient throughput.</td>
         </tr>
       </tbody>
     </table>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Activations</h3>
+    <!-- SECTION 4: 4-TIER PRACTICE SUITE -->
+    <h3>Multi-Layer Perceptrons &amp; Activations Practice Suite &amp; Complete Worked Solutions</h3>
 
+    <!-- PROBLEM 3.2.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 3.2.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="difficulty difficulty-easy">Level 1 • Direct Numerical Warm-Up Drill</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> For each of the three input values $z \in \{-1.5, 0.0, +2.0\}$, compute the exact numerical output value and first derivative for:</p>
+        <ol>
+          <li>The Sigmoid function: $\sigma(z) = \frac{1}{1 + e^{-z}}$ and $\sigma'(z) = \sigma(z)(1 - \sigma(z))$.</li>
+          <li>The Hyperbolic Tangent function: $\tanh(z) = \frac{e^z - e^{-z}}{e^z + e^{-z}}$ and $\tanh'(z) = 1 - \tanh^2(z)$.</li>
+          <li>The Standard ReLU function: $f(z) = \max(0, z)$ and its subgradient $f'(z)$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
+
+        <p class="step"><strong>Step 1: Sigmoid Calculations:</strong><br>
+        Recall $e^{-(-1.5)} = e^{1.5} \approx 4.4817$, $e^0 = 1.0$, $e^{-2.0} \approx 0.1353$.
+        <ul>
+          <li>For $z = -1.5$:
+          $$\sigma(-1.5) = \frac{1}{1 + 4.4817} = \frac{1}{5.4817} \approx 0.1824$$
+          $$\sigma'(-1.5) = 0.1824 \times (1 - 0.1824) = 0.1824 \times 0.8176 \approx \mathbf{0.1491}$$</li>
+          <li>For $z = 0.0$:
+          $$\sigma(0.0) = \frac{1}{1 + 1} = 0.5000$$
+          $$\sigma'(0.0) = 0.5000 \times (1 - 0.5000) = 0.5000 \times 0.5000 = \mathbf{0.2500}$$</li>
+          <li>For $z = +2.0$:
+          $$\sigma(2.0) = \frac{1}{1 + 0.1353} = \frac{1}{1.1353} \approx 0.8808$$
+          $$\sigma'(2.0) = 0.8808 \times (1 - 0.8808) = 0.8808 \times 0.1192 \approx \mathbf{0.1050}$$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2: Hyperbolic Tangent ($\tanh$) Calculations:</strong><br>
+        <ul>
+          <li>For $z = -1.5$:
+          $$\tanh(-1.5) = \frac{e^{-1.5} - e^{1.5}}{e^{-1.5} + e^{1.5}} = \frac{0.2231 - 4.4817}{0.2231 + 4.4817} = \frac{-4.2586}{4.7048} \approx -0.9051$$
+          $$\tanh'(-1.5) = 1 - (-0.9051)^2 = 1 - 0.8193 = \mathbf{0.1807}$$</li>
+          <li>For $z = 0.0$:
+          $$\tanh(0.0) = \frac{1 - 1}{1 + 1} = 0.0000$$
+          $$\tanh'(0.0) = 1 - (0.0000)^2 = \mathbf{1.0000}$$</li>
+          <li>For $z = +2.0$:
+          $$\tanh(2.0) = \frac{e^2 - e^{-2}}{e^2 + e^{-2}} = \frac{7.3891 - 0.1353}{7.3891 + 0.1353} = \frac{7.2537}{7.5244} \approx 0.9640$$
+          $$\tanh'(2.0) = 1 - (0.9640)^2 = 1 - 0.9293 = \mathbf{0.0707}$$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 3: ReLU Calculations:</strong><br>
+        <ul>
+          <li>For $z = -1.5$:
+          $$f(-1.5) = \max(0, -1.5) = \mathbf{0.0000}, \quad f'(-1.5) = \mathbf{0.0000}$$</li>
+          <li>For $z = 0.0$:
+          $$f(0.0) = \max(0, 0.0) = \mathbf{0.0000}, \quad f'(0.0) \in [0, 1] \text{ (conventionally } \mathbf{0.0} \text{ or } \mathbf{0.5}\text{)}$$</li>
+          <li>For $z = +2.0$:
+          $$f(2.0) = \max(0, 2.0) = \mathbf{2.0000}, \quad f'(2.0) = \mathbf{1.0000}$$</li>
+        </ul>
+        Notice that at $z = 2.0$, Sigmoid derivative is $0.105$ and Tanh is $0.071$ (both saturating), whereas ReLU derivative is exactly $1.0000$, enabling unobstructed gradient flow.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.2.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.2.2</span>
+        <span class="difficulty difficulty-easy">Level 1 • Direct Formula Drill</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A Transformer LLM block has model dimension $d = 4,096$. Compare the parameter counts and forward floating-point operations (FLOPs) per token between two Feed-Forward Network (FFN) designs:</p>
+        <ol>
+          <li>A standard 2-matrix ReLU FFN: $\operatorname{FFN}(x) = \operatorname{ReLU}(x W_1) W_2$, with intermediate hidden dimension $d_{\text{ffn}} = 4d = 16,384$.</li>
+          <li>A modern 3-matrix SwiGLU FFN (as used in LLaMA 3): $\operatorname{SwiGLU}(x) = (\operatorname{Swish}(x W_{\text{gate}}) \otimes x W_{\text{up}}) W_{\text{down}}$, where the intermediate dimension is scaled to $d_{\text{ffn}} = \frac{8}{3}d \approx 11,008$ (rounded to nearest multiple of 256: $11,008$).</li>
+        </ol>
+        <p>Neglect bias terms. Calculate the total parameter count for both architectures and prove that the $\frac{8}{3}$ scaling factor preserves compute budget parity.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+
+        <p class="step"><strong>Step 1: Standard ReLU FFN Parameter Count:</strong><br>
+        The layer contains two weight matrices:
+        <ul>
+          <li>$W_1 \in \mathbb{R}^{d \times 4d} = \mathbb{R}^{4096 \times 16384}$:
+          $$\text{Params}(W_1) = 4096 \times 16384 = 67,108,864$$</li>
+          <li>$W_2 \in \mathbb{R}^{4d \times d} = \mathbb{R}^{16384 \times 4096}$:
+          $$\text{Params}(W_2) = 16384 \times 4096 = 67,108,864$$</li>
+        </ul>
+        $$\text{Total Params}_{\text{ReLU}} = 67,108,864 + 67,108,864 = 134,217,728 \quad (2 \times 4d^2 = 8 d^2 \text{ parameters})$$</p>
+
+        <p class="step"><strong>Step 2: SwiGLU FFN Parameter Count:</strong><br>
+        With $d = 4096$ and $d_{\text{ffn}} = 11,008$, the SwiGLU layer has three weight matrices:
+        <ul>
+          <li>$W_{\text{gate}} \in \mathbb{R}^{d \times d_{\text{ffn}}} = \mathbb{R}^{4096 \times 11008} \implies 4096 \times 11008 = 45,088,768$</li>
+          <li>$W_{\text{up}} \in \mathbb{R}^{d \times d_{\text{ffn}}} = \mathbb{R}^{4096 \times 11008} \implies 4096 \times 11008 = 45,088,768$</li>
+          <li>$W_{\text{down}} \in \mathbb{R}^{d_{\text{ffn}} \times d} = \mathbb{R}^{11008 \times 4096} \implies 11008 \times 4096 = 45,088,768$</li>
+        </ul>
+        $$\text{Total Params}_{\text{SwiGLU}} = 3 \times 45,088,768 = 135,266,304 \quad \left(3 \times \frac{8}{3}d^2 = 8 d^2 \text{ parameters}\right)$$</p>
+
+        <p class="step"><strong>Step 3: FLOPs Comparison &amp; Architectural Parity:</strong><br>
+        Forward matrix multiplications require $2 \times M \times K \times N$ FLOPs. For a single token ($M = 1$):
+        <ul>
+          <li>Standard ReLU FFN: $2(4096 \times 16384) + 2(16384 \times 4096) = 16 d^2 = 268,435,456$ FLOPs.</li>
+          <li>SwiGLU FFN: $3 \times [2(4096 \times 11008)] = 6(4096 \times 11008) \approx 16 d^2 = 270,532,608$ FLOPs.</li>
+        </ul>
+        By scaling intermediate width by $\frac{2}{3} \times 4d = \frac{8}{3}d$, SwiGLU incorporates three independent linear projections with multiplicative non-linear gating at <strong>identical parameter count and FLOP budget</strong>, consistently boosting language model perplexity across empirical evaluations (Shazeer, 2020).</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.2.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.2.3</span>
+        <span class="difficulty difficulty-medium">Level 2 • Applied Engineering Trace</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Consider a 2-layer MLP with 2 inputs, 2 hidden neurons, and 1 scalar output. The parameters are:</p>
+        $$W^{(1)} = \begin{pmatrix} 0.5 & -0.5 \\ -1.0 & 1.0 \end{pmatrix}, \quad \mathbf{b}^{(1)} = \begin{pmatrix} 0.1 \\ -0.2 \end{pmatrix}$$
+        $$W^{(2)} = \begin{pmatrix} 1.5 & -2.0 \end{pmatrix}, \quad b^{(2)} = 0.5$$
+        <p>The hidden layer uses the standard $\operatorname{ReLU}$ activation: $g(z) = \max(0, z)$. The output layer is linear: $\hat{y} = W^{(2)} \mathbf{h} + b^{(2)}$. The loss function is squared error: $\mathcal{L} = \frac{1}{2}(\hat{y} - y)^2$.<br>
+        Given training example $\mathbf{x} = [1.0, -1.0]^T$ with target label $y = 1.0$:</p>
+        <ol>
+          <li>Compute the hidden pre-activations $\mathbf{z}^{(1)}$, hidden activations $\mathbf{h}^{(1)}$, and output prediction $\hat{y}$.</li>
+          <li>Compute the output error $\delta^{(2)} = \frac{\partial \mathcal{L}}{\partial \hat{y}}$ and parameter gradients $\frac{\partial \mathcal{L}}{\partial W^{(2)}}$ and $\frac{\partial \mathcal{L}}{\partial b^{(2)}}$.</li>
+          <li>Compute the hidden layer error $\boldsymbol{\delta}^{(1)}$ and input weight gradient matrix $\frac{\partial \mathcal{L}}{\partial W^{(1)}}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Backprop Hand Trace</div>
+
+        <p class="step"><strong>Step 1: Forward Pass:</strong><br>
+        Compute hidden pre-activation $\mathbf{z}^{(1)} = W^{(1)} \mathbf{x} + \mathbf{b}^{(1)}$:
+        $$\mathbf{z}^{(1)} = \begin{pmatrix} 0.5 & -0.5 \\ -1.0 & 1.0 \end{pmatrix} \begin{pmatrix} 1.0 \\ -1.0 \end{pmatrix} + \begin{pmatrix} 0.1 \\ -0.2 \end{pmatrix} = \begin{pmatrix} 0.5(1) - 0.5(-1) \\ -1.0(1) + 1.0(-1) \end{pmatrix} + \begin{pmatrix} 0.1 \\ -0.2 \end{pmatrix} = \begin{pmatrix} 1.0 + 0.1 \\ -2.0 - 0.2 \end{pmatrix} = \begin{pmatrix} 1.1 \\ -2.2 \end{pmatrix}$$
+        Apply ReLU:
+        $$\mathbf{h}^{(1)} = \operatorname{ReLU}(\mathbf{z}^{(1)}) = \begin{pmatrix} \max(0, 1.1) \\ \max(0, -2.2) \end{pmatrix} = \begin{pmatrix} 1.1 \\ 0.0 \end{pmatrix}$$
+        Notice that hidden unit 2 is inactive ($h_2 = 0$).<br>
+        Compute output prediction $\hat{y} = W^{(2)} \mathbf{h}^{(1)} + b^{(2)}$:
+        $$\hat{y} = \begin{pmatrix} 1.5 & -2.0 \end{pmatrix} \begin{pmatrix} 1.1 \\ 0.0 \end{pmatrix} + 0.5 = (1.5 \times 1.1) + (-2.0 \times 0.0) + 0.5 = 1.65 + 0.5 = \mathbf{2.15}$$</p>
+
+        <p class="step"><strong>Step 2: Output Layer Backward Pass:</strong><br>
+        Loss $\mathcal{L} = \frac{1}{2}(\hat{y} - y)^2 = \frac{1}{2}(2.15 - 1.0)^2 = \frac{1}{2}(1.15)^2 = 0.66125$.<br>
+        Output scalar error:
+        $$\delta^{(2)} = \frac{\partial \mathcal{L}}{\partial \hat{y}} = \hat{y} - y = 2.15 - 1.0 = +\mathbf{1.15}$$
+        Gradients for $W^{(2)}$ and $b^{(2)}$:
+        $$\frac{\partial \mathcal{L}}{\partial W^{(2)}} = \delta^{(2)} (\mathbf{h}^{(1)})^T = 1.15 \begin{pmatrix} 1.1 & 0.0 \end{pmatrix} = \begin{pmatrix} 1.265 & 0.000 \end{pmatrix}$$
+        $$\frac{\partial \mathcal{L}}{\partial b^{(2)}} = \delta^{(2)} = +\mathbf{1.15}$$</p>
+
+        <p class="step"><strong>Step 3: Hidden Layer Backward Pass:</strong><br>
+        Backpropagate error through the output weights:
+        $$\mathbf{g}^{(1)} = (W^{(2)})^T \delta^{(2)} = \begin{pmatrix} 1.5 \\ -2.0 \end{pmatrix} (1.15) = \begin{pmatrix} 1.725 \\ -2.300 \end{pmatrix}$$
+        Multiply element-wise by the derivative of the activation function $g'(\mathbf{z}^{(1)})$:
+        $$g'(z_1) = \mathbb{I}(1.1 &gt; 0) = 1, \quad g'(z_2) = \mathbb{I}(-2.2 &gt; 0) = 0$$
+        $$\boldsymbol{\delta}^{(1)} = \mathbf{g}^{(1)} \odot g'(\mathbf{z}^{(1)}) = \begin{pmatrix} 1.725 \times 1 \\ -2.300 \times 0 \end{pmatrix} = \begin{pmatrix} 1.725 \\ 0.000 \end{pmatrix}$$
+        Now compute weight gradient $\frac{\partial \mathcal{L}}{\partial W^{(1)}} = \boldsymbol{\delta}^{(1)} \mathbf{x}^T$:
+        $$\frac{\partial \mathcal{L}}{\partial W^{(1)}} = \begin{pmatrix} 1.725 \\ 0.000 \end{pmatrix} \begin{pmatrix} 1.0 & -1.0 \end{pmatrix} = \begin{pmatrix} 1.725 & -1.725 \\ 0.000 & 0.000 \end{pmatrix}$$
+        $$\frac{\partial \mathcal{L}}{\partial \mathbf{b}^{(1)}} = \boldsymbol{\delta}^{(1)} = \begin{pmatrix} 1.725 \\ 0.000 \end{pmatrix}$$
+        Notice that the entire second row of gradients for hidden unit 2 is identically zero because the ReLU was inactive during forward evaluation.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.2.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.2.4</span>
+        <span class="difficulty difficulty-medium">Level 2 • Algorithmic Tracing</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A hidden neuron in a convolutional neural network has current weights $\mathbf{w} = [0.5, -0.5]^T$ and bias $b = -2.0$. The neuron processes a mini-batch of 4 training samples:
+        $$\mathbf{x}_1 = (1, 1)^T, \quad \mathbf{x}_2 = (2, 0)^T, \quad \mathbf{x}_3 = (0, 2)^T, \quad \mathbf{x}_4 = (1, 2)^T$$</p>
+        <ol>
+          <li>Calculate the pre-activation $z_i = \mathbf{w}^T \mathbf{x}_i + b$ for all 4 samples.</li>
+          <li>If the neuron uses standard $\operatorname{ReLU}$, show that the gradient $\nabla_{\mathbf{w}} \mathcal{L}_i = \mathbf{0}$ for every sample in the mini-batch, explaining the mechanism of a <strong>Dying ReLU</strong>.</li>
+          <li>If the neuron is replaced with a $\operatorname{LeakyReLU}$ with negative slope $\alpha = 0.01$ and incoming error signal $\delta_i = -1.0$ for all samples, compute the non-zero parameter update $\Delta \mathbf{w} = -\eta \frac{1}{B} \sum_{i=1}^B \nabla_{\mathbf{w}} \mathcal{L}_i$ for learning rate $\eta = 0.1$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Algorithmic Diagnosis</div>
+
+        <p class="step"><strong>Step 1: Compute Pre-Activations $z_i$:</strong><br>
+        For each sample $\mathbf{x} = (x_1, x_2)^T$: $z = 0.5 x_1 - 0.5 x_2 - 2.0$:
+        <ul>
+          <li>$\mathbf{x}_1 = (1, 1)$: $z_1 = 0.5(1) - 0.5(1) - 2.0 = 0.0 - 2.0 = \mathbf{-2.0}$</li>
+          <li>$\mathbf{x}_2 = (2, 0)$: $z_2 = 0.5(2) - 0.5(0) - 2.0 = 1.0 - 2.0 = \mathbf{-1.0}$</li>
+          <li>$\mathbf{x}_3 = (0, 2)$: $z_3 = 0.5(0) - 0.5(2) - 2.0 = -1.0 - 2.0 = \mathbf{-3.0}$</li>
+          <li>$\mathbf{x}_4 = (1, 2)$: $z_4 = 0.5(1) - 0.5(2) - 2.0 = -0.5 - 2.0 = \mathbf{-2.5}$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2: Diagnosis of the Dying ReLU:</strong><br>
+        Notice that $z_i &lt; 0$ for <strong>all 4 samples in the mini-batch</strong>.<br>
+        Under standard ReLU:
+        $$h_i = \max(0, z_i) = 0.0, \quad g'(z_i) = 0.0, \quad \forall i \in \{1, 2, 3, 4\}$$
+        The gradient of the loss with respect to weights is:
+        $$\nabla_{\mathbf{w}} \mathcal{L}_i = \frac{\partial \mathcal{L}}{\partial h_i} \cdot g'(z_i) \cdot \mathbf{x}_i = \frac{\partial \mathcal{L}}{\partial h_i} \cdot (0) \cdot \mathbf{x}_i = \mathbf{0}$$
+        The average gradient over the batch is $\frac{1}{4} \sum_{i=1}^4 \mathbf{0} = \mathbf{0}$.<br>
+        Because the gradient is identically zero, gradient descent cannot modify $\mathbf{w}$ or $b$. The neuron will output zero for all future samples and never recover—it is permanently dead.</p>
+
+        <p class="step"><strong>Step 3: Recovery via LeakyReLU:</strong><br>
+        Under LeakyReLU with $\alpha = 0.01$, for $z_i &lt; 0$, the derivative is $g'(z_i) = 0.01$.<br>
+        With incoming error $\delta_i = -1.0$:
+        $$\nabla_{\mathbf{w}} \mathcal{L}_i = \delta_i \cdot \alpha \cdot \mathbf{x}_i = (-1.0)(0.01) \mathbf{x}_i = -0.01 \mathbf{x}_i$$
+        Compute average sample vector $\bar{\mathbf{x}}$:
+        $$\bar{\mathbf{x}} = \frac{1}{4} \left[ \begin{pmatrix} 1 \\ 1 \end{pmatrix} + \begin{pmatrix} 2 \\ 0 \end{pmatrix} + \begin{pmatrix} 0 \\ 2 \end{pmatrix} + \begin{pmatrix} 1 \\ 2 \end{pmatrix} \right] = \frac{1}{4} \begin{pmatrix} 4 \\ 5 \end{pmatrix} = \begin{pmatrix} 1.00 \\ 1.25 \end{pmatrix}$$
+        Average gradient: $\nabla_{\mathbf{w}} \mathcal{L} = -0.01 \begin{pmatrix} 1.00 \\ 1.25 \end{pmatrix} = \begin{pmatrix} -0.0100 \\ -0.0125 \end{pmatrix}$.<br>
+        Parameter update with $\eta = 0.1$:
+        $$\Delta \mathbf{w} = -\eta \nabla_{\mathbf{w}} \mathcal{L} = -0.1 \begin{pmatrix} -0.0100 \\ -0.0125 \end{pmatrix} = +\begin{pmatrix} 0.00100 \\ 0.00125 \end{pmatrix}$$
+        $$\Delta b = -\eta (-0.01) = +0.0010$$
+        The non-zero gradient allows the optimizer to slowly push the bias up ($b \leftarrow -2.0 + 0.001$), eventually reviving the neuron into the active $z &gt; 0$ regime.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.2.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.2.5</span>
+        <span class="difficulty difficulty-hard">Level 3 • FAANG / Research Lab Proof</span>
         <span class="company-tag company-google">Google</span>
         <span class="company-tag company-meta">Meta</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Prove mathematically that the maximum value of the derivative of the Sigmoid function $\sigma'(z)$ is exactly $0.25$. Using this result, prove why an $L$-layer deep neural network initialized with Sigmoid activations suffers from the <strong>Vanishing Gradient Problem</strong>, and calculate the maximum gradient magnitude reaching layer 1 when $L = 10$.</p>
+        <p><strong>QUESTION:</strong> The Gaussian Error Linear Unit (GELU) is defined as:
+        $$\operatorname{GELU}(x) = x \Phi(x) = x \int_{-\infty}^x \frac{1}{\sqrt{2\pi}} e^{-t^2/2} dt$$
+        Where $\Phi(x)$ is the cumulative distribution function of the standard normal distribution $\mathcal{N}(0, 1)$.</p>
+        <ol>
+          <li>Prove that as $x \to +\infty$, $\operatorname{GELU}(x) \sim x$ (asymptotically identical to linear ReLU).</li>
+          <li>Prove that as $x \to -\infty$, $\operatorname{GELU}(x) \to 0$.</li>
+          <li>Derive the analytic first derivative $\frac{d}{dx} \operatorname{GELU}(x)$ in terms of $\Phi(x)$ and the Gaussian probability density $\phi(x) = \frac{1}{\sqrt{2\pi}} e^{-x^2/2}$.</li>
+          <li>Show that $\operatorname{GELU}(x)$ is non-monotonic and exhibits a negative local minimum in the negative regime.</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+        <div class="solution-label">✓ Complete First-Principles Mathematical Derivation</div>
 
-        <p class="step"><strong>Step 1: Maximize the Sigmoid Derivative:</strong><br>
-        Recall the derivative identity:
-        $$\sigma'(z) = \sigma(z)(1 - \sigma(z))$$
-        Let $u = \sigma(z)$. Since the range of the sigmoid function is $u \in (0, 1)$, we can rewrite this as a scalar function of $u$:
-        $$f(u) = u(1 - u) = u - u^2$$
-        To find the maximum, take the derivative with respect to $u$ and set to zero:
-        $$\frac{df}{du} = 1 - 2u = 0 \implies u^* = \frac{1}{2}$$
-        Verify the second derivative: $\frac{d^2 f}{du^2} = -2 &lt; 0$ (strictly concave maximum).<br>
-        Substitute $u^* = \frac{1}{2}$ back into $f(u)$:
-        $$f_{\max} = \left(\frac{1}{2}\right) \left(1 - \frac{1}{2}\right) = \frac{1}{4} = \mathbf{0.25}$$
-        Since $\sigma(z) = 0.5$ occurs at $z = 0$, the maximum derivative occurs at the origin:</p>
-        $$\max_{z \in \mathbb{R}} \sigma'(z) = \sigma'(0) = \mathbf{0.25}$$
+        <p class="step"><strong>Step 1: Asymptotic Behavior as $x \to +\infty$:</strong><br>
+        As $x \to +\infty$, the cumulative normal probability approaches 1:
+        $$\lim_{x \to \infty} \Phi(x) = \int_{-\infty}^\infty \frac{1}{\sqrt{2\pi}} e^{-t^2/2} dt = 1.0$$
+        Therefore:
+        $$\lim_{x \to \infty} \frac{\operatorname{GELU}(x)}{x} = \lim_{x \to \infty} \Phi(x) = 1.0 \implies \operatorname{GELU}(x) \sim x \quad \text{as } x \to +\infty$$</p>
 
-        <p class="step"><strong>Step 2: Vanishing Gradients Across $L$ Layers:</strong><br>
-        In an $L$-layer network, the chain rule expresses the gradient of the loss $\mathcal{L}$ with respect to the initial hidden layer activation $h_1$ as the product of $L$ Jacobian matrices:
-        $$\frac{\partial \mathcal{L}}{\partial h_1} = \frac{\partial \mathcal{L}}{\partial h_L} \prod_{l=1}^{L-1} \left( W^{(l+1)T} \text{diag}(\sigma'(z_{l+1})) \right)$$
-        Even if weights are initialized such that $\|W\|_2 \approx 1$, the scalar derivative factor at every layer is bounded by:
-        $$\sigma'(z) \le 0.25 = \frac{1}{4}$$
-        Across $L = 10$ layers:
-        $$\text{Gradient Scale} \le (0.25)^{10} = \left( \frac{1}{4} \right)^{10} = \frac{1}{1,048,576} \approx \mathbf{9.54 \times 10^{-7}}$$
-        <strong>Result: In a 10-layer network, the error signal reaching the first layer is diminished by a factor of over ONE MILLION!</strong> The initial layers learn at a rate of practically zero, paralyzing representation learning. This single mathematical reality halted deep neural network research until Hinton and Nair introduced the non-saturating <strong>ReLU</strong> activation.</p>
+        <p class="step"><strong>Step 2: Asymptotic Behavior as $x \to -\infty$:</strong><br>
+        Using Mill's ratio bound for Gaussian tails: as $x \to -\infty$, $\Phi(x) \sim \frac{\phi(x)}{|x|} = \frac{e^{-x^2/2}}{\sqrt{2\pi} |x|}$.<br>
+        Evaluating the product $x \Phi(x)$:
+        $$\lim_{x \to -\infty} x \Phi(x) = \lim_{x \to -\infty} \left[ -|x| \frac{e^{-x^2/2}}{\sqrt{2\pi} |x|} \right] = \lim_{x \to -\infty} \left[ -\frac{1}{\sqrt{2\pi}} e^{-x^2/2} \right] = 0.0$$
+        The exponential decay of $e^{-x^2/2}$ completely crushes the linear factor $x$, yielding $\lim_{x \to -\infty} \operatorname{GELU}(x) = 0$.</p>
+
+        <p class="step"><strong>Step 3: Compute the Analytic First Derivative:</strong><br>
+        By the product rule:
+        $$\frac{d}{dx} \operatorname{GELU}(x) = \frac{d}{dx} [x \Phi(x)] = \left(\frac{d}{dx} x\right) \Phi(x) + x \left(\frac{d}{dx} \Phi(x)\right)$$
+        By the Fundamental Theorem of Calculus, the derivative of the CDF $\Phi(x)$ is the PDF $\phi(x)$:
+        $$\frac{d}{dx} \Phi(x) = \phi(x) = \frac{1}{\sqrt{2\pi}} e^{-x^2/2}$$
+        Substituting:
+        $$\frac{d}{dx} \operatorname{GELU}(x) = \Phi(x) + x \phi(x) = \Phi(x) + \frac{x}{\sqrt{2\pi}} e^{-x^2/2}$$</p>
+
+        <p class="step"><strong>Step 4: Non-Monotonicity and Local Minimum:</strong><br>
+        Evaluate the derivative at $x = 0$:
+        $$\operatorname{GELU}'(0) = \Phi(0) + 0 \cdot \phi(0) = 0.50 + 0 = 0.50 &gt; 0$$
+        Evaluate the derivative at $x = -1$:
+        $$\Phi(-1) \approx 0.1587, \quad \phi(-1) = \frac{1}{\sqrt{2\pi}} e^{-0.5} \approx 0.2420$$
+        $$\operatorname{GELU}'(-1) = 0.1587 + (-1)(0.2420) = 0.1587 - 0.2420 = -0.0833 &lt; 0$$
+        By the Intermediate Value Theorem, since $\operatorname{GELU}'(-1) &lt; 0$ and $\operatorname{GELU}'(0) &gt; 0$, there must exist a stationary point $x^* \in (-1, 0)$ where $\operatorname{GELU}'(x^*) = 0$.<br>
+        Numerically solving $\Phi(x) + x \phi(x) = 0$ yields:
+        $$x^* \approx -0.7518 \implies \operatorname{GELU}(x^*) \approx -0.1699$$
+        Because $\operatorname{GELU}(x)$ dips below zero to $-0.17$ before rising, it is <strong>non-monotonic</strong>. This curvature creates a smooth probabilistic stochastic regularization effect, explaining why GELU outperforms monotonic ReLU in self-attention transformers. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.2.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.2.6</span>
+        <span class="difficulty difficulty-hard">Level 3 • FAANG / Research Lab Proof</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Prove by mathematical induction that an $L$-layer neural network with arbitrary intermediate layer dimensions $d_0, d_1, \dots, d_L$ using purely affine activation functions $g_l(\mathbf{z}) = A_l \mathbf{z} + \mathbf{c}_l$ (where $A_l \in \mathbb{R}^{d_l \times d_l}, \mathbf{c}_l \in \mathbb{R}^{d_l}$) is mathematically identical to a single-layer affine model $\hat{\mathbf{y}} = W^* \mathbf{x} + \mathbf{b}^*$. Derive the explicit algebraic formulas for $W^*$ and $\mathbf{b}^*$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Proof by Mathematical Induction</div>
+
+        <p class="step"><strong>Step 1: Formal Definition of Layer Operations:</strong><br>
+        Let $\mathbf{h}^{(0)} = \mathbf{x} \in \mathbb{R}^{d_0}$.<br>
+        For each layer $l \in \{1, \dots, L\}$, the linear transformation followed by the affine activation is:
+        $$\mathbf{z}^{(l)} = W^{(l)} \mathbf{h}^{(l-1)} + \mathbf{b}^{(l)}$$
+        $$\mathbf{h}^{(l)} = A_l \mathbf{z}^{(l)} + \mathbf{c}_l = A_l \left( W^{(l)} \mathbf{h}^{(l-1)} + \mathbf{b}^{(l)} \right) + \mathbf{c}_l = \left( A_l W^{(l)} \right) \mathbf{h}^{(l-1)} + \left( A_l \mathbf{b}^{(l)} + \mathbf{c}_l \right)$$
+        Define the combined layer matrix $\tilde{W}^{(l)} = A_l W^{(l)} \in \mathbb{R}^{d_l \times d_{l-1}}$ and combined bias $\tilde{\mathbf{b}}^{(l)} = A_l \mathbf{b}^{(l)} + \mathbf{c}_l \in \mathbb{R}^{d_l}$.<br>
+        Then the layer transition is strictly affine: $\mathbf{h}^{(l)} = \tilde{W}^{(l)} \mathbf{h}^{(l-1)} + \tilde{\mathbf{b}}^{(l)}$.</p>
+
+        <p class="step"><strong>Step 2: Base Case ($L = 1$):</strong><br>
+        $$\mathbf{h}^{(1)} = \tilde{W}^{(1)} \mathbf{x} + \tilde{\mathbf{b}}^{(1)}$$
+        Setting $W^* = \tilde{W}^{(1)}$ and $\mathbf{b}^* = \tilde{\mathbf{b}}^{(1)}$, the base case holds trivially.</p>
+
+        <p class="step"><strong>Step 3: Inductive Hypothesis:</strong><br>
+        Assume that for layer $k \ge 1$, the activation $\mathbf{h}^{(k)}$ can be expressed as a single affine transformation of the input $\mathbf{x}$:
+        $$\mathbf{h}^{(k)} = W_{(k)}^* \mathbf{x} + \mathbf{b}_{(k)}^*$$
+        Where $W_{(k)}^* = \prod_{j=1}^k \tilde{W}^{(j)}$ and $\mathbf{b}_{(k)}^* = \sum_{j=1}^k \left( \prod_{m=j+1}^k \tilde{W}^{(m)} \right) \tilde{\mathbf{b}}^{(j)}$.</p>
+
+        <p class="step"><strong>Step 4: Inductive Step ($k \to k + 1$):</strong><br>
+        Evaluating layer $k+1$:
+        $$\mathbf{h}^{(k+1)} = \tilde{W}^{(k+1)} \mathbf{h}^{(k)} + \tilde{\mathbf{b}}^{(k+1)}$$
+        Substitute the inductive hypothesis for $\mathbf{h}^{(k)}$:
+        $$\mathbf{h}^{(k+1)} = \tilde{W}^{(k+1)} \left( W_{(k)}^* \mathbf{x} + \mathbf{b}_{(k)}^* \right) + \tilde{\mathbf{b}}^{(k+1)} = \left( \tilde{W}^{(k+1)} W_{(k)}^* \right) \mathbf{x} + \left( \tilde{W}^{(k+1)} \mathbf{b}_{(k)}^* + \tilde{\mathbf{b}}^{(k+1)} \right)$$
+        Define:
+        $$W_{(k+1)}^* = \tilde{W}^{(k+1)} W_{(k)}^* = \tilde{W}^{(k+1)} \left( \prod_{j=1}^k \tilde{W}^{(j)} \right) = \prod_{j=1}^{k+1} \tilde{W}^{(j)}$$
+        $$\mathbf{b}_{(k+1)}^* = \tilde{W}^{(k+1)} \mathbf{b}_{(k)}^* + \tilde{\mathbf{b}}^{(k+1)}$$
+        This is an exact affine equation $\mathbf{h}^{(k+1)} = W_{(k+1)}^* \mathbf{x} + \mathbf{b}_{(k+1)}^*$, completing the inductive step.</p>
+
+        <p class="step"><strong>Step 5: Conclusion:</strong><br>
+        By mathematical induction, for any finite depth $L$, the entire network computes:
+        $$\hat{\mathbf{y}} = \mathbf{h}^{(L)} = W^* \mathbf{x} + \mathbf{b}^*$$
+        Where $W^* = \tilde{W}^{(L)} \tilde{W}^{(L-1)} \dots \tilde{W}^{(1)}$ and $\mathbf{b}^*$ is an accumulated constant vector.<br>
+        The composition of any number of affine transformations is strictly affine, proving that depth provides zero expressive advantage without non-linear activations. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.2.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.2.7</span>
+        <span class="difficulty difficulty-medium">Level 4 • Conceptual Trap MCQ</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A deep MLP uses the Sigmoid activation $\sigma(z) = \frac{1}{1 + e^{-z}}$ across all hidden layers. During training with standard stochastic gradient descent, the optimizer exhibits severe "zig-zagging" dynamics where weights oscillate wildly and training progresses extremely slowly. What is the precise mathematical root cause?</p>
+        <ol type="A">
+          <li>The Sigmoid function's output range is strictly positive ($\sigma(z) \in (0, 1)$), which forces all input signals $h_i$ to subsequent weights to be positive, constraining all weight gradients $\frac{\partial \mathcal{L}}{\partial w_j} = \delta h_j$ entering a neuron to share the exact same sign (all positive or all negative).</li>
+          <li>The Sigmoid function has infinite condition numbers at the origin, causing IEEE-754 floating-point underflow.</li>
+          <li>The Sigmoid derivative is discontinuous at $z = 0$, causing subgradient chattering across the decision boundary.</li>
+          <li>Sigmoid networks violate the Gauss-Markov theorem, causing residual errors to become autocorrelated across depth.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A • Comprehensive Gradient Mechanics Analysis</div>
+
+        <p class="step"><strong>Detailed Analysis:</strong><br>
+        Consider a neuron in layer $l$ computing $z = \sum_{j=1}^m w_j h_j + b$, where $h_j$ are the activations from layer $l-1$.<br>
+        The gradient of the loss $\mathcal{L}$ with respect to weight $w_j$ is given by the chain rule:
+        $$\frac{\partial \mathcal{L}}{\partial w_j} = \frac{\partial \mathcal{L}}{\partial z} \cdot \frac{\partial z}{\partial w_j} = \delta \cdot h_j$$
+        Where $\delta = \frac{\partial \mathcal{L}}{\partial z}$ is the error signal backpropagated from downstream layers.<br>
+        Because layer $l-1$ uses the Sigmoid activation:
+        $$h_j = \sigma(z_j) \in (0, 1) \implies \mathbf{h_j &gt; 0 \quad \text{for all } j \in \{1, \dots, m\}}$$
+        Every single component of the vector $\mathbf{h}$ is strictly positive!<br>
+        Now look at the gradient vector $\nabla_{\mathbf{w}} \mathcal{L} = \delta \cdot \mathbf{h}$:
+        <ul>
+          <li>If downstream error $\delta &gt; 0$, then $\frac{\partial \mathcal{L}}{\partial w_j} &gt; 0$ for <strong>every single weight $w_j$</strong> in that neuron. All weights must simultaneously decrease!</li>
+          <li>If downstream error $\delta &lt; 0$, then $\frac{\partial \mathcal{L}}{\partial w_j} &lt; 0$ for <strong>every single weight $w_j$</strong>. All weights must simultaneously increase!</li>
+        </ul>
+        The gradient descent update cannot move in an arbitrary direction (e.g., increasing $w_1$ while decreasing $w_2$); it is restricted to moving strictly along the all-positive or all-negative orthants.<br>
+        To reach an optimal solution where $w_1$ must increase and $w_2$ must decrease, gradient descent is forced to take an inefficient, high-frequency "zig-zag" path, dragging down optimization speed by orders of magnitude.<br>
+        <strong>Fix:</strong> Use <strong>zero-centered</strong> activation functions (like $\tanh$, where $h \in (-1, +1)$) or apply <strong>Batch Normalization / Layer Normalization</strong> to ensure hidden activations have mean zero.</p>
+
+        <p class="step"><strong>Why Other Options are False:</strong><br>
+        <ul>
+          <li><strong>B is FALSE:</strong> At $z = 0$, $\sigma(0) = 0.5$ and $\sigma'(0) = 0.25$, which are well-conditioned, normal floating-point numbers.</li>
+          <li><strong>C is FALSE:</strong> The Sigmoid function is smooth and infinitely differentiable ($C^\infty$); it has no discontinuities anywhere on the real line.</li>
+          <li><strong>D is FALSE:</strong> The Gauss-Markov theorem applies to linear OLS regression assumptions, not the backpropagation gradient dynamics of neural activations.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 3.2.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 3.2.8</span>
+        <span class="difficulty difficulty-hard">Level 4 • Assertion-Reasoning &amp; Universal Approximation Trap</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-openai">OpenAI</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> Evaluate the following Assertion and Reason regarding neural network approximation and optimization:</p>
+        <p><strong>Assertion (A):</strong> While Cybenko's Universal Approximation Theorem proves that a 2-layer MLP with finite width can approximate any continuous function on a compact domain with arbitrary precision, it provides zero theoretical guarantee that gradient descent will ever successfully learn those weights from finite data.</p>
+        <p><strong>Reason (R):</strong> Cybenko's theorem is a non-constructive existential proof from functional analysis establishing the density of the neural hypothesis space in $C(K)$, which is completely uncoupled from the non-convex optimization landscape, local minima traps, saddle points, and polynomial sample complexity required by algorithmic learning theory.</p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct mathematical explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A • Comprehensive Functional Analysis Explanation</div>
+
+        <p class="step"><strong>Detailed Analysis:</strong><br>
+        <strong>Analysis of Reason (R):</strong><br>
+        Cybenko (1989) utilized the <strong>Hahn-Banach Theorem</strong> and the <strong>Riesz Representation Theorem</strong> from functional analysis. His proof demonstrates that if the linear span of functions $\{\sigma(\mathbf{w}^T \mathbf{x} + b)\}$ were not dense in the Banach space $C(K)$, there would exist a non-zero signed regular Borel measure $\mu$ orthogonal to the subspace ($\int \sigma(\mathbf{w}^T \mathbf{x} + b) d\mu = 0$ for all $\mathbf{w}, b$). He then proved that this implies $\mu = 0$, establishing density.<br>
+        Notice what this proof establishes: <em>There exist parameters $(W, \mathbf{b})$ somewhere in $\mathbb{R}^M$ that satisfy the approximation error.</em><br>
+        The theorem does <strong>not</strong> provide:
+        <ol>
+          <li>A polynomial algorithm to find those weights.</li>
+          <li>A bound on how many training samples are needed (sample complexity).</li>
+          <li>A guarantee that the loss surface $\mathcal{L}(W)$ is convex (in fact, neural network loss surfaces are highly non-convex, NP-hard to optimize globally).</li>
+        </ol>
+        Thus, Reason (R) is completely true.</p>
+
+        <p class="step"><strong>Analysis of Assertion (A):</strong><br>
+        In practice, many architectures that theoretically possess universal approximation capability fail completely to train when optimized with gradient descent. For instance:
+        <ul>
+          <li>A single hidden layer with $10^9$ neurons might theoretically approximate a complex physics simulation, but gradient descent will immediately stall in a poor local minimum or overfit catastrophically.</li>
+          <li>Deep architectures (ResNets, Transformers) are chosen not because they approximate functions that 2-layer MLPs cannot, but because they have <strong>favorable optimization landscapes</strong> (via residual connections and normalization) that allow SGD and Adam to actually discover good generalizing minima!</li>
+        </ul>
+        Thus, (A) is true, and (R) provides the exact mathematical justification. $\blacksquare$</p>
       </div>
     </div>
 
     <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 3.2: Modern Activation Function Arena</h3>
+    <h3>5. Production Code Lab 3.2: Modern Activation Function Arena</h3>
     <p>Below is a clean, production-grade PyTorch module implementing Sigmoid, ReLU, GELU, and SwiGLU alongside dead-neuron monitoring.</p>
 
     <div class="code-lab">
       <div class="code-lab-header">Code Lab 3.2 — SwiGLU &amp; Modern Activations from Scratch</div>
       <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part3_neural_networks/ch32_activations/activations_scratch.py" target="_blank">🔗 View in GitHub: part3_neural_networks/ch32_activations/activations_scratch.py</a></p>
-<pre><code>import torch
+<pre><code>import math
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 class GELUScratch(nn.Module):
-    """Gaussian Error Linear Unit via tanh approximation"""
+    """
+    Gaussian Error Linear Unit (GELU) via high-accuracy tanh approximation:
+    GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+    """
     def forward(self, x):
         return 0.5 * x * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
 
 class SwiGLU(nn.Module):
     """
     SwiGLU Feed-Forward Block as used in Meta LLaMA 3
-    SwiGLU(x) = (xW_gate * sigmoid(xW_gate)) * (xW_up)
+    SwiGLU(x) = (SiLU(x * W_gate) * (x * W_up)) * W_down
     """
     def __init__(self, in_features, hidden_features):
         super().__init__()
@@ -161,17 +545,18 @@ class SwiGLU(nn.Module):
         self.w_down = nn.Linear(hidden_features, in_features, bias=False)
 
     def forward(self, x):
-        # Swish(x * W_gate) * (x * W_up)
+        # Swish/SiLU gating
         gate = F.silu(self.w_gate(x))
         up = self.w_up(x)
         return self.w_down(gate * up)
 
 if __name__ == "__main__":
-    import math
     x = torch.randn(4, 512)
+    # Scale intermediate dimension to 8/3 * 512 = 1365 -> round to 1376
     swiglu = SwiGLU(in_features=512, hidden_features=1376)
     out = swiglu(x)
-    print(f"SwiGLU Forward Pass Output Shape: {out.shape} (Matches Input!)")</code></pre>
+    print(f"SwiGLU Input Shape  : {x.shape}")
+    print(f"SwiGLU Output Shape : {out.shape} (Preserved for residual connection!)")</code></pre>
     </div>
 
     <!-- SECTION 6: END OF CHAPTER PROJECT -->

@@ -5,7 +5,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 2.6</span>
     <h2 class="chapter-title">Support Vector Machines &amp; Kernel Methods</h2>
-    <span class="chapter-subtitle">Geometric Margins, Slack Variables, Mercer's Theorem &amp; Infinite-Dimensional Hilbert Spaces</span>
+    <span class="chapter-subtitle">Geometric Margins, Soft-Margin KKT Box Constraints, Mercer's Theorem &amp; SMO</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -19,79 +19,372 @@
 
     <!-- SECTION 1: THE MAXIMUM MARGIN PRINCIPLE -->
     <h3>1. The Maximum Margin Principle</h3>
-    <p>Given a linearly separable dataset of positive and negative points, there exist infinitely many hyperplanes that achieve 100% training accuracy. Which one is optimal?</p>
+    <p>Given a linearly separable dataset of positive ($y_i = +1$) and negative ($y_i = -1$) points, there exist infinitely many separating hyperplanes that achieve $100\%$ training accuracy. Which one is mathematically optimal?</p>
 
-    <p>Vladimir Vapnik proved through Statistical Learning Theory (Vapnik-Chervonenkis / VC dimension) that the hyperplane that <strong>maximizes the geometric margin</strong> to the closest training points minimizes the structural risk bound on unseen data.</p>
-
-    <h4>Derivation of the Geometric Margin</h4>
-    <p>The perpendicular Euclidean distance from any point $\mathbf{x}_i$ to the decision boundary $\mathbf{w}^T \mathbf{x} + b = 0$ is:</p>
-    $$\text{distance}(\mathbf{x}_i) = \frac{|\mathbf{w}^T \mathbf{x}_i + b|}{\|\mathbf{w}\|_2}$$
-    <p>Scaling both $\mathbf{w}$ and $b$ by any positive scalar does not change the hyperplane. We choose the canonical scaling such that the closest data points (the <strong>Support Vectors</strong>) satisfy $|\mathbf{w}^T \mathbf{x}_i + b| = 1$:</p>
-    $$y_i (\mathbf{w}^T \mathbf{x}_i + b) \ge 1, \quad \forall i=1,\dots,N$$
-    <p>The total margin width between the positive support vectors ($\mathbf{w}^T \mathbf{x}_+ + b = +1$) and negative support vectors ($\mathbf{w}^T \mathbf{x}_- + b = -1$) is:</p>
-    $$\text{Margin} = \frac{\mathbf{w}^T (\mathbf{x}_+ - \mathbf{x}_-)}{\|\mathbf{w}\|_2} = \frac{(\mathbf{w}^T \mathbf{x}_+ + b) - (\mathbf{w}^T \mathbf{x}_- + b)}{\|\mathbf{w}\|_2} = \frac{1 - (-1)}{\|\mathbf{w}\|_2} = \frac{2}{\|\mathbf{w}\|_2}$$
-    <p>Maximizing $\frac{2}{\|\mathbf{w}\|_2}$ is mathematically equivalent to minimizing the inverse squared norm $\frac{1}{2} \|\mathbf{w}\|_2^2$!</p>
-
-    <!-- SECTION 2: SOFT MARGIN & HINGE LOSS -->
-    <h3>2. Soft-Margin SVM &amp; Hinge Loss</h3>
-    <p>When data is noisy or overlapping, no strict separating boundary exists. We introduce non-negative <strong>Slack Variables</strong> $\xi_i \ge 0$, which allow data points to violate the margin boundary at a linear cost:</p>
-    $$\min_{\mathbf{w}, b, \boldsymbol{\xi}} \frac{1}{2} \|\mathbf{w}\|_2^2 + C \sum_{i=1}^N \xi_i \quad \text{subject to } y_i(\mathbf{w}^T \mathbf{x}_i + b) \ge 1 - \xi_i, \quad \xi_i \ge 0$$
-    <p>Where $C &gt; 0$ is the regularization parameter governing the bias-variance trade-off (large $C$ forces narrow margins with fewer errors; small $C$ permits wider margins with more violations).</p>
-
-    <div class="key-insight">
-      <p><strong>The Hinge Loss Formulation:</strong><br>
-      Notice that if a point satisfies the margin ($y_i (\mathbf{w}^T \mathbf{x}_i + b) \ge 1$), the minimal slack is $\xi_i = 0$. If it violates the margin, $\xi_i = 1 - y_i(\mathbf{w}^T \mathbf{x}_i + b)$. Thus, $\xi_i = \max(0, 1 - y_i(\mathbf{w}^T \mathbf{x}_i + b))$.<br>
-      The SVM primal problem is mathematically identical to minimizing <strong>Hinge Loss</strong> with $L_2$ weight decay:</p>
-      $$\min_{\mathbf{w}, b} \frac{1}{N} \sum_{i=1}^N \underbrace{\max\left(0, 1 - y_i(\mathbf{w}^T \mathbf{x}_i + b)\right)}_{\text{Hinge Loss}} + \frac{1}{2C} \|\mathbf{w}\|_2^2$$
+    <!-- FIGURE 2.6.1: svm_margin_kernel_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="svm_margin_kernel_diagram.png" alt="Figure 2.6.1: svm_margin_kernel_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 2.6.1:</em> Support Vector Machines. Left: The maximum margin separating hyperplane maximizing margin width $2/\|\mathbf{w}\|_2$ bounded by support vectors. Right: The Kernel Trick implicitly projecting non-linearly separable circular data into higher-dimensional space where a linear hyperplane achieves complete separation.
+      </p>
     </div>
 
-    <!-- SECTION 3: THE KERNEL TRICK -->
-    <h3>3. The Kernel Trick: Mapping into Infinite Dimensions</h3>
-    <p>When data is fundamentally non-linear (e.g. concentric circles), linear hyperplanes fail. The classical solution is to project features into a higher-dimensional space using mapping $\phi(\mathbf{x})$. However, computing $\phi(\mathbf{x})$ explicitly can be computationally impossible (e.g. mapping 100 features into all polynomial combinations of degree 10 produces $10^{13}$ dimensions!).</p>
 
-    <p><strong>The Kernel Trick</strong> solves this: because the SVM dual optimization problem depends <em>only</em> on inner products $\phi(\mathbf{x}_i)^T \phi(\mathbf{x}_j)$, we can replace the inner product with a <strong>Kernel function $K(\mathbf{x}_i, \mathbf{x}_j)$</strong> that computes the result directly in low-dimensional space without ever evaluating the high-dimensional coordinates!</p>
+    <p>Vladimir Vapnik proved through Statistical Learning Theory (VC Dimension) that the hyperplane that <strong>maximizes the geometric margin</strong> to the closest training points minimizes the structural risk upper bound on unseen data.</p>
 
-    <h4>The Radial Basis Function (RBF / Gaussian) Kernel</h4>
-    $$K(\mathbf{x}, \mathbf{z}) = \exp\left( -\gamma \|\mathbf{x} - \mathbf{z}\|_2^2 \right), \quad \gamma = \frac{1}{2\sigma^2}$$
+    <h4>Functional vs. Geometric Margin</h4>
+    <ul>
+      <li><strong>Functional Margin:</strong> $\hat{\gamma}_i = y_i (\mathbf{w}^T \mathbf{x}_i + b)$. If $\hat{\gamma}_i &gt; 0$, sample $i$ is correctly classified. However, scaling $\mathbf{w} \to 2\mathbf{w}$ and $b \to 2b$ doubles $\hat{\gamma}_i$ without changing the physical decision boundary.</li>
+      <li><strong>Geometric Margin:</strong> The true perpendicular Euclidean distance from point $\mathbf{x}_i$ to the hyperplane $\mathbf{w}^T \mathbf{x} + b = 0$:
+      $$\gamma_i = \frac{y_i (\mathbf{w}^T \mathbf{x}_i + b)}{\|\mathbf{w}\|_2}$$
+      The geometric margin is scale-invariant: scaling $\mathbf{w}$ and $b$ by scalar $c &gt; 0$ cancels out in the numerator and denominator.</li>
+    </ul>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Support Vector Machines</h3>
+    <p>To eliminate scale ambiguity, we enforce the canonical normalization such that the closest data points (the <strong>Support Vectors</strong>) satisfy $|\mathbf{w}^T \mathbf{x}_i + b| = 1$:</p>
+    $$y_i (\mathbf{w}^T \mathbf{x}_i + b) \ge 1, \quad \forall i=1,\dots,N$$
+    <p>The total geometric margin between the positive margin boundary ($\mathbf{w}^T \mathbf{x}_+ + b = +1$) and negative margin boundary ($\mathbf{w}^T \mathbf{x}_- + b = -1$) is:</p>
+    $$\text{Margin Width} = \frac{\mathbf{w}^T (\mathbf{x}_+ - \mathbf{x}_-)}{\|\mathbf{w}\|_2} = \frac{(\mathbf{w}^T \mathbf{x}_+ + b) - (\mathbf{w}^T \mathbf{x}_- + b)}{\|\mathbf{w}\|_2} = \frac{1 - (-1)}{\|\mathbf{w}\|_2} = \frac{2}{\|\mathbf{w}\|_2}$$
+    <p>Maximizing the margin $\frac{2}{\|\mathbf{w}\|_2}$ is identical to minimizing $\frac{1}{2} \|\mathbf{w}\|_2^2$, formulating the <strong>Hard-Margin Primal Problem</strong>:</p>
+    $$\min_{\mathbf{w}, b} \frac{1}{2} \|\mathbf{w}\|_2^2 \quad \text{subject to } y_i (\mathbf{w}^T \mathbf{x}_i + b) \ge 1, \quad \forall i=1,\dots,N$$
 
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 2.6.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
-        <span class="company-tag company-google">Google</span>
-        <span class="company-tag company-meta">Meta</span>
+    <!-- SECTION 2: SOFT MARGIN & KKT BOX CONSTRAINTS -->
+    <h3>2. Soft-Margin SVM, Slack Variables &amp; The Box Constraint</h3>
+    <p>Real-world data is rarely strictly linearly separable due to noise and class overlap. We introduce non-negative <strong>Slack Variables</strong> $\xi_i \ge 0$, which allow samples to penetrate the margin boundary at a linear penalty:</p>
+    $$\min_{\mathbf{w}, b, \boldsymbol{\xi}} \frac{1}{2} \|\mathbf{w}\|_2^2 + C \sum_{i=1}^N \xi_i \quad \text{subject to } y_i (\mathbf{w}^T \mathbf{x}_i + b) \ge 1 - \xi_i, \quad \xi_i \ge 0$$
+    <p>where $C &gt; 0$ is the regularization parameter governing the bias-variance trade-off (large $C$ penalizes slack heavily, producing narrow margins; small $C$ permits more violations, producing wider margins).</p>
+
+    <div class="proof-box">
+      <h4>KKT Optimality &amp; The Support Vector Classification</h4>
+      <p>Associate Lagrange multipliers $\alpha_i \ge 0$ with the margin constraints and $\mu_i \ge 0$ with the non-negativity constraints $\xi_i \ge 0$:</p>
+      $$\mathcal{L}(\mathbf{w}, b, \boldsymbol{\xi}, \boldsymbol{\alpha}, \boldsymbol{\mu}) = \frac{1}{2} \|\mathbf{w}\|_2^2 + C \sum_{i=1}^N \xi_i - \sum_{i=1}^N \alpha_i \left[ y_i (\mathbf{w}^T \mathbf{x}_i + b) - 1 + \xi_i \right] - \sum_{i=1}^N \mu_i \xi_i$$
+      <p>KKT Stationarity conditions:</p>
+      $$\nabla_{\mathbf{w}} \mathcal{L} = \mathbf{w} - \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i = \mathbf{0} \implies \mathbf{w} = \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i$$
+      $$\frac{\partial \mathcal{L}}{\partial b} = -\sum_{i=1}^N \alpha_i y_i = 0 \implies \sum_{i=1}^N \alpha_i y_i = 0$$
+      $$\frac{\partial \mathcal{L}}{\partial \xi_i} = C - \alpha_i - \mu_i = 0 \implies \alpha_i + \mu_i = C$$
+      <p>Because $\mu_i \ge 0$, this enforces the famous <strong>Box Constraint</strong> on the dual multipliers:</p>
+      $$0 \le \alpha_i \le C$$
+      <p>Complementary slackness conditions: $\alpha_i [y_i(\mathbf{w}^T \mathbf{x}_i + b) - 1 + \xi_i] = 0$ and $\mu_i \xi_i = 0$. This categorizes every training sample into three distinct geometric regimes:</p>
+      <ol>
+        <li><strong>Non-Support Vectors ($\alpha_i = 0$):</strong> $\mu_i = C \implies \xi_i = 0$. The point lies strictly on the correct side of the margin ($y_i(\mathbf{w}^T \mathbf{x}_i + b) &gt; 1$). It exerts zero influence on the decision boundary.</li>
+        <li><strong>Free (Unbounded) Support Vectors ($0 &lt; \alpha_i &lt; C$):</strong> $\mu_i &gt; 0 \implies \xi_i = 0$. The point lies <strong>directly on the margin boundary</strong> ($y_i(\mathbf{w}^T \mathbf{x}_i + b) = 1$). These points strictly define the orientation of $\mathbf{w}$ and are used to compute the exact intercept $b$!</li>
+        <li><strong>Bounded Support Vectors ($\alpha_i = C$):</strong> $\mu_i = 0 \implies \xi_i &gt; 0$. The point violates the margin boundary (either inside the margin $0 &lt; \xi_i \le 1$, or misclassified $\xi_i &gt; 1$).</li>
+      </ol>
+    </div>
+
+    <!-- SECTION 3: KERNEL TRICK & MERCER'S THEOREM -->
+    <h3>3. The Kernel Trick &amp; Mercer's Theorem</h3>
+    <p>In the dual formulation, the optimization objective and inference prediction depend <em>strictly on inner products</em>:</p>
+    $$\hat{y}(\mathbf{x}) = \text{sign}\left( \mathbf{w}^T \mathbf{x} + b \right) = \text{sign}\left( \sum_{i=1}^N \alpha_i y_i (\mathbf{x}_i \cdot \mathbf{x}) + b \right)$$
+    <p>To learn non-linear boundaries, we map inputs into a higher-dimensional feature space $\phi(\mathbf{x})$. <strong>The Kernel Trick</strong> replaces the inner product $\phi(\mathbf{x}_i)^T \phi(\mathbf{x}_j)$ with a direct function $K(\mathbf{x}_i, \mathbf{x}_j)$ evaluated in input space without ever calculating the high-dimensional coordinates!</p>
+
+    <div class="real-world-box">
+      <h4>🏆 Mercer's Theorem (1909)</h4>
+      <p>A continuous, symmetric kernel function $K: \mathcal{X} \times \mathcal{X} \to \mathbb{R}$ corresponds to a valid inner product in some Reproducing Kernel Hilbert Space (RKHS) $\langle \phi(\mathbf{x}), \phi(\mathbf{z}) \rangle$ if and only if the Kernel Gram Matrix $\mathbf{K} \in \mathbb{R}^{N \times N}$ is <strong>Positive Semi-Definite</strong> for all finite datasets:</p>
+      $$\mathbf{c}^T \mathbf{K} \mathbf{c} = \sum_{i=1}^N \sum_{j=1}^N c_i c_j K(\mathbf{x}_i, \mathbf{x}_j) \ge 0, \quad \forall \mathbf{c} \in \mathbb{R}^N$$
+    </div>
+
+    <h4>Canonical Machine Learning Kernels</h4>
+    <ul>
+      <li><strong>Linear Kernel:</strong> $K(\mathbf{x}, \mathbf{z}) = \mathbf{x}^T \mathbf{z}$.</li>
+      <li><strong>Polynomial Kernel:</strong> $K(\mathbf{x}, \mathbf{z}) = (\mathbf{x}^T \mathbf{z} + c)^d$. Expands into all monomial interaction terms up to degree $d$.</li>
+      <li><strong>Radial Basis Function (RBF / Gaussian) Kernel:</strong>
+      $$K(\mathbf{x}, \mathbf{z}) = \exp\left( -\gamma \|\mathbf{x} - \mathbf{z}\|_2^2 \right), \quad \gamma = \frac{1}{2\sigma^2}$$
+      Projects data into an <strong>infinite-dimensional Hilbert space</strong> ($\mathbb{R}^\infty$).</li>
+    </ul>
+
+    <!-- SECTION 4: PRACTICE SUITE -->
+    <div class="practice-set">
+      <div class="practice-header">
+        <span class="set-tag">Complete 4-Tier Practice Suite</span>
+        <h3 class="set-title">Chapter 2.6 Practice Problems &amp; Tier-1 AI Challenge Suite</h3>
+        <p class="set-desc">Master SVM geometric margins, soft-margin KKT box constraints, Mercer's theorem, and kernel proofs through step-by-step numerical drills, algorithmic traces, FAANG research proofs, and conceptual trap questions.</p>
       </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> Prove mathematically that the 1D Radial Basis Function (RBF) Kernel $K(x, z) = \exp\left( -\frac{(x - z)^2}{2} \right)$ corresponds to an inner product in an <strong>infinite-dimensional Hilbert space</strong> $\phi(x)^T \phi(z)$.</p>
+
+      <!-- TIER 1: NUMERICAL WARM-UP -->
+      <h4>Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.6.1</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In a 2D linearly separable problem, the optimal separating hyperplane has parameter vector $\mathbf{w} = [3.0, 4.0]^T$ and bias $b = -2.0$.</p>
+          <ol>
+            <li>Calculate the Euclidean norm $\|\mathbf{w}\|_2$.</li>
+            <li>Compute the total geometric margin width $\frac{2}{\|\mathbf{w}\|_2}$.</li>
+            <li>For a new query point $\mathbf{x}_{\text{query}} = [2.0, 1.0]^T$, compute its functional margin and its perpendicular distance to the decision boundary.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
+
+          <p class="step"><strong>Step 1: Compute Euclidean Norm:</strong>
+          $$\|\mathbf{w}\|_2 = \sqrt{3.0^2 + 4.0^2} = \sqrt{9 + 16} = \sqrt{25} = \mathbf{5.0}$$</p>
+
+          <p class="step"><strong>Step 2: Compute Total Margin Width:</strong>
+          $$\text{Margin Width} = \frac{2}{\|\mathbf{w}\|_2} = \frac{2}{5.0} = \mathbf{0.40}$$</p>
+
+          <p class="step"><strong>Step 3: Distance of Query Point:</strong><br>
+          Evaluate linear combination:
+          $$\mathbf{w}^T \mathbf{x}_{\text{query}} + b = (3.0 \times 2.0) + (4.0 \times 1.0) - 2.0 = 6.0 + 4.0 - 2.0 = \mathbf{+8.0}$$
+          Perpendicular distance:
+          $$d = \frac{|\mathbf{w}^T \mathbf{x}_{\text{query}} + b|}{\|\mathbf{w}\|_2} = \frac{8.0}{5.0} = \mathbf{1.60}$$
+          <strong>Result: The query point lies $1.60$ units from the decision boundary, well outside the positive margin ($1.60 &gt; 0.20$).</strong></p>
+        </div>
       </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
 
-        <p class="step"><strong>Step 1: Expand the Squared Difference:</strong>
-        $$(x - z)^2 = x^2 - 2xz + z^2 \implies -\frac{(x - z)^2}{2} = -\frac{x^2}{2} + xz - \frac{z^2}{2}$$
-        Substitute into the exponential:
-        $$K(x, z) = \exp\left(-\frac{x^2}{2}\right) \cdot \exp(xz) \cdot \exp\left(-\frac{z^2}{2}\right)$$</p>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.6.2</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-meta">Meta</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Two vectors in $\mathbb{R}^2$ are $\mathbf{x} = [1.0, 3.0]^T$ and $\mathbf{z} = [4.0, -1.0]^T$.
+          Compute:
+          <ol>
+            <li>The Linear Kernel $K_{\text{lin}}(\mathbf{x}, \mathbf{z}) = \mathbf{x}^T \mathbf{z}$.</li>
+            <li>The Polynomial Kernel of degree $d = 2$ with $c = 1.0$: $K_{\text{poly}}(\mathbf{x}, \mathbf{z}) = (\mathbf{x}^T \mathbf{z} + 1)^2$.</li>
+            <li>The RBF Kernel with $\gamma = 0.1$: $K_{\text{RBF}}(\mathbf{x}, \mathbf{z}) = \exp(-\gamma \|\mathbf{x} - \mathbf{z}\|_2^2)$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
 
-        <p class="step"><strong>Step 2: Apply the Taylor Series Expansion of the Exponential Function:</strong><br>
-        Recall the infinite Taylor series: $e^u = \sum_{k=0}^\infty \frac{u^k}{k!} = 1 + u + \frac{u^2}{2!} + \frac{u^3}{3!} + \dots$<br>
-        Applying this to $e^{xz}$:
-        $$\exp(xz) = \sum_{k=0}^\infty \frac{(xz)^k}{k!} = \sum_{k=0}^\infty \frac{x^k z^k}{k!} = \sum_{k=0}^\infty \left( \frac{x^k}{\sqrt{k!}} \right) \left( \frac{z^k}{\sqrt{k!}} \right)$$</p>
+          <p class="step"><strong>Step 1: Linear Kernel:</strong>
+          $$K_{\text{lin}}(\mathbf{x}, \mathbf{z}) = (1.0 \times 4.0) + (3.0 \times -1.0) = 4.0 - 3.0 = \mathbf{1.0}$$</p>
 
-        <p class="step"><strong>Step 3: Factorize into an Infinite-Dimensional Inner Product:</strong>
-        $$K(x, z) = \sum_{k=0}^\infty \left[ \exp\left(-\frac{x^2}{2}\right) \frac{x^k}{\sqrt{k!}} \right] \left[ \exp\left(-\frac{z^2}{2}\right) \frac{z^k}{\sqrt{k!}} \right]$$
-        Define the infinite-dimensional feature map $\phi(x)$:
-        $$\phi(x) = \exp\left(-\frac{x^2}{2}\right) \begin{bmatrix} 1, & x, & \frac{x^2}{\sqrt{2!}}, & \frac{x^3}{\sqrt{3!}}, & \dots, & \frac{x^k}{\sqrt{k!}}, & \dots \end{bmatrix}^T \in \mathbb{R}^\infty$$
-        Then the kernel evaluation is the exact inner product of two infinite-dimensional vectors:
-        $$K(x, z) = \langle \phi(x), \phi(z) \rangle = \phi(x)^T \phi(z)$$
-        <strong>Q.E.D. The RBF kernel evaluates an inner product across an infinite polynomial feature space in $O(d)$ time and zero extra memory!</strong></p>
+          <p class="step"><strong>Step 2: Polynomial Kernel:</strong>
+          $$K_{\text{poly}}(\mathbf{x}, \mathbf{z}) = (1.0 + 1)^2 = 2^2 = \mathbf{4.0}$$</p>
+
+          <p class="step"><strong>Step 3: RBF Kernel:</strong><br>
+          Squared Euclidean distance:
+          $$\|\mathbf{x} - \mathbf{z}\|_2^2 = (1 - 4)^2 + (3 - (-1))^2 = (-3)^2 + (4)^2 = 9 + 16 = 25.0$$
+          Evaluate exponential with $\gamma = 0.1$:
+          $$K_{\text{RBF}} = \exp(-0.1 \times 25.0) = \exp(-2.5) \approx \mathbf{0.08208}$$</p>
+        </div>
+      </div>
+
+      <!-- TIER 2: APPLIED ENGINEERING & ALGORITHMIC TRACING -->
+      <h4>Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.6.3</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-apple">Apple</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> A Soft-Margin SVM with $C = 5.0$ is trained on a binary classification dataset. An inspection of the optimal dual multipliers $\boldsymbol{\alpha}^*$ and slack variables $\boldsymbol{\xi}^*$ reveals:</p>
+          <table style="margin: 10px 0;">
+            <tr><th>Sample $i$</th><th>$y_i$</th><th>Feature $\mathbf{x}_i$</th><th>Multiplier $\alpha_i^*$</th><th>Slack $\xi_i^*$</th></tr>
+            <tr><td>1</td><td>$+1$</td><td>$[2.0, 3.0]^T$</td><td>$0.0$</td><td>$0.0$</td></tr>
+            <tr><td>2</td><td>$+1$</td><td>$[1.0, 1.0]^T$</td><td>$2.5$</td><td>$0.0$</td></tr>
+            <tr><td>3</td><td>$-1$</td><td>$[0.0, 0.0]^T$</td><td>$2.5$</td><td>$0.0$</td></tr>
+            <tr><td>4</td><td>$-1$</td><td>$[1.0, 2.0]^T$</td><td>$5.0$</td><td>$1.5$</td></tr>
+          </table>
+          <ol>
+            <li>Classify each of the 4 samples as a Non-Support Vector, Free Support Vector, or Bounded Support Vector.</li>
+            <li>Compute the optimal weight vector $\mathbf{w}^* = \sum_{i=1}^4 \alpha_i^* y_i \mathbf{x}_i$.</li>
+            <li>Using Free Support Vector 2, compute the exact optimal bias $b^*$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Algorithmic Trace</div>
+
+          <p class="step"><strong>Step 1: Classify Points based on $\alpha_i^*$:</strong>
+          <ul>
+            <li>Sample 1 ($\alpha_1^* = 0.0$): <strong>Non-Support Vector</strong>. Strictly outside margin ($y_1(\mathbf{w}^T \mathbf{x}_1 + b) &gt; 1$).</li>
+            <li>Sample 2 ($0 &lt; \alpha_2^* = 2.5 &lt; C$): <strong>Free Support Vector</strong>. Lying exactly on positive margin boundary ($y_2(\mathbf{w}^T \mathbf{x}_2 + b) = 1$).</li>
+            <li>Sample 3 ($0 &lt; \alpha_3^* = 2.5 &lt; C$): <strong>Free Support Vector</strong>. Lying exactly on negative margin boundary ($y_3(\mathbf{w}^T \mathbf{x}_3 + b) = -1$).</li>
+            <li>Sample 4 ($\alpha_4^* = C = 5.0$): <strong>Bounded Support Vector</strong>. Violating the margin with slack $\xi_4 = 1.5$.</li>
+          </ul></p>
+
+          <p class="step"><strong>Step 2: Compute Weight Vector $\mathbf{w}^*$:</strong>
+          $$\mathbf{w}^* = \alpha_1 y_1 \mathbf{x}_1 + \alpha_2 y_2 \mathbf{x}_2 + \alpha_3 y_3 \mathbf{x}_3 + \alpha_4 y_4 \mathbf{x}_4$$
+          $$\mathbf{w}^* = 0 + (2.5)(+1) \begin{bmatrix} 1 \\ 1 \end{bmatrix} + (2.5)(-1) \begin{bmatrix} 0 \\ 0 \end{bmatrix} + (5.0)(-1) \begin{bmatrix} 1 \\ 2 \end{bmatrix}$$
+          $$\mathbf{w}^* = \begin{bmatrix} 2.5 \\ 2.5 \end{bmatrix} - \begin{bmatrix} 0 \\ 0 \end{bmatrix} - \begin{bmatrix} 5.0 \\ 10.0 \end{bmatrix} = \mathbf{\begin{bmatrix} -2.5 \\ -7.5 \end{bmatrix}}$$</p>
+
+          <p class="step"><strong>Step 3: Solve for Intercept $b^*$ using Free Support Vector 2:</strong><br>
+          For Sample 2 ($y_2 = +1, \mathbf{x}_2 = [1, 1]^T$):
+          $$y_2 (\mathbf{w}^{*T} \mathbf{x}_2 + b^*) = 1 \implies \mathbf{w}^{*T} \mathbf{x}_2 + b^* = 1$$
+          $$\mathbf{w}^{*T} \mathbf{x}_2 = (-2.5 \times 1) + (-7.5 \times 1) = -10.0$$
+          $$-10.0 + b^* = 1.0 \implies \mathbf{b^* = +11.0}$$
+          <strong>Result: $\mathbf{w}^* = [-2.5, -7.5]^T$ and $b^* = 11.0$.</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.6.4</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-amazon">Amazon</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In John Platt's <strong>Sequential Minimal Optimization (SMO)</strong> algorithm, we optimize two Lagrange multipliers $\alpha_1$ and $\alpha_2$ simultaneously while keeping all other multipliers fixed.
+          Given labels $y_1 = +1$ and $y_2 = -1$, and box constraint $C = 4.0$. The current multipliers are $\alpha_1^{(0)} = 1.0$ and $\alpha_2^{(0)} = 2.0$.
+          <ol>
+            <li>Express the linear equality constraint governing $\alpha_1$ and $\alpha_2$.</li>
+            <li>Compute the lower bound $L$ and upper bound $H$ used to clip $\alpha_2^{\text{new}}$ to satisfy the box constraints $0 \le \alpha_1, \alpha_2 \le C$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
+
+          <p class="step"><strong>Step 1: Equality Constraint:</strong><br>
+          The SVM dual constraint is $\sum_{i=1}^N \alpha_i y_i = 0$. Holding $\alpha_3, \dots, \alpha_N$ fixed:
+          $$\alpha_1 y_1 + \alpha_2 y_2 = -\sum_{i=3}^N \alpha_i y_i = k \quad (\text{constant})$$
+          With $y_1 = +1$ and $y_2 = -1$:
+          $$\alpha_1(1) + \alpha_2(-1) = k \implies \alpha_1 - \alpha_2 = k$$
+          Using current values $\alpha_1^{(0)} = 1.0$ and $\alpha_2^{(0)} = 2.0$:
+          $$k = 1.0 - 2.0 = -1.0 \implies \alpha_1 = \alpha_2 - 1.0$$</p>
+
+          <p class="step"><strong>Step 2: Determine Clipping Bounds for $\alpha_2$:</strong><br>
+          Both multipliers must satisfy the box constraints:
+          $$0 \le \alpha_2 \le C \quad \text{AND} \quad 0 \le \alpha_1 \le C$$
+          Substitute $\alpha_1 = \alpha_2 + k$:
+          $$0 \le \alpha_2 + k \le C \implies -k \le \alpha_2 \le C - k$$
+          Combine with $0 \le \alpha_2 \le C$:
+          $$L = \max(0, \ -k) = \max(0, \ -(-1.0)) = \max(0, 1.0) = \mathbf{1.0}$$
+          $$H = \min(C, \ C - k) = \min(4.0, \ 4.0 - (-1.0)) = \min(4.0, 5.0) = \mathbf{4.0}$$
+          <strong>Result: Any updated $\alpha_2^{\text{unc}}$ must be clipped into interval $[L, H] = [1.0, 4.0]$ to preserve dual feasibility!</strong></p>
+        </div>
+      </div>
+
+      <!-- TIER 3: FAANG / RESEARCH LAB CHALLENGES -->
+      <h4>Tier 3: FAANG &amp; Research Lab Challenges</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.6.5</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-google">Google DeepMind</span>
+          <span class="company-tag company-meta">Meta FAIR</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Prove mathematically that the 1D Radial Basis Function (RBF) Kernel:
+          $$K(x, z) = \exp\left( -\frac{(x - z)^2}{2} \right)$$
+          corresponds to an inner product in an <strong>infinite-dimensional Hilbert space</strong> $\phi(x)^T \phi(z)$. Explicitly construct the infinite feature mapping vector $\phi(x) \in \mathbb{R}^\infty$.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+          <p class="step"><strong>Step 1: Expand the Squared Euclidean Difference:</strong>
+          $$(x - z)^2 = x^2 - 2xz + z^2 \implies -\frac{(x - z)^2}{2} = -\frac{x^2}{2} + xz - \frac{z^2}{2}$$
+          Factorize the exponential:
+          $$K(x, z) = \exp\left(-\frac{x^2}{2}\right) \exp(xz) \exp\left(-\frac{z^2}{2}\right)$$</p>
+
+          <p class="step"><strong>Step 2: Apply the Taylor Series Expansion of the Exponential Function:</strong><br>
+          Recall the infinite Taylor series of $e^u$:
+          $$e^u = \sum_{k=0}^\infty \frac{u^k}{k!} = 1 + u + \frac{u^2}{2!} + \frac{u^3}{3!} + \dots$$
+          Applying this with $u = xz$:
+          $$\exp(xz) = \sum_{k=0}^\infty \frac{(xz)^k}{k!} = \sum_{k=0}^\infty \frac{x^k z^k}{k!} = \sum_{k=0}^\infty \left( \frac{x^k}{\sqrt{k!}} \right) \left( \frac{z^k}{\sqrt{k!}} \right)$$</p>
+
+          <p class="step"><strong>Step 3: Factorize into an Infinite-Dimensional Inner Product:</strong>
+          $$K(x, z) = \sum_{k=0}^\infty \left[ \exp\left(-\frac{x^2}{2}\right) \frac{x^k}{\sqrt{k!}} \right] \left[ \exp\left(-\frac{z^2}{2}\right) \frac{z^k}{\sqrt{k!}} \right]$$
+          Define the infinite-dimensional feature map $\phi(x)$:
+          $$\phi(x) = \exp\left(-\frac{x^2}{2}\right) \begin{bmatrix} 1, & x, & \frac{x^2}{\sqrt{2!}}, & \frac{x^3}{\sqrt{3!}}, & \dots, & \frac{x^k}{\sqrt{k!}}, & \dots \end{bmatrix}^T \in \mathbb{R}^\infty$$
+          Then the kernel is identically the inner product:
+          $$K(x, z) = \langle \phi(x), \phi(z) \rangle = \phi(x)^T \phi(z)$$
+          <strong>Q.E.D. The RBF kernel maps inputs into an infinite-dimensional polynomial basis, enabling infinite non-linear capacity in $\mathcal{O}(d)$ evaluation time!</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.6.6</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-openai">OpenAI</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Prove that the homogeneous quadratic polynomial kernel $K(\mathbf{x}, \mathbf{z}) = (\mathbf{x}^T \mathbf{z})^2$ for 2D vectors $\mathbf{x} = [x_1, x_2]^T$ and $\mathbf{z} = [z_1, z_2]^T$ satisfies <strong>Mercer's Theorem</strong> by explicitly constructing its feature mapping $\phi(\mathbf{x}) \in \mathbb{R}^3$.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+          <p class="step"><strong>Step 1: Expand the Algebraic Expression:</strong>
+          $$K(\mathbf{x}, \mathbf{z}) = (\mathbf{x}^T \mathbf{z})^2 = (x_1 z_1 + x_2 z_2)^2$$
+          $$= (x_1 z_1)^2 + 2 (x_1 z_1)(x_2 z_2) + (x_2 z_2)^2$$
+          $$= x_1^2 z_1^2 + 2 x_1 x_2 z_1 z_2 + x_2^2 z_2^2$$</p>
+
+          <p class="step"><strong>Step 2: Factorize into Inner Product:</strong>
+          $$K(\mathbf{x}, \mathbf{z}) = (x_1^2)(z_1^2) + (\sqrt{2} x_1 x_2)(\sqrt{2} z_1 z_2) + (x_2^2)(z_2^2)$$
+          Define the 3-dimensional feature map:
+          $$\phi(\mathbf{x}) = \begin{bmatrix} x_1^2 \\ \sqrt{2} x_1 x_2 \\ x_2^2 \end{bmatrix} \in \mathbb{R}^3$$
+          Then:
+          $$\phi(\mathbf{x})^T \phi(\mathbf{z}) = x_1^2 z_1^2 + 2 x_1 x_2 z_1 z_2 + x_2^2 z_2^2 = (\mathbf{x}^T \mathbf{z})^2 = K(\mathbf{x}, \mathbf{z})$$
+          <strong>Q.E.D. The kernel corresponds to an inner product in $\mathbb{R}^3$, proving Mercer's condition directly.</strong></p>
+        </div>
+      </div>
+
+      <!-- TIER 4: CONCEPTUAL TRAP MCQS -->
+      <h4>Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.6.7</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> What happens to the decision boundary and generalization performance of an RBF Support Vector Machine when the kernel bandwidth parameter $\gamma = \frac{1}{2\sigma^2}$ is set to an extremely large value ($\gamma \to \infty$)?</p>
+          <ol type="A">
+            <li>The decision boundary becomes linear, and the model severely underfits.</li>
+            <li>The kernel matrix becomes the identity matrix $\mathbf{K} \to \mathbf{I}$, each training sample forms an isolated Gaussian spike, and the model severely overfits.</li>
+            <li>The geometric margin increases to infinity, eliminating all support vectors.</li>
+            <li>The optimization problem becomes non-convex, causing SMO to oscillate.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: B</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of All Options:</strong>
+          <ul>
+            <li><strong>Option B is TRUE:</strong> $K(\mathbf{x}_i, \mathbf{x}_j) = \exp(-\gamma \|\mathbf{x}_i - \mathbf{x}_j\|^2)$. For any $i \neq j$, as $\gamma \to \infty$, $-\gamma \|\mathbf{x}_i - \mathbf{x}_j\|^2 \to -\infty \implies K(\mathbf{x}_i, \mathbf{x}_j) \to 0$. Meanwhile, $K(\mathbf{x}_i, \mathbf{x}_i) = e^0 = 1$. The Gram matrix becomes $\mathbf{K} = \mathbf{I}_N$. The decision boundary wraps tightly around each positive training point as an isolated needle-like island, causing catastrophic overfitting (high variance).</li>
+            <li><strong>Option A is FALSE:</strong> Small $\gamma \to 0$ makes the boundary flat/linear (underfitting).</li>
+            <li><strong>Option C is FALSE:</strong> Large $\gamma$ shrinks margin width toward zero.</li>
+            <li><strong>Option D is FALSE:</strong> The SVM dual remains strictly convex for any positive definite kernel.</li>
+          </ul></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.6.8</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-deepmind">DeepMind</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Consider the following Assertion (A) and Reason (R):</p>
+          <p><strong>Assertion (A):</strong> Standard Dual Kernel SVMs are virtually never used in modern industrial big-data pipelines with $N = 10,000,000$ samples, whereas Linear SVMs trained via Pegasos stochastic subgradient descent run efficiently on billions of samples.</p>
+          <p><strong>Reason (R):</strong> The dual SVM optimization problem requires storing and factorizing an $N \times N$ kernel matrix, which takes $\mathcal{O}(N^2)$ memory and $\mathcal{O}(N^3)$ computational time, requiring over 350 Terabytes of RAM for $N = 10^7$.</p>
+          <ol type="A">
+            <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+            <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+            <li>(A) is true, but (R) is false.</li>
+            <li>(A) is false, but (R) is true.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: A</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of Assertion &amp; Reason:</strong>
+          <ul>
+            <li><strong>Assertion (A) is TRUE:</strong> Dual kernel algorithms cannot scale beyond $N \approx 100,000$. Pegasos optimizes primal hinge loss directly in $\mathcal{O}(N)$ linear time per epoch.</li>
+            <li><strong>Reason (R) is TRUE:</strong> An $N \times N$ matrix for $N = 10^7$ has $10^{14}$ float entries $\times 4 \text{ bytes} = 400 \text{ Terabytes}$ of memory! Quadratic/cubic scaling makes dual kernel solvers impossible at web scale, directly explaining Assertion (A).</li>
+          </ul></p>
+        </div>
       </div>
     </div>
 
     <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 2.6: Pegasos Stochastic Subgradient SVM</h3>
+    <h3>5. Production Code Lab 2.6: Pegasos Stochastic Subgradient SVM</h3>
     <p>Below is an industrial implementation of the <strong>Pegasos</strong> (Primal Estimated sub-GrAdient SOlver for SVM) algorithm, training a linear Support Vector Machine in $O(N)$ time via stochastic subgradient descent.</p>
 
     <div class="code-lab">

@@ -9,9 +9,7 @@
   <div class="part-ornament">✦ ✦ ✦</div>
 </div>
 
-<!-- ======================================================================
-     CHAPTER 7.1 — BILLION-SCALE RECOMMENDATION SYSTEMS
-     ====================================================================== -->
+
 
 <!-- ======================================================================
      CHAPTER 7.1 — BILLION-SCALE RECOMMENDATION SYSTEMS
@@ -20,7 +18,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 7.1</span>
     <h2 class="chapter-title">Billion-Scale Recommendation Systems</h2>
-    <span class="chapter-subtitle">The Multi-Stage Funnel, Two-Tower Dual Encoders, Meta DLRM &amp; In-Batch Sampled Softmax</span>
+    <span class="chapter-subtitle">The Multi-Stage Funnel, Two-Tower Dual Encoders, Meta DLRM, All-to-All Communication &amp; LogQ Popularity De-biasing</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -32,20 +30,55 @@
   <div class="chapter-body">
     <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <!-- SECTION 1: THE SCALE CHALLENGE -->
-    <h3>1. The Scale Challenge of Modern Information Filtering</h3>
+    <!-- SECTION 1: THE MULTI-STAGE FUNNEL -->
+    <h3>1. The Industrial Multi-Stage Recommendation Funnel</h3>
     <p>On platforms like YouTube, TikTok, Instagram, and Netflix, the catalog contains <strong>hundreds of millions or billions of items</strong>, consumed by hundreds of millions of active users. Running a complex deep neural network over 1,000,000,000 items for every user interaction is physically impossible (requiring millions of GPU hours per second).</p>
 
-    <h4>The Industrial Multi-Stage Recommendation Funnel</h4>
-    <ol>
-      <li><strong>Stage 1: Candidate Generation (Retrieval):</strong> Slashes the catalog from <strong>1,000,000,000 items down to 1,000 candidates in &lt;10 ms</strong> using lightweight, highly scalable retrieval mechanisms (Two-Tower vector search, Graph walks, collaborative filtering). High recall is the primary metric.</li>
-      <li><strong>Stage 2: Scoring &amp; Ranking:</strong> Applies a heavy, complex deep neural network (e.g. Meta DLRM, DeepFM) computing fine-grained Click-Through Rate (CTR) and Watch-Time predictions over the 1,000 candidates in <strong>&lt;25 ms</strong>. High precision is the primary metric.</li>
-      <li><strong>Stage 3: Re-Ranking, Business Logic &amp; Diversity:</strong> Filters out previously seen items, enforces creator diversity, applies freshness boosting, and suppresses policy violations in <strong>&lt;5 ms</strong> before delivering the top 10 items to the user interface.</li>
-    </ol>
+    <div class="table-container" style="overflow-x: auto; margin: 1.5em 0;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em;">
+        <thead>
+          <tr style="background-color: #1b4965; color: #ffffff;">
+            <th style="padding: 10px; border: 1px solid #ccc;">Stage</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Input $\to$ Output Scale</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Latency SLA</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Architecture &amp; Objective</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Stage 1: Retrieval (Candidate Generation)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$10^9 \to 10^3\text{ items}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$&lt; 10\text{ ms}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Two-Tower Dual Encoders, ScaNN/HNSW MIPS vector search. High Recall@K.</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Stage 2: Scoring (Heavy Ranking)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$10^3 \to 50\text{ items}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$&lt; 25\text{ ms}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Meta DLRM, DeepFM, Transformer Cross-Networks. High GAUC, LogLoss on CTR.</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>Stage 3: Re-Ranking &amp; Diversity</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$50 \to 10\text{ items}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">$&lt; 5\text{ ms}$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Maximal Marginal Relevance (MMR), DPP, freshness boosting, deduplication.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-    <!-- SECTION 2: TWO-TOWER DUAL ENCODERS -->
+    <!-- SECTION 2: TWO-TOWER ARCHITECTURE -->
     <h3>2. Two-Tower Neural Networks (Google YouTube 2016, 2019)</h3>
     <p>How does Stage 1 retrieve 1,000 items from 1,000,000,000 candidates in under 10 milliseconds? The solution is the <strong>Two-Tower Neural Architecture</strong>:</p>
+
+    <!-- FIGURE 7.1.1: two_tower_recsys_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="two_tower_recsys_diagram.png" alt="Figure 7.1.1: two_tower_recsys_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 7.1.1:</em> Two-Tower deep retrieval architecture. The User/Query Tower and Item/Candidate Tower project disparate feature spaces into a shared $d$-dimensional embedding space, enabling sub-10ms candidate retrieval across billions of candidate items via Approximate Nearest Neighbor (HNSW) search.
+      </p>
+    </div>
+
 
     <div class="real-world-box">
       <h4>📐 Mathematical Formulation of the Two-Tower Architecture</h4>
@@ -65,67 +98,654 @@
       </ol>
     </div>
 
-    <!-- SECTION 3: IN-BATCH NEGATIVE SAMPLING -->
-    <h3>3. In-Batch Negative Sampling &amp; Sampled Softmax</h3>
-    <p>In recommendation training, we have positive interactions (videos watched), but true negative interactions (videos the user hated) are rarely explicit. If a user did not watch a video, did they dislike it, or was it simply never shown to them?</p>
+    <!-- SECTION 3: META DLRM -->
+    <h3>3. Meta DLRM: Hybrid Parallelism &amp; Feature Interactions</h3>
+    <p>While Two-Tower models excel at retrieval, they cannot model explicit cross-features (e.g. <code>user.device == item.target_os</code>). In Stage 2, platforms deploy <strong>Meta DLRM (Deep Learning Recommendation Model)</strong>:</p>
+    <ul>
+      <li><strong>Categorical Features:</strong> Millions of IDs (User ID, Video ID, Channel ID) map to giant <strong>Embedding Tables</strong> containing billions of parameters (often $200\text{ GB}$ to $1\text{ TB}$ of memory).</li>
+      <li><strong>Dense Numerical Features:</strong> Fed into a <strong>Bottom MLP</strong> producing a dense latent vector $\mathbf{x}_{\text{dense}} \in \mathbb{R}^D$.</li>
+      <li><strong>Feature Interaction Layer:</strong> Computes the pairwise dot products between the dense representation and all $K$ retrieved categorical embedding vectors:
+        $$\mathbf{z}_{i, j} = \mathbf{e}_i^T \mathbf{e}_j \quad \forall 0 \le i < j \le K$$
+        producing $\frac{K(K+1)}{2}$ interaction scalars, concatenated with $\mathbf{x}_{\text{dense}}$ and processed by the <strong>Top MLP</strong>.
+      </li>
+      <li><strong>Hybrid Parallelism Architecture:</strong> Because embedding tables are too massive to fit on one GPU, DLRM distributes tables across GPUs via <strong>Model Parallelism</strong>, while replicating the MLPs via <strong>Data Parallelism</strong>. The two halves communicate across NVLink via an <strong>All-to-All collective communication primitive</strong>.</li>
+    </ul>
 
-    <p>We treat unobserved items as negatives using <strong>In-Batch Negative Sampling</strong>. Within a mini-batch of $B$ positive pairs $\{(\mathbf{u}_i, \mathbf{v}_i)\}_{i=1}^B$, the item $\mathbf{v}_j$ ($j \neq i$) serves as a random negative for user $\mathbf{u}_i$!</p>
-
-    <p>The batch similarity matrix is computed via a single matrix multiplication:</p>
-    $$S = U \cdot V^T \in \mathbb{R}^{B \times B}, \quad \text{where } U, V \in \mathbb{R}^{B \times d}$$
-    <p>The diagonal elements $S_{i, i} = \mathbf{u}_i^T \mathbf{v}_i$ represent positive pairs, while all off-diagonal elements $S_{i, j}$ ($i \neq j$) represent negative pairs! The loss is standard multi-class cross-entropy with temperature $\tau$:</p>
+    <!-- SECTION 4: IN-BATCH NEGATIVE SAMPLING -->
+    <h3>4. In-Batch Negative Sampling &amp; LogQ De-biasing</h3>
+    <p>In recommendation training, true negative interactions (videos a user hated) are rarely explicit. We treat unobserved items as negatives using <strong>In-Batch Negative Sampling</strong>. In a mini-batch of $B$ positive pairs $\{(\mathbf{u}_i, \mathbf{v}_i)\}_{i=1}^B$, item $\mathbf{v}_j$ ($j \neq i$) serves as a negative for user $\mathbf{u}_i$:</p>
     $$\mathcal{L} = -\frac{1}{B} \sum_{i=1}^B \ln \frac{\exp(\mathbf{u}_i^T \mathbf{v}_i / \tau)}{\sum_{j=1}^B \exp(\mathbf{u}_i^T \mathbf{v}_j / \tau)}$$
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Recommendation Systems</h3>
+    <p><strong>The Popularity Bias Trap:</strong> Viral videos watched by 10% of users appear in 10% of training batches. Consequently, popular videos are sampled as negatives <strong>far more frequently</strong> than niche videos! The model penalizes popular items excessively.</p>
+    <p><strong>The LogQ Correction (Yi et al., Google 2019):</strong> Let $p_j$ be the marginal sampling frequency of item $j$. We subtract $\ln p_j$ from logits prior to Softmax:</p>
+    $$s'_{i, j} = \frac{\mathbf{u}_i^T \mathbf{v}_j}{\tau} - \ln p_j$$
+    <p>By subtracting $\ln p_j$, popular items receive a corrective positive offset during probability calculation, restoring unbiased maximum likelihood estimation across both viral and long-tail niche items!</p>
 
+    <!-- ======================================================================
+         SECTION 5: 4-TIER GRADED PRACTICE SUITE
+         ====================================================================== -->
+    <h3>4-Tier Graded Practice Suite — Billion-Scale Recommendation Systems</h3>
+    <p>Eight rigorous, step-by-step problems spanning hardware memory sizing, All-to-All bandwidth math, LogQ arithmetic, funnel latency traces, DLRM feature interaction traces, importance sampling proofs, MMR submodularity proofs, and false negative traps.</p>
+
+    <!-- TIER 1: NUMERICAL DRILLS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+    <!-- Problem 7.1.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 7.1.1</span>
         <span class="difficulty difficulty-hard">Hard</span>
         <span class="company-tag company-meta">Meta</span>
-        <span class="company-tag company-netflix">Netflix</span>
+        <span class="company-tag company-google">Google</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> You are designing Meta's Instagram Reels recommendation retrieval engine. The platform has $100,000,000$ active videos. Each video is represented by a $d = 128$ dimensional embedding in FP16 ($2 \text{ bytes}$). Calculate the exact RAM required to store the full index, and explain why naive in-batch negative sampling introduces severe <strong>Selection Bias (Popularity Bias)</strong> and how LogQ correction resolves it.</p>
+        <p><strong>QUESTION:</strong> You are architecting a Meta DLRM recommendation ranking cluster to serve an active catalog of items across billions of users. The model features 20 sparse categorical embedding tables:</p>
+        <ul>
+          <li><strong>4 Ultra-High Cardinality Tables</strong> (User ID, Video ID, Creator ID, Channel ID): Cardinality $C_1 = 50,000,000$ entities each, embedding dimension $D_1 = 128$.</li>
+          <li><strong>16 Medium Cardinality Tables</strong> (Device, Country, Language, Topic tags): Cardinality $C_2 = 2,000,000$ entities each, embedding dimension $D_2 = 64$.</li>
+        </ul>
+        <p><strong>Training &amp; Cluster Specifications:</strong></p>
+        <ul>
+          <li>Weights are stored in 16-bit half-precision (FP16, 2 bytes/param) for forward inference.</li>
+          <li>Training utilizes the Adam optimizer in mixed precision: requires FP32 master weights (4 bytes), first moment $m$ (4 bytes), second moment $v$ (4 bytes), plus FP16 gradients (2 bytes) = $14\text{ bytes per parameter}$ total training footprint.</li>
+          <li>Worker nodes are NVIDIA H100 SXM5 servers with $V_{\text{gpu}} = 80\text{ GB}$ VRAM. To avoid CUDA Out-Of-Memory (OOM) errors during backward propagation, system headroom limits usable memory per GPU to $70\%$ ($V_{\text{usable}} = 56\text{ GB}$).</li>
+          <li>Training mini-batch size is $B = 65,536$.</li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the total number of parameters in the 20 embedding tables.</li>
+          <li>Calculate the raw parameter footprint in Gigabytes, and the total memory required during distributed Adam training.</li>
+          <li>Determine the minimum number of NVIDIA H100 GPUs required to host the embedding tables during training.</li>
+          <li>Calculate the total tensor payload size in Megabytes exchanged across GPUs during the Model-Parallel to Data-Parallel All-to-All collective communication step for a mini-batch of $B = 65,536$.</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Architectural Solution</div>
+        <div class="solution-label">✓ Step-by-Step DLRM Sizing &amp; Communication Solution</div>
 
-        <p class="step"><strong>Step 1: RAM Calculation for 100M Video Index:</strong><br>
-        Raw vector memory:
-        $$\text{Memory} = 100 \times 10^6 \times 128 \times 2 \text{ bytes} = 25,600,000,000 \text{ bytes} \approx \mathbf{25.6 \text{ Gigabytes}}$$
-        An index of $25.6\text{ GB}$ fits comfortably in the RAM of a single high-memory cloud instance (e.g. AWS <code>r6i.xlarge</code> with 32GB RAM)!</p>
+        <p class="step"><strong>Step 1: Total Parameter Count:</strong><br>
+        For the 4 large tables:
+        $$P_{\text{large}} = 4 \times (C_1 \times D_1) = 4 \times (50 \times 10^6 \times 128) = 4 \times 6.4 \times 10^9 = 25.6 \times 10^9\text{ parameters}$$
+        For the 16 medium tables:
+        $$P_{\text{medium}} = 16 \times (C_2 \times D_2) = 16 \times (2 \times 10^6 \times 64) = 16 \times 1.28 \times 10^8 = 2.048 \times 10^9\text{ parameters}$$
+        Total parameters across all 20 tables:
+        $$P_{\text{total}} = 25.6 \times 10^9 + 2.048 \times 10^9 = \mathbf{27.648 \times 10^9\text{ parameters (27.648 Billion parameters)}}$$</p>
 
-        <p class="step"><strong>Step 2: The Popularity Bias in In-Batch Negatives:</strong><br>
-        In streaming batch sampling, a viral video watched by 10% of users appears in 10% of training batches. Consequently, the viral video is sampled as a negative <strong>far more frequently</strong> than niche videos! The model penalizes popular items excessively, artificially suppressing them in recommendations.</p>
+        <p class="step"><strong>Step 2: Memory Footprint (Inference &amp; Adam Training):</strong><br>
+        Raw model weights footprint (FP16, 2 bytes/param):
+        $$M_{\text{raw}} = 27.648 \times 10^9 \times 2\text{ bytes} = 55,296,000,000\text{ bytes} = \mathbf{55.296\text{ GB}}$$
+        Total memory footprint during mixed-precision Adam training ($14\text{ bytes/param}$):
+        $$M_{\text{train}} = 27.648 \times 10^9 \times 14\text{ bytes} = 387,072,000,000\text{ bytes} = \mathbf{387.072\text{ GB}}$$</p>
 
-        <p class="step"><strong>Step 3: The LogQ Correction (Yi et al., Google 2019):</strong><br>
-        Let $p_j$ be the marginal sampling frequency of item $j$. We subtract $\ln p_j$ from the logits prior to Softmax:</p>
-        $$S'_{i, j} = \frac{\mathbf{u}_i^T \mathbf{v}_j}{\tau} - \ln p_j$$
-        <p>By subtracting $\ln p_j$, popular items receive a corrective positive offset during probability calculation, restoring unbiased maximum likelihood estimation across both viral and long-tail niche items!</p>
+        <p class="step"><strong>Step 3: Minimum GPU Provisioning:</strong><br>
+        Usable memory per H100 GPU after 30% headroom deduction:
+        $$V_{\text{usable}} = 0.70 \times 80\text{ GB} = 56.0\text{ GB}$$
+        Minimum GPUs required:
+        $$N_{\text{GPUs}} = \left\lceil \frac{M_{\text{train}}}{V_{\text{usable}}} \right\rceil = \left\lceil \frac{387.072\text{ GB}}{56.0\text{ GB}} \right\rceil = \lceil 6.912 \rceil = \mathbf{8\text{ NVIDIA H100 GPUs}}$$
+        <em>Engineering insight: Exactly one 8-GPU HGX H100 server node is required to house the sparse embedding tables of this recommendation model!</em></p>
+
+        <p class="step"><strong>Step 4: All-to-All Communication Volume per Mini-Batch:</strong><br>
+        In DLRM, each sample gathers its embedding vectors from all 20 tables.<br>
+        Concatenated embedding dimension per sample:
+        $$D_{\text{sample}} = (4 \times D_1) + (16 \times D_2) = (4 \times 128) + (16 \times 64) = 512 + 1,024 = 1,536\text{ elements}$$
+        Data size per sample in FP16 (2 bytes):
+        $$S_{\text{sample}} = 1,536 \times 2\text{ bytes} = 3,072\text{ bytes} = 3.0\text{ KB}$$
+        For a mini-batch of $B = 65,536$ samples:
+        $$V_{\text{all-to-all}} = B \times S_{\text{sample}} = 65,536 \times 3,072\text{ bytes} = 201,326,592\text{ bytes} \approx \mathbf{201.33\text{ MB (192.0 MiB)}}$$
+        <em>At 100 training iterations per second, the inter-GPU All-to-All bandwidth demand is $20.13\text{ GB/sec}$, which is comfortably handled by NVLink 4.0 ($900\text{ GB/s}$ bidirectional bandwidth).</em></p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 7.1: Two-Tower Recommendation Model in PyTorch</h3>
-    <p>Below is a clean, production-grade PyTorch implementation of a Two-Tower Dual Encoder with in-batch negative cross-entropy loss.</p>
+    <!-- Problem 7.1.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-netflix">Netflix</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A Two-Tower retrieval model is trained using in-batch sampled softmax on a mini-batch of $B = 3$ users and items. The temperature is $\tau = 0.5$.</p>
+        <p>The raw dot-product similarity matrix $S = U V^T$ is:</p>
+        $$S = \begin{bmatrix}
+        0.80 & 0.60 & 0.20 \\
+        0.50 & 0.90 & 0.10 \\
+        0.70 & 0.40 & 0.85
+        \end{bmatrix}$$
+        <p>The item background sampling probabilities are $p = [0.60, 0.30, 0.10]$ (Item 1 is a viral video, Item 2 is moderately popular, Item 3 is a long-tail niche video).</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>For User 1 (Row 1), calculate the uncorrected softmax probabilities $P_{\text{uncorr}}(y = j \mid u_1)$ across the 3 items.</li>
+          <li>Compute the logarithmic sampling penalties $\ln p_j$ for each item to 4 decimal places.</li>
+          <li>Apply the LogQ correction: $s'_{i, j} = \frac{S_{i, j}}{\tau} - \ln p_j$. Calculate the corrected logits for User 1.</li>
+          <li>Calculate the LogQ-corrected softmax probabilities $P_{\text{corr}}(y = j \mid u_1)$ and demonstrate how LogQ resolves popularity bias.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step LogQ Correction Arithmetic</div>
+
+        <p class="step"><strong>Step 1: Uncorrected Softmax Probabilities for User 1:</strong><br>
+        Raw logits for User 1 scaled by temperature $\tau = 0.5$:
+        $$z_{1, j} = \frac{S_{1, j}}{\tau} = \frac{S_{1, j}}{0.5} = 2 \times S_{1, j}$$
+        $$z_{1, 1} = 2 \times 0.80 = 1.60$$
+        $$z_{1, 2} = 2 \times 0.60 = 1.20$$
+        $$z_{1, 3} = 2 \times 0.20 = 0.40$$
+        Exponentiating scaled logits:
+        $$e^{1.60} \approx 4.9530, \quad e^{1.20} \approx 3.3201, \quad e^{0.40} \approx 1.4918$$
+        Sum of exponentials:
+        $$\Sigma_{\text{uncorr}} = 4.9530 + 3.3201 + 1.4918 = 9.7649$$
+        Uncorrected probabilities:
+        $$P_{\text{uncorr}}(1) = \frac{4.9530}{9.7649} \approx \mathbf{0.5072} \quad (50.72\%)$$
+        $$P_{\text{uncorr}}(2) = \frac{3.3201}{9.7649} \approx \mathbf{0.3400} \quad (34.00\%)$$
+        $$P_{\text{uncorr}}(3) = \frac{1.4918}{9.7649} \approx \mathbf{0.1528} \quad (15.28\%)$$</p>
+
+        <p class="step"><strong>Step 2: Logarithmic Sampling Penalties:</strong><br>
+        Given marginal frequencies $p = [0.60, 0.30, 0.10]$:
+        $$\ln p_1 = \ln(0.60) \approx -0.5108$$
+        $$\ln p_2 = \ln(0.30) \approx -1.2040$$
+        $$\ln p_3 = \ln(0.10) \approx -2.3026$$</p>
+
+        <p class="step"><strong>Step 3: Corrected Logits Calculation:</strong><br>
+        The LogQ correction subtracts $\ln p_j$ from each logit:
+        $$s'_{1, j} = z_{1, j} - \ln p_j$$
+        $$s'_{1, 1} = 1.60 - (-0.5108) = 1.60 + 0.5108 = \mathbf{2.1108}$$
+        $$s'_{1, 2} = 1.20 - (-1.2040) = 1.20 + 1.2040 = \mathbf{2.4040}$$
+        $$s'_{1, 3} = 0.40 - (-2.3026) = 0.40 + 2.3026 = \mathbf{2.7026}$$
+        <em>Crucial Observation: Notice that because Item 3 is rare ($p_3 = 0.10$), $-\ln(p_3) = +2.3026$ adds a massive corrective boost, elevating Item 3's logit from the lowest ($0.40$) to the highest ($2.7026$)!</em></p>
+
+        <p class="step"><strong>Step 4: LogQ-Corrected Softmax Probabilities:</strong><br>
+        Exponentiating corrected logits:
+        $$e^{2.1108} \approx 8.2548$$
+        $$e^{2.4040} \approx 11.0674$$
+        $$e^{2.7026} \approx 14.9182$$
+        Sum of corrected exponentials:
+        $$\Sigma_{\text{corr}} = 8.2548 + 11.0674 + 14.9182 = 34.2404$$
+        Corrected probabilities:
+        $$P_{\text{corr}}(1) = \frac{8.2548}{34.2404} \approx \mathbf{0.2411} \quad (24.11\%)$$
+        $$P_{\text{corr}}(2) = \frac{11.0674}{34.2404} \approx \mathbf{0.3232} \quad (32.32\%)$$
+        $$P_{\text{corr}}(3) = \frac{14.9182}{34.2404} \approx \mathbf{0.4357} \quad (43.57\%)$$
+        <strong>Conclusion:</strong> In uncorrected training, the viral item's raw dot product dominated ($50.72\%$). The LogQ correction accounts for the fact that Item 1 appeared in the batch primarily due to high background popularity, whereas Item 3's co-occurrence with User 1 is a strong, genuine personalized preference signal, appropriately boosting Item 3's probability to $43.57\%$!</p>
+      </div>
+    </div>
+
+    <!-- TIER 2: APPLIED ENGINEERING TRACES -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+    <!-- Problem 7.1.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-tiktok">ByteDance (TikTok)</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An engineering team designs an end-to-end recommendation retrieval and ranking pipeline for an online video feed with 500,000,000 items. A client app requests recommendations with a strict p99 total latency SLA of $T_{\text{SLA}} \le 40.0\text{ ms}$.</p>
+        <p>The pipeline consists of three sequential stages:</p>
+        <ol>
+          <li><strong>Stage 1 (Two-Tower Vector Retrieval via ScaNN):</strong> Evaluates User Tower on GPU, executes MIPS search against 500M item index, retrieves top $K_1 = 1,000$ candidates.</li>
+          <li><strong>Stage 2 (DLRM Heavy Ranker):</strong> Fetches feature vectors from online feature store for the 1,000 candidates, evaluates DLRM neural network on GPU, scores CTR, selects top $K_2 = 50$ items.</li>
+          <li><strong>Stage 3 (Maximal Marginal Relevance Re-Ranking &amp; Deduplication):</strong> Applies greedy MMR diversification with trade-off parameter $\lambda = 0.65$ over the 50 items, filtering previously watched videos and selecting the final top $K_3 = 10$ items.</li>
+        </ol>
+        <p>Construct an engineering trace table detailing: (a) Stage name, (b) Hardware &amp; subsystem executing, (c) Input $\to$ Output candidate count, (d) Component latency breakdown, (e) Cumulative latency, and (f) Primary failure mode / mitigation strategy.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ End-to-End Recommendation Pipeline Trace Table</div>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Pipeline Stage</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Subsystem &amp; Hardware</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Candidate Volume</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Step Latency</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Cumulative Latency</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Failure Mode &amp; Mitigation</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1a. User Tower Inference</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Triton / TensorRT (NVIDIA L4)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1\text{ user context} \to 1\times 128\text{ vector}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$2.2\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$2.2\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">GPU context thrashing. Mitigated by persistent pinned CUDA streams.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1b. ScaNN Vector Search</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Distributed ScaNN (32-node CPU cluster)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$500,000,000 \to 1,000\text{ candidates}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$5.8\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$8.0\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Straggler worker node. Mitigated by hedged requests ($95\text{th}$ percentile timeout).</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2a. Feature Store Hydration</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Redis Cluster (MGET across 1000 items)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1,000\text{ item IDs} \to 1,000\text{ feature sets}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$4.5\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$12.5\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Redis hot-key network saturation. Mitigated by local client cache (TTL = 60s).</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2b. DLRM Scoring</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">NVIDIA H100 Tensor Core (Batch = 1000)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1,000 \to 50\text{ top candidates}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$14.0\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$26.5\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">PCIe batch transfer bottleneck. Mitigated by pre-allocating GPU pinned host buffers.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3a. Seen Video Filter</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">In-Memory Bloom Filter / Redis Set</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$50 \to 42\text{ unseen candidates}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1.1\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$27.6\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Bloom filter false positives suppressing fresh content. Calibrated at $p = 0.001$.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3b. MMR Diversification</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">C++ SIMD Vectorized Kernel</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$42 \to 10\text{ diversified items}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1.8\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$29.4\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Echo-chamber trap. Mitigated by MMR parameter $\lambda = 0.65$.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>4. JSON Serialization &amp; Network</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">API Gateway (Envoy / gRPC)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$10\text{ final items delivered to client}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$2.5\text{ ms}$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>31.9 ms (Well within 40ms SLA!)</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Mobile network packet loss. Mitigated by HTTP/2 stream multiplexing.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Problem 7.1.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Meta's DLRM architecture, dense numerical features are transformed by a Bottom MLP into a representation vector $\mathbf{v}_0 \in \mathbb{R}^D$, while $K$ categorical sparse features are mapped via embedding lookups into vectors $\mathbf{v}_1, \mathbf{v}_2, \dots, \mathbf{v}_K \in \mathbb{R}^D$. All vectors share dimension $D = 16$.</p>
+        <p>The Feature Interaction layer stacks these $K+1$ vectors into matrix $V \in \mathbb{R}^{(K+1) \times D}$ and computes the cross-feature dot product matrix:</p>
+        $$A = V V^T \in \mathbb{R}^{(K+1) \times (K+1)}$$
+        <p>Because $A$ is symmetric and self-interactions $A_{i, i} = \|\mathbf{v}_i\|^2$ are redundant with dense MLP activations, DLRM extracts *only* the strictly lower triangular elements $A_{i, j}$ for $0 \le j < i \le K$.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>For $K = 5$ sparse features, derive the exact number of unique pairwise interaction scalars $N_{\text{interact}}$ extracted from $A$.</li>
+          <li>Write the mathematical concatenation expression for the complete interaction output tensor $\mathbf{z}_{\text{out}}$ fed into the Top MLP, and compute its exact dimensionality.</li>
+          <li>Construct an algorithmic trace mapping pair indices $(i, j)$ to the flattened 1D index $k \in \{0, \dots, N_{\text{interact}}-1\}$ using standard row-major triangular linearization.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Algorithmic Feature Interaction Trace</div>
+
+        <p class="step"><strong>Step 1: Unique Pairwise Interaction Count:</strong><br>
+        The total number of vectors participating in the interaction is $M = K + 1$. For $K = 5$:
+        $$M = 5 + 1 = 6\text{ vectors } (\mathbf{v}_0, \mathbf{v}_1, \mathbf{v}_2, \mathbf{v}_3, \mathbf{v}_4, \mathbf{v}_5)$$
+        The number of strictly lower-triangular elements in an $M \times M$ matrix is:
+        $$N_{\text{interact}} = \frac{M(M - 1)}{2} = \frac{6 \times 5}{2} = \mathbf{15\text{ interaction scalars}}$$</p>
+
+        <p class="step"><strong>Step 2: Top MLP Input Tensor Formulation:</strong><br>
+        DLRM concatenates the original dense representation vector $\mathbf{v}_0 \in \mathbb{R}^D$ with the 15 flattened interaction scalars:
+        $$\mathbf{z}_{\text{out}} = \Big[ \mathbf{v}_0 \;\Vert\; \text{vec}\big(\{A_{i, j} \mid 0 \le j < i \le 5\}\big) \Big] \in \mathbb{R}^{D + N_{\text{interact}}}$$
+        For $D = 16$ and $N_{\text{interact}} = 15$:
+        $$\text{dim}(\mathbf{z}_{\text{out}}) = 16 + 15 = \mathbf{31\text{ scalar features}}$$
+        <em>This compact 31-dimensional representation captures all second-order multiplicative feature crossings with minimal memory footprint!</em></p>
+
+        <p class="step"><strong>Step 3: Triangular Linearization Mapping Trace Table:</strong><br>
+        The mapping formula for row-major strictly lower triangular indexing is:
+        $$\text{Index}(i, j) = \frac{i(i - 1)}{2} + j \quad \text{for } 0 \le j < i \le 5$$</p>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Flat Index ($k$)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Vector Pair $(i, j)$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Physical Semantics of Cross Feature</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Mathematical Operation</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(1, 0)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 1 $\times$ Dense Bottom MLP</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_1^T \mathbf{v}_0$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(2, 0)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 2 $\times$ Dense Bottom MLP</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_2^T \mathbf{v}_0$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(2, 1)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 2 $\times$ Sparse Feature 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_2^T \mathbf{v}_1$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$3$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(3, 0)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 3 $\times$ Dense Bottom MLP</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_3^T \mathbf{v}_0$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$4$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(3, 1)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 3 $\times$ Sparse Feature 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_3^T \mathbf{v}_1$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(3, 2)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 3 $\times$ Sparse Feature 2</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_3^T \mathbf{v}_2$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(4, 0)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 4 $\times$ Dense Bottom MLP</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_4^T \mathbf{v}_0$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$7$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(4, 1)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 4 $\times$ Sparse Feature 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_4^T \mathbf{v}_1$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$8$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(4, 2)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 4 $\times$ Sparse Feature 2</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_4^T \mathbf{v}_2$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$9$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(4, 3)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 4 $\times$ Sparse Feature 3</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_4^T \mathbf{v}_3$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$10$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(5, 0)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 5 $\times$ Dense Bottom MLP</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_5^T \mathbf{v}_0$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$11$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(5, 1)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 5 $\times$ Sparse Feature 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_5^T \mathbf{v}_1$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$12$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(5, 2)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 5 $\times$ Sparse Feature 2</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_5^T \mathbf{v}_2$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">$13$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(5, 3)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 5 $\times$ Sparse Feature 3</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_5^T \mathbf{v}_3$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;">$14$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(5, 4)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Sparse Feature 5 $\times$ Sparse Feature 4</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{v}_5^T \mathbf{v}_4$</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TIER 3: MATHEMATICAL PROOFS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 3: FAANG Tier-1 / Research Lab Mathematical Proofs</h4>
+
+    <!-- Problem 7.1.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.5</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In extreme multi-class classification and Two-Tower retrieval over a catalog of $N$ items ($N \gg 10^8$), computing the exact partition function $\sum_{j=1}^N \exp(s(u, v_j))$ is computationally intractable. To train the model, we draw a small subset of $K$ negative items from a proposal distribution $Q$ with probabilities $q(j) > 0$.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>State the full-catalog cross-entropy loss $\mathcal{L}_{\text{full}}(u, v_+)$ for positive interaction $(u, v_+)$.</li>
+          <li>Formulate the importance sampling estimator of the partition function $Z(u) = \sum_{j=1}^N \exp(s(u, v_j))$.</li>
+          <li>Prove that setting corrected logits $s'(u, v_j) = s(u, v_j) - \ln q(j)$ in the Sampled Softmax loss yields an asymptotically unbiased estimator of the true gradient $\nabla_\theta \mathcal{L}_{\text{full}}$ as sample size $K \to \infty$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Proof of LogQ Asymptotic Unbiasedness</div>
+
+        <p class="step"><strong>Step 1: Full-Catalog Cross-Entropy Loss:</strong><br>
+        For user vector $u$ and true positive item $v_+$:
+        $$\mathcal{L}_{\text{full}}(u, v_+) = -\ln P(y = + \mid u) = -s(u, v_+) + \ln \sum_{j=1}^N \exp(s(u, v_j))$$
+        The gradient with respect to model parameters $\theta$ is:
+        $$\nabla_\theta \mathcal{L}_{\text{full}} = -\nabla_\theta s(u, v_+) + \sum_{j=1}^N P(j \mid u) \nabla_\theta s(u, v_j)$$
+        where $P(j \mid u) = \frac{\exp(s(u, v_j))}{\sum_{k=1}^N \exp(s(u, v_k))}$.</p>
+
+        <p class="step"><strong>Step 2: Importance Sampling Formulation of the Partition Function:</strong><br>
+        Rewrite the partition function $Z(u)$ as an expectation under proposal distribution $Q$:
+        $$Z(u) = \sum_{j=1}^N \exp(s(u, v_j)) = \sum_{j=1}^N q(j) \cdot \frac{\exp(s(u, v_j))}{q(j)} = \mathbb{E}_{j \sim Q} \left[ \frac{\exp(s(u, v_j))}{q(j)} \right]$$
+        Given $K$ independent negative samples $\mathcal{S}_{\text{neg}} = \{v_{(1)}, \dots, v_{(K)}\}$ drawn from $Q$, plus the positive item $v_+$:
+        The unbiased Monte Carlo importance sampling estimator of $Z(u)$ is:
+        $$\widehat{Z}(u) = \frac{1}{K} \sum_{k=1}^K \frac{\exp(s(u, v_{(k)}))}{q(k)}$$</p>
+
+        <p class="step"><strong>Step 3: Derivation of the LogQ Corrected Logit:</strong><br>
+        Observe that:
+        $$\frac{\exp(s(u, v_j))}{q(j)} = \exp\big( s(u, v_j) - \ln q(j) \big)$$
+        Define the corrected logit as:
+        $$s'(u, v_j) \triangleq s(u, v_j) - \ln q(j)$$
+        Then the Monte Carlo estimator becomes:
+        $$\widehat{Z}(u) = \frac{1}{K} \sum_{k=1}^K \exp(s'(u, v_{(k)}))$$
+        Substituting this estimator into the Sampled Softmax probability for item $i \in \{+\} \cup \mathcal{S}_{\text{neg}}$:
+        $$\widehat{P}(i \mid u) = \frac{\exp(s'(u, v_i))}{\sum_{j \in \{+\} \cup \mathcal{S}_{\text{neg}}} \exp(s'(u, v_j))}$$
+        By the Strong Law of Large Numbers, as $K \to \infty$:
+        $$\frac{1}{K} \sum_{k=1}^K \exp(s'(u, v_{(k)})) \xrightarrow{a.s.} \sum_{j=1}^N \exp(s(u, v_j)) = Z(u)$$
+        Consequently:
+        $$\lim_{K \to \infty} \nabla_\theta \mathcal{L}_{\text{sampled}} = -\nabla_\theta s(u, v_+) + \sum_{j=1}^N \frac{\exp(s(u, v_j))}{Z(u)} \nabla_\theta s(u, v_j) = \nabla_\theta \mathcal{L}_{\text{full}}$$
+        <em>Q.E.D. Subtracting $\ln q(j)$ from the raw dot-product logits exactly counteracts the non-uniform proposal sampling bias, guaranteeing asymptotically unbiased gradient convergence!</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 7.1.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.6</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-netflix">Netflix</span>
+        <span class="company-tag company-spotify">Spotify</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Stage 3 re-ranking, platforms maximize user satisfaction by balancing individual item relevance with catalog diversity using <strong>Maximal Marginal Relevance (MMR)</strong>.</p>
+        <p>Let $\mathcal{V}$ be the candidate set of items. For a selected subset $S \subseteq \mathcal{V}$, consider the Facility Location diversity formulation:</p>
+        $$F(S) = \sum_{i \in \mathcal{V}} \max_{j \in S} \text{Sim}(i, j)$$
+        <p>where $\text{Sim}(i, j) \ge 0$ is a symmetric similarity measure.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>State the formal definition of a <strong>Monotone Submodular Set Function</strong>.</li>
+          <li>Prove that $F(S)$ is monotone increasing and submodular on $2^{\mathcal{V}}$.</li>
+          <li>Using the Nemhauser-Wolsey-Fisher (1978) theorem, prove that the greedy MMR selection algorithm:
+            $$v^* = \arg\max_{v \in \mathcal{V} \setminus S} \left( F(S \cup \{v\}) - F(S) \right)$$
+            is guaranteed to achieve at least a $(1 - 1/e) \approx 63.2\%$ approximation of the globally optimal diverse subset under cardinality constraint $|S| \le k$.
+          </li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Proof of Submodularity &amp; Greedy Approximation Bound</div>
+
+        <p class="step"><strong>Step 1: Definition of Monotone Submodularity:</strong><br>
+        A set function $F: 2^{\mathcal{V}} \to \mathbb{R}$ is:
+        <ul>
+          <li><strong>Monotone:</strong> If for all $A \subseteq B \subseteq \mathcal{V}$, $F(A) \le F(B)$.</li>
+          <li><strong>Submodular:</strong> If for all $A \subseteq B \subseteq \mathcal{V}$ and all elements $x \in \mathcal{V} \setminus B$, the marginal gain satisfies the diminishing returns property:
+            $$F(A \cup \{x\}) - F(A) \ge F(B \cup \{x\}) - F(B)$$
+          </li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2: Proof that $F(S)$ is Monotone Submodular:</strong><br>
+        Recall $F(S) = \sum_{i \in \mathcal{V}} f_i(S)$, where $f_i(S) = \max_{j \in S} \text{Sim}(i, j)$.<br>
+        Since a non-negative linear combination of submodular functions is submodular, it suffices to prove that each component $f_i(S)$ is submodular.<br><br>
+        <strong>Proof of Monotonicity:</strong><br>
+        Let $A \subseteq B$. Since $A \subseteq B$, the candidate pool for the maximum is larger in $B$:
+        $$f_i(A) = \max_{j \in A} \text{Sim}(i, j) \le \max_{j \in B} \text{Sim}(i, j) = f_i(B)$$
+        Thus $f_i(S)$ is monotone non-decreasing.<br><br>
+        <strong>Proof of Diminishing Returns (Submodularity):</strong><br>
+        Let $A \subseteq B$ and $x \notin B$. The marginal gain of adding $x$ to set $S$ is:
+        $$\Delta_i(x \mid S) = f_i(S \cup \{x\}) - f_i(S) = \max\left( \max_{j \in S} \text{Sim}(i, j), \text{Sim}(i, x) \right) - \max_{j \in S} \text{Sim}(i, j)$$
+        Let $m_S = \max_{j \in S} \text{Sim}(i, j)$. Then:
+        $$\Delta_i(x \mid S) = \max(m_S, \text{Sim}(i, x)) - m_S = \max(0, \text{Sim}(i, x) - m_S)$$
+        Since $A \subseteq B$, monotonicity implies $m_A \le m_B$.<br>
+        Observe that the function $g(m) = \max(0, c - m)$ is non-increasing with respect to $m$.<br>
+        Since $m_A \le m_B$:
+        $$\max(0, \text{Sim}(i, x) - m_A) \ge \max(0, \text{Sim}(i, x) - m_B)$$
+        $$\Delta_i(x \mid A) \ge \Delta_i(x \mid B)$$
+        Summing over all $i \in \mathcal{V}$:
+        $$F(A \cup \{x\}) - F(A) \ge F(B \cup \{x\}) - F(B)$$
+        <em>Q.E.D. $F(S)$ is strictly monotone submodular!</em></p>
+
+        <p class="step"><strong>Step 3: Proof of the $(1 - 1/e)$ Greedy Approximation Bound:</strong><br>
+        Let $S^*$ be the optimal subset of size $k$ that maximizes $F(S)$, and let $S_t$ be the set chosen by the greedy algorithm at step $t \in \{0, 1, \dots, k\}$ ($S_0 = \emptyset$).<br>
+        By submodularity and monotonicity, for any set $S$:
+        $$F(S^*) \le F(S) + \sum_{v \in S^* \setminus S} \big(F(S \cup \{v\}) - F(S)\big)$$
+        Since $|S^* \setminus S| \le k$, by the pigeonhole principle there exists at least one element $v \in S^*$ such that:
+        $$F(S \cup \{v\}) - F(S) \ge \frac{F(S^*) - F(S)}{k}$$
+        Because the greedy algorithm selects the element $v^*$ that maximizes this marginal gain:
+        $$F(S_{t+1}) - F(S_t) \ge \frac{1}{k}\big(F(S^*) - F(S_t)\big)$$
+        Rearranging:
+        $$F(S^*) - F(S_{t+1}) \le \left(1 - \frac{1}{k}\right) \big(F(S^*) - F(S_t)\big)$$
+        Applying this recurrence relation inductively from $t = 0$ to $k$:
+        $$F(S^*) - F(S_k) \le \left(1 - \frac{1}{k}\right)^k \big(F(S^*) - F(S_0)\big)$$
+        Using the fundamental calculus limit inequality $(1 - 1/k)^k \le e^{-1}$ for all $k \ge 1$, and since $F(S_0) = F(\emptyset) \ge 0$:
+        $$F(S^*) - F(S_k) \le e^{-1} F(S^*)$$
+        $$F(S_k) \ge \left(1 - \frac{1}{e}\right) F(S^*) \approx 0.6321 \cdot F(S^*)$$
+        <em>Q.E.D. The greedy MMR selection algorithm is mathematically guaranteed to achieve at least 63.2% of the globally optimal recommendation diversity!</em></p>
+      </div>
+    </div>
+
+    <!-- TIER 4: CONCEPTUAL TRAPS & ASSERTION-REASONING -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+    <!-- Problem 7.1.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.7</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> A machine learning engineer proposes upgrading a YouTube Two-Tower retrieval model (Stage 1) by adding an explicit cross-feature: <code>match_country = (user_country == video_uploader_country)</code> directly into the neural network architecture. The engineer concatenates this binary indicator feature into the early hidden layers of both the User Tower and Item Tower.</p>
+        <p>Which of the following statements correctly identifies the architectural consequence of this change?</p>
+        <ol type="A">
+          <li>The model will achieve higher recall with zero impact on serving latency because the feature is a simple boolean scalar that compiles into a single bitwise instruction in TensorRT.</li>
+          <li>The change fundamentally breaks the Two-Tower serving paradigm: item embeddings $g_\phi(\mathbf{y}_{\text{item}})$ can no longer be pre-computed offline because the item vector now depends on dynamic user runtime context (<code>user_country</code>). Offline vector indexing collapses, forcing the system into an intractable $O(N)$ real-time brute force scan over 1 billion items.</li>
+          <li>The change causes gradient explosion in the Adam optimizer due to embedding table rank deficiency.</li>
+          <li>The change succeeds, but only if the vector database uses HNSW rather than IVF-PQ.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: B (Exhaustive Distractor Analysis)</div>
+
+        <p class="step"><strong>Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Option A is Catastrophically False:</strong> While bitwise comparisons are computationally cheap in isolation, embedding user state into the item encoder violates the mathematical separation of variables:
+            $$s(\mathbf{u}, \mathbf{v}) = f_\theta(\mathbf{x}_{\text{user}})^T g_\phi(\mathbf{y}_{\text{item}})$$
+          </li>
+          <li><strong>Option B is Correct:</strong>
+            <ul>
+              <li>The entire computational feasibility of Stage 1 candidate retrieval relies on the invariant that the Item Tower $g_\phi(\mathbf{y}_{\text{item}})$ is a function <em>strictly of item attributes</em>.</li>
+              <li>This allows 1,000,000,000 video embeddings to be computed once overnight, normalized, and indexed into ScaNN/HNSW vector databases.</li>
+              <li>The moment an item's embedding depends on <code>user_country</code>, an item no longer has a single vector; it has 195 different vectors (one per country)! If more user features are crossed, the number of vectors explodes combinatorially.</li>
+              <li>Offline indexing is destroyed. At query time, the system would be forced to execute 1,000,000,000 forward passes on the fly, causing query latency to spike from $8\text{ ms}$ to $800\text{ seconds}$!</li>
+              <li><em>System Design Rule: Cross-features belong strictly in Stage 2 (Heavy Ranking / DLRM), where the candidate set is already pruned to $\le 1,000$ items!</em></li>
+            </ul>
+          </li>
+          <li><strong>Option C is False:</strong> Boolean scalar features do not affect embedding table rank or cause Adam optimizer instability.</li>
+          <li><strong>Option D is False:</strong> Neither HNSW nor IVF-PQ can index dynamic vectors whose coordinates mutate depending on which user is issuing the query.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Problem 7.1.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.1.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-tiktok">ByteDance (TikTok)</span>
+        <span class="company-tag company-netflix">Netflix</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>ASSERTION-REASONING:</strong></p>
+        <p><strong>Assertion (A):</strong> When training Two-Tower retrieval models with In-Batch Negative Sampling, increasing the mini-batch size $B$ from 128 to 65,536 consistently improves negative sampling coverage and retrieval recall up to an empirical threshold, beyond which further batch expansion causes severe performance degradation unless False Negative Masking is applied.</p>
+        <p><strong>Reason (R):</strong> In billion-scale recommendation platforms with skewed power-law consumption, ultra-large mini-batches dramatically increase the probability of <strong>False Negative Collisions</strong>—where two distinct users in the same mini-batch have both genuinely consumed and enjoyed the same viral item, forcing the contrastive loss to treat a legitimate positive recommendation as a negative sample and penalizing correct predictions.</p>
+        <p><strong>Options:</strong></p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A (Comprehensive Contrastive Collisions Analysis)</div>
+
+        <p class="step"><strong>Deep Architectural Analysis:</strong></p>
+        <p><strong>Evaluation of Assertion (A): True.</strong><br>
+        In contrastive learning and Two-Tower retrieval, each sample in a batch uses the other $B - 1$ items as negatives. Increasing $B$ provides a closer approximation to the full catalog partition function. However, as $B$ scales to tens of thousands (e.g. $B = 65,536$), recall degrades unless collision masking is deployed.</p>
+
+        <p class="step"><strong>Evaluation of Reason (R): True &amp; Explanatory.</strong><br>
+        Consider a viral video consumed by $15\%$ of the entire user base.<br>
+        In a mini-batch of $B = 65,536$ random user interactions:
+        The expected number of times this viral video appears in the batch is:
+        $$\mathbb{E}[\text{Count}] = 65,536 \times 0.15 \approx 9,830\text{ instances}!$$
+        Under standard In-Batch Negative Sampling, the loss assumes that for user $i$, ALL items $j \neq i$ in the batch are negative.<br>
+        Consequently, for thousands of users who legitimately loved this viral video, the model treats the video as a negative sample, pushing its embedding <em>away</em> from the user's vector:
+        $$\nabla_\theta \mathcal{L} \implies -\frac{\partial \mathbf{u}_i^T \mathbf{v}_j}{\partial \theta} \quad \text{where } j \text{ is actually a true positive!}$$
+        This gradient collision severely degrades model training.<br>
+        <strong>Mitigation:</strong> Modern production systems implement <strong>False Negative Masking</strong>: a bitmask matrix $M \in \{0, 1\}^{B \times B}$ constructed by querying user historical interaction graphs; if user $i$ has previously interacted with item $j$, $M_{i, j} = 0$, completely zeroing out the negative loss contribution for that pair.</p>
+      </div>
+    </div>
+
+    <!-- SECTION 6: PRODUCTION CODE LAB -->
+    <h3>5. Production Code Lab 7.1: Two-Tower Dual Encoder with LogQ Correction</h3>
+    <p>Below is an enterprise-grade PyTorch implementation of a Two-Tower retrieval model featuring in-batch negative sampled softmax, dynamic temperature scaling, and LogQ popularity de-biasing.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 7.1 — Two-Tower Dual Encoder Architecture</div>
+      <div class="code-lab-header">Code Lab 7.1 — Two-Tower Dual Encoder with LogQ De-biasing</div>
       <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch71_recsys/twotower_model.py" target="_blank">🔗 View in GitHub: part7_system_design/ch71_recsys/twotower_model.py</a></p>
 <pre><code>import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class TwoTowerRecSys(nn.Module):
-    def __init__(self, user_dim, item_dim, embed_dim=128, temperature=0.07):
+class LogQTwoTowerRecSys(nn.Module):
+    def __init__(self, user_dim: int, item_dim: int, embed_dim: int = 128, temperature: float = 0.07):
         super().__init__()
         self.temperature = temperature
 
         # User Tower MLP
         self.user_tower = nn.Sequential(
             nn.Linear(user_dim, 256),
+            nn.BatchNorm1d(256),
             nn.ReLU(),
             nn.Linear(256, embed_dim)
         )
@@ -133,50 +753,70 @@ class TwoTowerRecSys(nn.Module):
         # Item Tower MLP
         self.item_tower = nn.Sequential(
             nn.Linear(item_dim, 256),
+            nn.BatchNorm1d(256),
             nn.ReLU(),
             nn.Linear(256, embed_dim)
         )
 
-    def forward(self, user_features, item_features):
+    def forward(self, user_features: torch.Tensor, item_features: torch.Tensor, 
+                item_sampling_probs: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor]:
         # 1. Project into shared embedding space & L2-normalize
         u = F.normalize(self.user_tower(user_features), p=2, dim=-1)
         v = F.normalize(self.item_tower(item_features), p=2, dim=-1)
 
         # 2. Compute similarity matrix: (B, B)
-        # S[i, j] is similarity between user i and item j
-        logits = torch.matmul(u, v.T) / self.temperature
+        # S[i, j] represents similarity between user i and item j
+        raw_logits = torch.matmul(u, v.T) / self.temperature
 
-        # 3. Targets: Diagonal elements are positive pairs!
+        # 3. Apply LogQ Correction: logits'[i, j] = logits[i, j] - ln(p_j)
+        if item_sampling_probs is not None:
+            # item_sampling_probs has shape (B,)
+            log_q = torch.log(item_sampling_probs.clamp(min=1e-8)).unsqueeze(0) # (1, B)
+            corrected_logits = raw_logits - log_q
+        else:
+            corrected_logits = raw_logits
+
+        # 4. In-batch targets: Diagonal elements are true positive pairs!
         labels = torch.arange(user_features.size(0), device=user_features.device)
-        loss = F.cross_entropy(logits, labels)
-        return loss, logits
+        loss = F.cross_entropy(corrected_logits, labels)
+        
+        return loss, corrected_logits
 
 if __name__ == "__main__":
     torch.manual_seed(42)
-    B = 4 # Batch size of 4 users and 4 items
+    B = 4
     user_feats = torch.randn(B, 32)
     item_feats = torch.randn(B, 64)
+    # Background sampling probabilities (Item 0 is viral, Item 3 is niche)
+    sampling_probs = torch.tensor([0.60, 0.25, 0.10, 0.05])
 
-    model = TwoTowerRecSys(user_dim=32, item_dim=64, embed_dim=128)
-    loss, logits = model(user_feats, item_feats)
-    print(f"Two-Tower In-Batch Loss: {loss.item():.4f}")
-    print(f"Logits Matrix Shape     : {logits.shape} (4x4 User-Item Similarity)")</code></pre>
+    model = LogQTwoTowerRecSys(user_dim=32, item_dim=64, embed_dim=128)
+    loss, logits = model(user_feats, item_feats, item_sampling_probs=sampling_probs)
+    print(f"Two-Tower LogQ-Corrected Loss: {loss.item():.4f}")
+    print(f"Corrected Logits Shape        : {logits.shape} (4x4)")</code></pre>
     </div>
 
-    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 7.1 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 7.1: Industrial Two-Tower Recommender with Approximate Vector Retrieval</h3>
-        <p class="project-desc">Architect, train, and deploy an end-to-end two-tower video recommendation retrieval engine, pre-computing millions of item embeddings into a FAISS/HNSW index, and serving sub-10ms candidate retrieval queries via FastAPI.</p>
+        <h3 class="project-title">Project 7.1: Industrial Multi-Stage Video Recommendation Retrieval Engine</h3>
+        <p class="project-desc">Architect, train, and deploy an end-to-end multi-stage video recommendation system: training a PyTorch Two-Tower Dual Encoder with LogQ popularity de-biasing, exporting pre-computed item embeddings into a FAISS/HNSW vector index, scoring top-1000 candidates with a DLRM ranker, and re-ranking top-10 results via Maximal Marginal Relevance in sub-30ms.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch71_recsys/twotower_model.py" target="_blank">🔗 Full Project Code: part7_system_design/ch71_recsys/twotower_model.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In high-throughput streaming video platforms (YouTube, Twitch), candidate retrieval systems must ingest continuous user interaction clicks and return personalized candidates from a 50-million video catalog in under 8 milliseconds. In this project, you build an asynchronous two-tower pipeline that streams user click events into online User Towers, queries GPU-accelerated HNSW vector indices, and benchmarks retrieval recall at scale.</p>
+        <p><strong>Case Study Architecture:</strong> In high-throughput streaming video platforms (YouTube, Twitch, TikTok), candidate retrieval systems must ingest continuous user interaction clicks and return personalized candidates from a 100-million video catalog in under 30 milliseconds. In this project, you construct an asynchronous recommendation pipeline that streams user click events into online User Towers, queries GPU-accelerated HNSW vector indices, evaluates DLRM ranking MLPs, and benchmarks retrieval recall at scale.</p>
       </div>
     </div>
   </div>
 </div>
+
+
+
+    <div class="diagram-figure">
+        <img src="hnsw_hierarchical_graph.png" alt="Figure 7.2.1: hnsw hierarchical graph">
+        <div class="diagram-caption"><strong>Figure 7.2.1:</strong> Hierarchical Navigable Small World (HNSW) vector search. The multi-layer proximity graph executes coarse greedy routing across sparse top layers before descending into dense base layers, locating approximate $k$-nearest neighbors in $\mathcal{O}(\log N)$ time with high recall.</div>
+    </div>
 
 <!-- ======================================================================
      CHAPTER 7.2 — DISTRIBUTED VECTOR SEARCH AT SCALE
@@ -185,7 +825,7 @@ if __name__ == "__main__":
   <div class="chapter-header">
     <span class="chapter-number">Chapter 7.2</span>
     <h2 class="chapter-title">Distributed Vector Search at Scale</h2>
-    <span class="chapter-subtitle">The Exact Search Complexity Wall, HNSW Multi-Layer Graphs, IVF-PQ Compression &amp; Sharding</span>
+    <span class="chapter-subtitle">The Exact Search Complexity Wall, HNSW Multi-Layer Graphs, IVF-PQ Compression, Asymmetric Distance &amp; Sharding</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -207,185 +847,713 @@ if __name__ == "__main__":
 
     <!-- SECTION 2: HNSW MULTI-LAYER GRAPHS -->
     <h3>2. Hierarchical Navigable Small World (HNSW): Malkov &amp; Yashunin, 2018</h3>
-    <p><strong>HNSW</strong> is the gold standard graph-based ANN algorithm, deployed in Pinecone, Milvus, and Qdrant. Inspired by the 1D Skip List, HNSW constructs a multi-layer geometric proximity graph:</p>
+    <p><strong>HNSW</strong> is the gold standard graph-based ANN algorithm, deployed in Pinecone, Milvus, Qdrant, and Weaviate. Inspired by the 1D Skip List, HNSW constructs a multi-layer geometric proximity graph:</p>
 
     <div class="real-world-box">
       <h4>🌐 The Multi-Layer Proximity Graph Architecture</h4>
       <ul>
-        <li><strong>Top Layers ($l_{\max}$):</strong> Contain a sparse subset of vectors connected by long-range geometric links. Queries take massive "high-speed jumps" across the global coordinate space.</li>
-        <li><strong>Bottom Layer (Layer 0):</strong> Contains all $N$ vectors connected by dense, short-range local links.</li>
+        <li><strong>Top Layers ($l_{\max}$):</strong> Contain a sparse subset of vectors connected by long-range geometric links. Queries take massive "high-speed jumps" across the global coordinate space. Layer assignment follows an exponential decay:
+          $$l = \lfloor -\ln(\text{uniform}(0, 1)) \cdot m_L \rfloor, \quad \text{where } m_L = \frac{1}{\ln M}$$
+        </li>
+        <li><strong>Bottom Layer (Layer 0):</strong> Contains all $N$ vectors connected by dense, short-range local links ($2M$ maximum edges).</li>
       </ul>
       <p><strong>The Query Routing Algorithm:</strong></p>
       <ol>
-        <li>Start at the designated entry point at top layer $l_{\max}$.</li>
-        <li>Perform greedy local routing: move to the neighbor closest to the query vector.</li>
+        <li>Start at the designated global entry point at top layer $l_{\max}$.</li>
+        <li>Perform greedy local routing: evaluate distance to all neighbors of the current node; hop to the neighbor closest to the query vector $\mathbf{q}$.</li>
         <li>When a local minimum is reached on layer $l$, drop vertically to the same node on layer $l-1$.</li>
-        <li>Repeat greedy routing until reaching Layer 0, where a bounded beam search discovers the top-$k$ nearest neighbors!</li>
+        <li>Repeat greedy routing until reaching Layer 0, where a bounded beam search of width <code>efSearch</code> discovers the top-$k$ nearest neighbors!</li>
       </ol>
       <p><em>Search Complexity:</em> Reduces search time from linear $O(N)$ down to <strong>logarithmic $O(\log N)$</strong>! However, storing graph edge lists requires significant auxiliary RAM ($1.5\times$ to $2\times$ raw vector size).</p>
     </div>
 
     <!-- SECTION 3: IVF-PQ COMPRESSION -->
     <h3>3. Inverted File with Product Quantization (IVF-PQ)</h3>
-    <p>When dataset scale reaches billions of vectors, even storing vectors in RAM becomes economically unfeasible. <strong>Product Quantization (PQ - Jégou et al., 2011)</strong> solves this via lossy vector compression:</p>
+    <p>When dataset scale reaches billions of vectors, even storing raw vectors in RAM becomes economically unfeasible. <strong>Product Quantization (PQ - Jégou et al., 2011)</strong> solves this via lossy vector compression:</p>
 
     <div class="key-insight">
       <p><strong>The Mechanics of Product Quantization (PQ):</strong></p>
       <ol>
-        <li>A $d$-dimensional vector is split into $m$ distinct sub-vectors of length $d/m$ (e.g. A 768-dim vector is split into $m = 64$ sub-vectors of dimension 12).</li>
+        <li>A $d$-dimensional vector is split into $m$ distinct sub-vectors of length $d^* = d/m$ (e.g. A 768-dim vector is split into $m = 64$ sub-vectors of dimension 12).</li>
         <li>For each sub-vector space, K-Means clusters the training data into $K = 256$ centroids.</li>
         <li>Because $256 = 2^8$, each centroid index fits into exactly <strong>1 single byte (uint8)</strong>!</li>
         <li>Each sub-vector is replaced by the 1-byte index of its nearest centroid.</li>
       </ol>
       <p><em>The Compression Miracle:</em> A 768-dimensional float32 vector ($3,072 \text{ bytes}$) is compressed into $m = 64$ bytes: <strong>a staggering $48\times$ memory reduction!</strong></p>
+      <p><strong>Asymmetric Distance Computation (ADC):</strong> At query time, the query vector $\mathbf{q}$ is NOT quantized. The server computes the distance between $\mathbf{q}$'s sub-vectors and the $256$ codebook centroids once, building a tiny lookup table. Evaluating the distance to a database vector requires only <strong>$m$ table lookups and additions—with zero floating-point multiplications!</strong></p>
     </div>
 
-    <h4>Asymmetric Distance Computation (ADC)</h4>
-    <p>During a query, does the engine decompress the quantized vectors back into floats? <strong>No!</strong> Using <strong>Asymmetric Distance Computation (ADC)</strong>:</p>
-    <ul>
-      <li>The uncompressed query vector computes its exact Euclidean distance to all $256$ centroids in each of the $m$ sub-spaces, storing them in a small $m \times 256$ lookup table ($16\text{ KB}$, fitting entirely inside CPU L1 cache!).</li>
-      <li>Evaluating the distance to any of the 1 billion database vectors reduces to summing $m$ values from the lookup table via fast CPU table lookups:
-      $$d(\mathbf{q}, \mathbf{x}) \approx \sum_{j=1}^m \text{LookupTable}[j, \text{index}_j(\mathbf{x})]$$</li>
-    </ul>
+    <!-- ======================================================================
+         SECTION 4: 4-TIER GRADED PRACTICE SUITE
+         ====================================================================== -->
+    <h3>4-Tier Graded Practice Suite — Distributed Vector Search at Scale</h3>
+    <p>Eight comprehensive problems spanning hardware cluster sizing, ADC lookup tables, HNSW layer-drop routing traces, IVF-PQ inverted list execution, logarithmic complexity proofs, sub-quantizer error proofs, MIPS non-metric traps, and scatter-gather tail latency amplification.</p>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Distributed Vector Search</h3>
+    <!-- TIER 1: NUMERICAL DRILLS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
 
+    <!-- Problem 7.2.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 7.2.1</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-pinecone">Pinecone</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are architecting a vector database to index $N = 1,000,000,000$ text embeddings ($d = 768$, IEEE 32-bit floating point, 4 bytes/scalar). You must evaluate two indexing architectures:</p>
+        <ul>
+          <li><strong>Architecture A (In-Memory HNSW):</strong> Raw vectors stored in FP32. Layer 0 maintains $2M = 64$ outgoing edges per node; upper layers maintain $M = 32$ edges per node. Graph connections are stored as 4-byte node ID integers. Vector metadata and reverse ID mapping require an additional 16 bytes per vector.</li>
+          <li><strong>Architecture B (IVF-PQ Index):</strong> Coarse quantizer partitions vectors into $K_{\text{coarse}} = 65,536$ Voronoi cells. Product Quantization divides the 768 dimensions into $m = 64$ sub-vectors, each quantized to $K = 256$ centroids (1 byte per sub-vector). Inverted lists store 4-byte document IDs alongside the 64-byte compressed codes.</li>
+        </ul>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the exact raw vector data size in Terabytes.</li>
+          <li>Calculate the total memory footprint of Architecture A (HNSW) in Terabytes, and determine the number of AWS <code>r6i.16xlarge</code> instances (512 GB RAM, 80% usable = 409.6 GB usable) required to host it.</li>
+          <li>Calculate the total memory footprint of Architecture B (IVF-PQ) in Gigabytes, and determine the number of instances required.</li>
+          <li>Compute the compression ratio of IVF-PQ relative to raw vectors and calculate the annual cloud infrastructure cost difference assuming each 512 GB instance costs &dollar;5.04 per hour.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Cluster Memory Sizing Solution</div>
+
+        <p class="step"><strong>Step 1: Raw Vector Data Size:</strong><br>
+        Memory per raw vector:
+        $$S_{\text{vec}} = d \times 4\text{ bytes} = 768 \times 4\text{ bytes} = 3,072\text{ bytes} = 3.0\text{ KB}$$
+        For $N = 1,000,000,000$ vectors:
+        $$M_{\text{raw}} = 10^9 \times 3,072\text{ bytes} = 3,072,000,000,000\text{ bytes} = \mathbf{3.072\text{ TB (3,072 GB)}}$$</p>
+
+        <p class="step"><strong>Step 2: Architecture A (HNSW) Memory Footprint:</strong><br>
+        Raw vector storage: $3,072\text{ GB}$.<br>
+        Layer 0 graph edges ($2M = 64$ connections per node, 4 bytes/link):
+        $$M_{\text{layer0}} = 10^9 \times 64 \times 4\text{ bytes} = 256,000,000,000\text{ bytes} = 256\text{ GB}$$
+        Upper layers graph edges: Average links across upper layers adds approximately $M / M \approx 16\text{ GB}$ across the sparse hierarchy.<br>
+        Vector ID metadata:
+        $$M_{\text{meta}} = 10^9 \times 16\text{ bytes} = 16\text{ GB}$$
+        Total HNSW memory footprint:
+        $$M_{\text{HNSW}} = 3,072\text{ GB} + 256\text{ GB} + 16\text{ GB} + 16\text{ GB} = \mathbf{3,360\text{ GB (3.36 TB)}}$$
+        With 409.6 GB usable RAM per instance:
+        $$N_{\text{instances, HNSW}} = \left\lceil \frac{3,360\text{ GB}}{409.6\text{ GB}} \right\rceil = \lceil 8.203 \rceil = \mathbf{9\text{ instances (512 GB RAM each)}}$$</p>
+
+        <p class="step"><strong>Step 3: Architecture B (IVF-PQ) Memory Footprint:</strong><br>
+        Compressed PQ code: $m = 64\text{ bytes per vector}$.
+        $$M_{\text{codes}} = 10^9 \times 64\text{ bytes} = 64\text{ GB}$$
+        Inverted list posting IDs (4 bytes per vector):
+        $$M_{\text{postings}} = 10^9 \times 4\text{ bytes} = 4\text{ GB}$$
+        Codebook centroids memory ($m \times 256 \times (d/m) \times 4\text{ bytes} = 64 \times 256 \times 12 \times 4\text{ bytes} \approx 786\text{ KB}$, negligible).<br>
+        Total IVF-PQ memory footprint:
+        $$M_{\text{IVF-PQ}} = 64\text{ GB} + 4\text{ GB} = \mathbf{68\text{ GB (0.068 TB)}}$$
+        Instance requirement:
+        $$N_{\text{instances, IVF-PQ}} = \mathbf{1\text{ instance (Comfortably fits in a single 128 GB machine!)}}$$</p>
+
+        <p class="step"><strong>Step 4: Compression Ratio &amp; Financial Cost Audit:</strong><br>
+        Compression ratio:
+        $$\text{Ratio} = \frac{M_{\text{raw}}}{M_{\text{IVF-PQ}}} = \frac{3,072\text{ GB}}{68\text{ GB}} \approx \mathbf{45.18\times\text{ Compression!}}$$
+        Annual Cloud Hosting Cost (HNSW vs IVF-PQ):
+        <ul>
+          <li>HNSW (9 instances $\times$ &dollar;5.04/hr): $9 \times 5.04 \times 8,760 \text{ hrs/yr} = \mathbf{\text{USD } 397,353.60 / \text{year}}$</li>
+          <li>IVF-PQ (1 smaller 128 GB instance @ &dollar;1.26/hr): $1 \times 1.26 \times 8,760 \text{ hrs/yr} = \mathbf{\text{USD } 11,037.60 / \text{year}}$</li>
+        </ul>
+        $$\mathbf{\text{Annual Infrastructure Savings: USD } 397,353.60 - \text{USD } 11,037.60 = \text{USD } 386,316.00 / \text{year (97.2\% Savings!)}}$$
+        <em>Trade-off Summary: HNSW delivers 98% recall at 2ms latency for $400k/yr. IVF-PQ delivers 93% recall at 8ms latency for $11k/yr!</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 7.2.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-uber">Uber</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Product Quantization (PQ), distance evaluation between an unquantized query vector and quantized database vectors is accelerated via <strong>Asymmetric Distance Computation (ADC)</strong>.</p>
+        <p>Consider an 8-dimensional space ($d = 8$) divided into $m = 2$ sub-vectors of dimension $d^* = 4$. The query vector is:
+        $$\mathbf{q} = [1.0, \; 2.0, \; -1.0, \; 0.5, \quad 0.0, \; 1.5, \; 2.0, \; -0.5]$$
+        The trained codebook has $K = 2$ centroids per subspace ($c \in \{0, 1\}$):</p>
+        <ul>
+          <li><strong>Subspace 1 Centroids:</strong> $\mathbf{c}_{1, 0} = [0.0, 1.0, 0.0, 0.0]$, $\mathbf{c}_{1, 1} = [1.0, 2.0, -1.0, 1.0]$</li>
+          <li><strong>Subspace 2 Centroids:</strong> $\mathbf{c}_{2, 0} = [0.0, 1.0, 1.0, 0.0]$, $\mathbf{c}_{2, 1} = [0.0, 2.0, 2.0, -1.0]$</li>
+        </ul>
+        <p>A compressed database vector $\mathbf{x}$ is represented by the 2-byte code $[1, 0]$ (meaning sub-vector 1 is quantized to centroid 1, and sub-vector 2 is quantized to centroid 0).</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Construct the full $2 \times 2$ pre-computed squared Euclidean distance lookup table $D_{\text{table}}[j, c]$ for $j \in \{1, 2\}$ and $c \in \{0, 1\}$.</li>
+          <li>Compute the exact ADC squared Euclidean distance and Euclidean distance $d_{\text{ADC}}(\mathbf{q}, \mathbf{x})$ using the lookup table.</li>
+          <li>Compute the exact uncompressed Euclidean distance between $\mathbf{q}$ and the reconstructed vector $\hat{\mathbf{x}} = [\mathbf{c}_{1, 1} \Vert \mathbf{c}_{2, 0}]$ to verify mathematical identity.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step ADC Lookup Table Arithmetic</div>
+
+        <p class="step"><strong>Step 1: Construction of Distance Lookup Table:</strong><br>
+        Partition the query vector into two 4-dimensional sub-vectors:
+        $$\mathbf{q}_1 = [1.0, 2.0, -1.0, 0.5], \quad \mathbf{q}_2 = [0.0, 1.5, 2.0, -0.5]$$
+        <strong>Subspace 1 Distances ($j = 1$):</strong>
+        To centroid $\mathbf{c}_{1, 0} = [0, 1, 0, 0]$:
+        $$D_{\text{table}}[1, 0] = (1-0)^2 + (2-1)^2 + (-1-0)^2 + (0.5-0)^2 = 1.0 + 1.0 + 1.0 + 0.25 = \mathbf{3.25}$$
+        To centroid $\mathbf{c}_{1, 1} = [1, 2, -1, 1]$:
+        $$D_{\text{table}}[1, 1] = (1-1)^2 + (2-2)^2 + (-1 - (-1))^2 + (0.5-1)^2 = 0 + 0 + 0 + (-0.5)^2 = \mathbf{0.25}$$<br>
+
+        <strong>Subspace 2 Distances ($j = 2$):</strong>
+        To centroid $\mathbf{c}_{2, 0} = [0, 1, 1, 0]$:
+        $$D_{\text{table}}[2, 0] = (0-0)^2 + (1.5-1)^2 + (2-1)^2 + (-0.5-0)^2 = 0 + 0.25 + 1.0 + 0.25 = \mathbf{1.50}$$
+        To centroid $\mathbf{c}_{2, 1} = [0, 2, 2, -1]$:
+        $$D_{\text{table}}[2, 1] = (0-0)^2 + (1.5-2)^2 + (2-2)^2 + (-0.5 - (-1))^2 = 0 + 0.25 + 0 + 0.25 = \mathbf{0.50}$$<br>
+        <strong>Lookup Table Matrix $D_{\text{table}}$:</strong>
+        $$D_{\text{table}} = \begin{bmatrix}
+        3.25 & 0.25 \\
+        1.50 & 0.50
+        \end{bmatrix}$$</p>
+
+        <p class="step"><strong>Step 2: Distance Evaluation via Table Lookups:</strong><br>
+        The database vector is encoded as code $C = [1, 0]$.<br>
+        Evaluating squared distance requires summing the corresponding table entries:
+        $$d_{\text{ADC}}^2(\mathbf{q}, \mathbf{x}) = D_{\text{table}}[1, C[1]] + D_{\text{table}}[2, C[2]] = D_{\text{table}}[1, 1] + D_{\text{table}}[2, 0]$$
+        $$d_{\text{ADC}}^2(\mathbf{q}, \mathbf{x}) = 0.25 + 1.50 = \mathbf{1.75}$$
+        Taking the square root:
+        $$d_{\text{ADC}}(\mathbf{q}, \mathbf{x}) = \sqrt{1.75} \approx \mathbf{1.32288}$$
+        <em>Notice: Evaluating distance to this vector required exactly 2 memory reads and 1 addition—zero floating-point multiplications!</em></p>
+
+        <p class="step"><strong>Step 3: Direct Verification against Reconstructed Vector:</strong><br>
+        The quantized vector reconstructed from centroids is:
+        $$\hat{\mathbf{x}} = [\mathbf{c}_{1, 1} \Vert \mathbf{c}_{2, 0}] = [1.0, 2.0, -1.0, 1.0, \quad 0.0, 1.0, 1.0, 0.0]$$
+        Compute direct squared Euclidean distance between $\mathbf{q}$ and $\hat{\mathbf{x}}$:
+        $$\|\mathbf{q} - \hat{\mathbf{x}}\|^2 = (1-1)^2 + (2-2)^2 + (-1 - (-1))^2 + (0.5-1)^2 + (0-0)^2 + (1.5-1)^2 + (2-1)^2 + (-0.5-0)^2$$
+        $$= 0 + 0 + 0 + 0.25 + 0 + 0.25 + 1.0 + 0.25 = \mathbf{1.75}$$
+        $$\|\mathbf{q} - \hat{\mathbf{x}}\| = \sqrt{1.75} \approx \mathbf{1.32288}$$
+        <em>Identity verified: ADC distance computed via lookups matches exact mathematical distance with 100% precision.</em></p>
+      </div>
+    </div>
+
+    <!-- TIER 2: APPLIED ENGINEERING TRACES -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+    <!-- Problem 7.2.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.3</span>
         <span class="difficulty difficulty-hard">Hard</span>
         <span class="company-tag company-google">Google</span>
         <span class="company-tag company-pinecone">Pinecone</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> You are designing a distributed vector search cluster for <strong>$1,000,000,000$ (1 Billion) vectors</strong> of dimension $d = 768$. Calculate the exact RAM required for:</p>
-        <ol>
-          <li>Uncompressed raw vectors in FP32.</li>
-          <li>HNSW Index with graph edges ($M = 32$ links per node).</li>
-          <li>IVF-PQ64 compressed index.</li>
-        </ol>
-        <p>Design a horizontal sharding cluster to serve 10,000 QPS with a p99 latency SLA of $<15\text{ ms}$.</p>
+        <p><strong>QUESTION:</strong> An engineer executes a vector search query $\mathbf{q}$ on an HNSW index consisting of 3 layers ($l \in \{2, 1, 0\}$). The search parameter is <code>efSearch = 1</code> (pure greedy routing).</p>
+        <p>The graph topology and Euclidean distances from query $\mathbf{q}$ to nodes are defined as:</p>
+        <ul>
+          <li><strong>Layer 2 (Top Layer):</strong> Global entry point is Node $A$ ($d(\mathbf{q}, A) = 4.2$). Node $A$ has one neighbor: Node $B$ ($d(\mathbf{q}, B) = 3.1$). Node $B$ has no other neighbors on Layer 2.</li>
+          <li><strong>Layer 1 (Middle Layer):</strong> Node $B$ has neighbors: Node $C$ ($d(\mathbf{q}, C) = 2.4$) and Node $D$ ($d(\mathbf{q}, D) = 3.5$). Node $C$ has neighbor: Node $E$ ($d(\mathbf{q}, E) = 1.8$). Node $E$ has neighbor: Node $F$ ($d(\mathbf{q}, F) = 2.0$).</li>
+          <li><strong>Layer 0 (Base Layer):</strong> Node $E$ drops to Layer 0. Node $E$ has neighbors: Node $G$ ($d(\mathbf{q}, G) = 1.1$) and Node $H$ ($d(\mathbf{q}, H) = 1.9$). Node $G$ has neighbor: Node $I$ ($d(\mathbf{q}, I) = 0.85$). Node $I$ has neighbor: Node $J$ ($d(\mathbf{q}, J) = 0.92$).</li>
+        </ul>
+        <p>Construct a comprehensive algorithmic trace table documenting the step-by-step path of the search algorithm from entry to termination, recording: Step, Current Layer, Current Node, Candidate Neighbors Inspected, Distances Computed, Routing Decision (Hop vs Drop Layer), and the Final Nearest Neighbor discovered.</p>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Hardware Sizing Audit</div>
+        <div class="solution-label">✓ Algorithmic HNSW Greedy Routing Trace Table</div>
 
-        <p class="step"><strong>Step 1: Uncompressed Raw FP32 Vector Footprint:</strong>
-        $$\text{Memory} = 10^9 \times 768 \times 4 \text{ bytes} = 3,072,000,000,000 \text{ bytes} \approx \mathbf{3.072 \text{ Terabytes of RAM}}!$$</p>
-
-        <p class="step"><strong>Step 2: HNSW Graph Index Footprint:</strong><br>
-        HNSW stores raw vectors ($3.07\text{ TB}$) plus graph adjacency lists. Each node has on average $M = 32$ integer neighbor pointers (4 bytes each) across layers:
-        $$\text{Graph Overhead} = 10^9 \times 32 \times 4 \text{ bytes} \approx 128 \text{ GB}$$
-        Adding allocator padding and node structures brings total HNSW memory to approximately <strong>$4.5 \text{ Terabytes of RAM}$</strong>!</p>
-
-        <p class="step"><strong>Step 3: IVF-PQ64 Compressed Index Footprint:</strong><br>
-        With $m = 64$ sub-vectors, each vector is encoded into exactly $64$ bytes:
-        $$\text{Vector Memory} = 10^9 \times 64 \text{ bytes} = \mathbf{64 \text{ Gigabytes}}!$$
-        Adding inverted lists and 64-bit document ID mappings ($8 \text{ bytes} \times 10^9 = 8 \text{ GB}$):
-        $$\text{Total IVF-PQ64 Memory} = 64 + 8 = \mathbf{72 \text{ Gigabytes of RAM}}!$$
-        <strong>Result: IVF-PQ reduces the cluster RAM requirement from 4,500 GB down to 72 GB (a 98.4% memory reduction)!</strong></p>
-
-        <p class="step"><strong>Step 4: Distributed Sharding Cluster Architecture:</strong><br>
-        To serve 10,000 QPS with sub-15ms latency, we deploy <strong>16 Shards with 3 Replicas</strong> (48 total worker nodes):
-        <ul>
-          <li>Each shard holds $10^9 / 16 = 62,500,000$ vectors ($4.5\text{ GB}$ per node).</li>
-          <li>Query routers scatter queries concurrently across all 16 shards, each returning top-100 candidates.</li>
-          <li>The router executes a reciprocal rank merge and returns the top 10 results in <strong>$8\text{ ms}$</strong>!</li>
-        </ul></p>
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Step</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Current Layer ($l$)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Current Node</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Neighbors Evaluated</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Distances Computed</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Algorithmic Routing Decision</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 2</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$A$ (Entry Point)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$B$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, B) = 3.1 < d(\mathbf{q}, A) = 4.2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>HOP TO $B$</strong> (Closer to query).</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 2</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$B$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">None (No neighbors)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Local minimum on Layer 2 reached.</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>DROP TO LAYER 1</strong> with entry point $B$.</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$B$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C, D$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, C) = 2.4$, $d(\mathbf{q}, D) = 3.5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>HOP TO $C$</strong> ($2.4 < 3.1$).</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>4</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$E$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, E) = 1.8 < d(\mathbf{q}, C) = 2.4$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>HOP TO $E$</strong> ($1.8 < 2.4$).</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>5</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 1</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$E$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$F$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, F) = 2.0 > d(\mathbf{q}, E) = 1.8$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Local minimum on Layer 1 reached. <strong>DROP TO LAYER 0</strong> with entry point $E$.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>6</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 0</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$E$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$G, H$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, G) = 1.1$, $d(\mathbf{q}, H) = 1.9$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>HOP TO $G$</strong> ($1.1 < 1.8$).</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>7</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 0</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$G$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$I$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, I) = 0.85 < d(\mathbf{q}, G) = 1.1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>HOP TO $I$</strong> ($0.85 < 1.1$).</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>8</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Layer 0</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$I$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$J$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$d(\mathbf{q}, J) = 0.92 > d(\mathbf{q}, I) = 0.85$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>TERMINATE:</strong> Global minimum reached. <strong>Return Node $I$ ($d = 0.85$) as 1-NN!</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p><em>Notice: Across a 10-node graph space, HNSW located the exact nearest neighbor using only 7 distance evaluations!</em></p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 7.2: Product Quantization &amp; Asymmetric Distance Computation</h3>
-    <p>Below is an educational implementation of Product Quantization (PQ) and Asymmetric Distance Computation (ADC) from scratch in pure NumPy.</p>
+    <!-- Problem 7.2.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-microsoft">Microsoft</span>
+        <span class="company-tag company-amazon">Amazon</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> You are profiling an IVF-PQ vector search engine handling a query $\mathbf{q}$. The index configuration is: <code>nlist = 4</code> (Voronoi centroids), <code>nprobe = 2</code> (cells scanned), $m = 2$ sub-vectors, and top-$k = 2$ nearest neighbors requested.</p>
+        <p><strong>Index State:</strong></p>
+        <ul>
+          <li>Coarse Centroid Distances: $d(\mathbf{q}, C_0) = 1.2$, $d(\mathbf{q}, C_1) = 0.6$, $d(\mathbf{q}, C_2) = 2.1$, $d(\mathbf{q}, C_3) = 0.8$.</li>
+          <li>Inverted List for $C_1$: Doc 101 with code $[0, 1]$, Doc 102 with code $[1, 1]$.</li>
+          <li>Inverted List for $C_3$: Doc 201 with code $[1, 0]$, Doc 202 with code $[0, 0]$.</li>
+          <li>Precomputed ADC Distance Table $D_{\text{table}}[j, c]$ for query $\mathbf{q}$:
+            $$D_{\text{table}} = \begin{bmatrix}
+            \text{Subspace 1 (}c=0\text{): } 0.10 & \text{Subspace 1 (}c=1\text{): } 0.70 \\
+            \text{Subspace 2 (}c=0\text{): } 0.30 & \text{Subspace 2 (}c=1\text{): } 0.40
+            \end{bmatrix}$$
+          </li>
+        </ul>
+        <p>Trace the step-by-step execution: (a) Selection of Voronoi cells via <code>nprobe</code>, (b) Inverted list scanning, (c) Max-heap state transitions (tracking heap contents of size $k = 2$), and (d) Final top-2 nearest documents returned.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Algorithmic IVF-PQ Execution &amp; Max-Heap Trace</div>
+
+        <p class="step"><strong>Step 1: Coarse Voronoi Cell Selection (nprobe = 2):</strong><br>
+        Distances to the 4 coarse centroids:
+        $$d(\mathbf{q}, C_1) = 0.6\ (\text{Rank 1}), \quad d(\mathbf{q}, C_3) = 0.8\ (\text{Rank 2}), \quad d(\mathbf{q}, C_0) = 1.2\ (\text{Rank 3}), \quad d(\mathbf{q}, C_2) = 2.1\ (\text{Rank 4})$$
+        With <code>nprobe = 2</code>, the engine prunes cells $C_0$ and $C_2$, scanning strictly inverted lists $C_1$ and $C_3$.</p>
+
+        <p class="step"><strong>Step 2 &amp; 3: Inverted List Scanning &amp; Heap Transitions:</strong><br>
+        A max-heap of capacity $k = 2$ maintains the current best matches (storing pairs <code>(distance, doc_id)</code>, ordered by highest distance at root).</p>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Doc ID</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Cell</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">PQ Code</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">ADC Lookup Computation</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">$d^2$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Max-Heap State (Capacity 2)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>101</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C_1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[0, 1]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$D[1, 0] + D[2, 1] = 0.10 + 0.40$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.50$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>[(0.50, 101)]</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Insert (Heap size 1).</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>102</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C_1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[1, 1]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$D[1, 1] + D[2, 1] = 0.70 + 0.40$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1.10$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>[(1.10, 102), (0.50, 101)]</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Insert (Heap size 2, root is 102).</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>201</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C_3$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[1, 0]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$D[1, 1] + D[2, 0] = 0.70 + 0.30$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1.00$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>[(1.00, 201), (0.50, 101)]</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1.00 < 1.10 \implies$ <strong>Evict Doc 102, Push Doc 201</strong>.</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>202</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C_3$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$[0, 0]$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$D[1, 0] + D[2, 0] = 0.10 + 0.30$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.40$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;"><code>[(0.50, 101), (0.40, 202)]</code></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.40 < 1.00 \implies$ <strong>Evict Doc 201, Push Doc 202</strong>.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="step"><strong>Step 4: Final Nearest Neighbors Returned:</strong><br>
+        Extracting elements from the heap in ascending order of distance:
+        <ol>
+          <li><strong>Rank 1:</strong> Document <strong>202</strong> with squared distance $d^2 = 0.40$ ($\text{distance} \approx 0.6325$).</li>
+          <li><strong>Rank 2:</strong> Document <strong>101</strong> with squared distance $d^2 = 0.50$ ($\text{distance} \approx 0.7071$).</li>
+        </ol></p>
+      </div>
+    </div>
+
+    <!-- TIER 3: MATHEMATICAL PROOFS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 3: FAANG Tier-1 / Research Lab Mathematical Proofs</h4>
+
+    <!-- Problem 7.2.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.5</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-princeton">Princeton</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Hierarchical Navigable Small World (HNSW) graphs, node insertion assigns an element $v$ to a maximum layer $l_v \in \mathbb{N}_0$ according to the probability distribution:</p>
+        $$l_v = \left\lfloor -\ln(\xi) \cdot m_L \right\rfloor$$
+        <p>where $\xi \sim \text{Uniform}(0, 1)$ and $m_L = \frac{1}{\ln M}$ is the normalization parameter ($M \ge 2$).</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Prove that the probability a node belongs to layer $l$ is given by $P(l_v \ge l) = M^{-l}$.</li>
+          <li>Derive the expected maximum layer $\mathbb{E}[l_{\max}]$ across a graph containing $N$ vectors, and prove that $\mathbb{E}[l_{\max}] = \mathcal{O}(\log_M N)$.</li>
+          <li>Assuming that on each layer $l$, greedy local routing requires at most a constant expected number of hops $C > 0$ to reach the local minimum before dropping to layer $l-1$, prove that the overall search complexity is strictly logarithmic: $\mathbb{E}[T_{\text{search}}] = \mathcal{O}(\log N)$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Proof of Logarithmic HNSW Complexity</div>
+
+        <p class="step"><strong>Step 1: Proof of Layer Assignment Probability:</strong><br>
+        Let $\xi \sim \text{Uniform}(0, 1)$. The maximum layer assigned is $l_v = \lfloor -\ln(\xi) \cdot m_L \rfloor$.<br>
+        For any integer $l \ge 0$:
+        $$l_v \ge l \iff -\ln(\xi) \cdot m_L \ge l \iff -\ln(\xi) \ge \frac{l}{m_L} \iff \ln(\xi) \le -\frac{l}{m_L}$$
+        Exponentiating both sides:
+        $$\xi \le \exp\left(-\frac{l}{m_L}\right)$$
+        Since $\xi \sim \text{Uniform}(0, 1)$, $P(\xi \le z) = z$ for $z \in [0, 1]$. Therefore:
+        $$P(l_v \ge l) = \exp\left(-\frac{l}{m_L}\right)$$
+        Substituting $m_L = \frac{1}{\ln M}$:
+        $$P(l_v \ge l) = \exp\left(-l \ln M\right) = \exp\left(\ln M^{-l}\right) = \mathbf{M^{-l}}$$
+        <em>Q.E.D. The probability of surviving to layer $l$ decays exponentially as $1 / M^l$, perfectly mirroring a geometric distribution with parameter $p = 1 - 1/M$.</em></p>
+
+        <p class="step"><strong>Step 2: Expected Maximum Layer $\mathbb{E}[l_{\max}]$:</strong><br>
+        Let $N$ nodes be independently assigned layers $l_1, \dots, l_N$. The maximum layer is $l_{\max} = \max_{1 \le i \le N} l_i$.<br>
+        The cumulative distribution function of $l_{\max}$ is:
+        $$P(l_{\max} < l) = \prod_{i=1}^N P(l_i < l) = \big(1 - P(l_i \ge l)\big)^N = \left(1 - M^{-l}\right)^N$$
+        Using the expectation formula for non-negative discrete random variables:
+        $$\mathbb{E}[l_{\max}] = \sum_{l=1}^\infty P(l_{\max} \ge l) = \sum_{l=1}^\infty \left[ 1 - \left(1 - M^{-l}\right)^N \right]$$
+        For large $N$, using the approximation $(1 - x)^N \approx e^{-Nx}$:
+        $$1 - \left(1 - M^{-l}\right)^N \approx 1 - e^{-N M^{-l}}$$
+        Notice that when $M^l \ll N$, $e^{-N M^{-l}} \approx 0 \implies \text{term } \approx 1$.<br>
+        When $M^l \gg N$, $e^{-N M^{-l}} \approx 1 - N M^{-l} \implies \text{term } \approx N M^{-l}$.<br>
+        The transition point occurs when $M^l \approx N \implies l \approx \log_M N$.<br>
+        Evaluating the summation rigorously yields:
+        $$\mathbb{E}[l_{\max}] = \log_M N + \frac{\gamma}{\ln M} + \frac{1}{2} + o(1) = \mathbf{\mathcal{O}(\log_M N)}$$
+        where $\gamma \approx 0.5772$ is the Euler-Mascheroni constant. <em>Q.E.D.</em></p>
+
+        <p class="step"><strong>Step 3: Proof of Logarithmic Overall Search Complexity:</strong><br>
+        The greedy search starts at the global entry point on layer $l_{\max}$.<br>
+        On each layer $l \in \{l_{\max}, l_{\max}-1, \dots, 1\}$, greedy routing moves along geometric links until discovering the node closest to $\mathbf{q}$ within that layer.<br>
+        Because each layer is a Delaunay graph approximation (Navigable Small World) with bounded degree $\le M$, Kleinberg's small-world navigation theorem guarantees that the expected number of hops on each layer is bounded by a constant $C(M)$ independent of $N$.<br>
+        Total expected hops across all upper layers down to Layer 0 is:
+        $$\mathbb{E}[T_{\text{routing}}] \le \sum_{l=1}^{\mathbb{E}[l_{\max}]} C(M) = C(M) \cdot \mathbb{E}[l_{\max}] = C(M) \cdot \mathcal{O}\left(\frac{\ln N}{\ln M}\right) = \mathbf{\mathcal{O}(\log N)}$$
+        At Layer 0, a bounded beam search of size <code>efSearch</code> evaluates at most $2M \cdot \text{efSearch} = \mathcal{O}(1)$ additional candidates.<br>
+        Summing all stages:
+        $$\mathbb{E}[T_{\text{search}}] = \mathcal{O}(\log N) + \mathcal{O}(1) = \mathbf{\mathcal{O}(\log N)}$$
+        <em>Q.E.D. HNSW reduces search across billions of vectors from linear to logarithmic time complexity!</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 7.2.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.6</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-meta">Meta</span>
+        <span class="company-tag company-inria">INRIA</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Product Quantization (Jégou et al., 2011), a vector $\mathbf{x} \in \mathbb{R}^d$ is decomposed into $m$ orthogonal sub-vectors $\mathbf{x} = [\mathbf{x}_1, \dots, \mathbf{x}_m]$, where each $\mathbf{x}_j \in \mathbb{R}^{d^*}$ ($d^* = d/m$).</p>
+        <p>Each sub-vector is independently quantized using a sub-quantizer $q_j: \mathbb{R}^{d^*} \to \mathcal{C}_j$, where $\mathcal{C}_j = \{\mathbf{c}_{j, 1}, \dots, \mathbf{c}_{j, K}\}$ is a codebook of $K$ centroids trained via K-Means. The global product quantizer is $q(\mathbf{x}) = [q_1(\mathbf{x}_1), \dots, q_m(\mathbf{x}_m)]$.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Prove that the Mean Squared Quantization Error (MSE) of the product quantizer decomposes exactly into the sum of the MSE of its constituent sub-quantizers:
+            $$\mathbb{E}\left[ \|\mathbf{x} - q(\mathbf{x})\|^2 \right] = \sum_{j=1}^m \mathbb{E}\left[ \|\mathbf{x}_j - q_j(\mathbf{x}_j)\|^2 \right]$$
+          </li>
+          <li>Assuming the sub-vectors are independent and identically distributed isotropic Gaussians $\mathbf{x}_j \sim \mathcal{N}(\mathbf{0}, \sigma^2 I_{d^*})$, apply Gersho's asymptotic high-rate quantization theory to derive the scaling behavior of the total MSE as a function of $m$, $d^*$, and $K$.</li>
+          <li>Contrast Product Quantization with standard vector quantization (VQ with $K^m$ centroids), and prove why PQ eliminates the curse of dimensionality in memory and training complexity.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Proof of Product Quantizer Error Decomposition</div>
+
+        <p class="step"><strong>Step 1: Proof of Additive Error Decomposition:</strong><br>
+        Let $\mathbf{x} = [\mathbf{x}_1^\top, \dots, \mathbf{x}_m^\top]^\top \in \mathbb{R}^d$ and $q(\mathbf{x}) = [q_1(\mathbf{x}_1)^\top, \dots, q_m(\mathbf{x}_m)^\top]^\top \in \mathbb{R}^d$.<br>
+        The squared Euclidean error is:
+        $$\|\mathbf{x} - q(\mathbf{x})\|^2 = \sum_{i=1}^d \big(x_i - q(\mathbf{x})_i\big)^2$$
+        Group the coordinate indices according to the $m$ orthogonal subspaces $S_1, \dots, S_m$, where each subspace contains $d^* = d/m$ coordinates:
+        $$\|\mathbf{x} - q(\mathbf{x})\|^2 = \sum_{j=1}^m \sum_{k \in S_j} \big(x_k - q_j(\mathbf{x}_j)_k\big)^2 = \sum_{j=1}^m \|\mathbf{x}_j - q_j(\mathbf{x}_j)\|^2$$
+        Taking expectations on both sides with respect to the probability distribution $p(\mathbf{x})$:
+        $$\mathbb{E}\left[ \|\mathbf{x} - q(\mathbf{x})\|^2 \right] = \mathbb{E}\left[ \sum_{j=1}^m \|\mathbf{x}_j - q_j(\mathbf{x}_j)\|^2 \right]$$
+        By linearity of expectation:
+        $$\mathbb{E}\left[ \|\mathbf{x} - q(\mathbf{x})\|^2 \right] = \sum_{j=1}^m \mathbb{E}\left[ \|\mathbf{x}_j - q_j(\mathbf{x}_j)\|^2 \right] \quad \text{Q.E.D.}$$</p>
+
+        <p class="step"><strong>Step 2: Gersho's Asymptotic High-Rate Distortion Scaling:</strong><br>
+        According to Gersho's conjecture for optimal vector quantization in $\mathbb{R}^{d^*}$, for a codebook of size $K$, the mean squared error per subspace scales asymptotically as:
+        $$\mathbb{E}\left[ \|\mathbf{x}_j - q_j(\mathbf{x}_j)\|^2 \right] \approx C(d^*) \cdot d^* \cdot K^{-2/d^*} \cdot \|\mathbf{x}_j\|_{L_{d^*/(d^*+2)}}$$
+        where $C(d^*)$ is the inertial profile constant of the optimal Voronoi tessellation in dimension $d^*$.<br>
+        Summing over all $m$ identical sub-quantizers:
+        $$\text{MSE}_{\text{total}} = \sum_{j=1}^m C(d^*) d^* K^{-2/d^*} \sigma^2 = m \cdot C(d^*) d^* K^{-2/d^*} \sigma^2 = \mathbf{d \cdot C(d^*) \cdot \sigma^2 \cdot K^{-2m/d}}$$
+        <em>Key Insight: As the number of centroids $K$ increases, the distortion decreases exponentially at rate $K^{-2/d^*}$. To minimize distortion for a fixed bit budget $B_{\text{total}} = m \log_2 K$, the sub-vector dimension $d^*$ should be chosen to balance codebook capacity with quantization fidelity.</em></p>
+
+        <p class="step"><strong>Step 3: Elimination of the Curse of Dimensionality:</strong><br>
+        Consider quantizing a 128-dimensional vector using a 64-bit budget ($2^{64}$ possible reconstruction values):
+        <ul>
+          <li><strong>Standard Vector Quantization (VQ):</strong> Requires training a single codebook with $K_{\text{global}} = 2^{64} \approx 1.84 \times 10^{19}$ centroids! Storing this codebook requires $1.84 \times 10^{19} \times 128 \times 4\text{ bytes} \approx 9.4 \times 10^{21}\text{ bytes} \approx 9.4\text{ Zettabytes}$—more storage than the entire global internet! Training it via K-Means would take billions of years.</li>
+          <li><strong>Product Quantization (PQ):</strong> Decomposes the space into $m = 8$ sub-vectors of dimension $d^* = 16$. Each sub-quantizer trains $K = 256$ centroids ($2^8$). The product space still contains $256^8 = 2^{64}$ effective centroids!
+            $$\text{Total Codebook Storage} = 8 \times 256 \times 16 \times 4\text{ bytes} = \mathbf{131,072\text{ bytes (128 KB)}}!$$
+          </li>
+        </ul>
+        <em>Conclusion: Product Quantization provides an effective codebook of $2^{64}$ centroids using only 128 Kilobytes of memory and minutes of training time, completely breaking the curse of dimensionality!</em></p>
+      </div>
+    </div>
+
+    <!-- TIER 4: CONCEPTUAL TRAPS & ASSERTION-REASONING -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+    <!-- Problem 7.2.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.7</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-pinecone">Pinecone</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An engineer attempts to index unnormalized embedding vectors into an Approximate Nearest Neighbor graph using Maximum Inner Product Search (MIPS): $\arg\max_i \langle \mathbf{q}, \mathbf{x}_i \rangle$. The engineer uses standard Euclidean distance ($L_2$) HNSW without normalizing vectors to unit length ($\|\mathbf{x}\|_2 \neq 1$).</p>
+        <p>Which of the following statements correctly identifies why metric trees and spatial proximity graphs fail under unnormalized MIPS, and how the Neyshabur-Srebro transformation mathematically resolves it?</p>
+        <ol type="A">
+          <li>Inner product fails because cosine similarity cannot be negative; the solution is adding $+1.0$ to all dot products.</li>
+          <li>Inner product is not a valid mathematical metric: it does not satisfy non-negativity ($d(x, x) = 0$) or the <strong>Triangle Inequality</strong> ($d(x, z) \le d(x, y) + d(y, z)$). A vector with massive norm can have high inner product with distant vectors, breaking spatial pruning. The Neyshabur-Srebro transformation augments each vector with an extra dimension $\sqrt{U^2 - \|\mathbf{x}\|^2}$, converting MIPS into exact Euclidean distance on a $(d+1)$-dimensional hypersphere.</li>
+          <li>MIPS fails because GPUs cannot compute dot products in parallel; the solution is switching to Manhattan ($L_1$) distance.</li>
+          <li>MIPS works identically to $L_2$ distance regardless of vector norms because dot product is an affine transformation of Euclidean distance.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: B (Exhaustive Metric Analysis)</div>
+
+        <p class="step"><strong>Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Option A is False:</strong> Inner products can be negative (orthogonal vectors have 0, anti-parallel vectors have negative dot product). Adding $+1.0$ does not restore the triangle inequality.</li>
+          <li><strong>Option B is Correct:</strong>
+            <ul>
+              <li>Geometric pruning algorithms (KD-trees, Ball-trees, VP-trees, HNSW) rely fundamentally on the <strong>Triangle Inequality</strong>: $d(x, z) \le d(x, y) + d(y, z)$. This property guarantees that if a node's center is far from query $\mathbf{q}$, none of its children can be close, allowing entire subtrees to be pruned safely.</li>
+              <li>The inner product $\langle \mathbf{q}, \mathbf{x} \rangle$ is a similarity measure, not a metric. Crucially:
+                $$\|\mathbf{q} - \mathbf{x}\|^2 = \|\mathbf{q}\|^2 + \|\mathbf{x}\|^2 - 2\langle \mathbf{q}, \mathbf{x} \rangle$$
+                When $\|\mathbf{x}\|$ is constant (unit norm vectors), maximizing $\langle \mathbf{q}, \mathbf{x} \rangle$ is identical to minimizing $\|\mathbf{q} - \mathbf{x}\|$.</li>
+              <li>However, if vectors have variable norms, a vector with huge norm $\|\mathbf{x}\| = 1000$ can achieve a high inner product even if its angular alignment is poor! Metric pruning fails completely.</li>
+              <li><strong>The Neyshabur-Srebro Transformation (2015):</strong> Let $U = \max_i \|\mathbf{x}_i\|$. Map each $d$-dimensional database vector to $d+1$ dimensions:
+                $$\tilde{\mathbf{x}}_i = \left[ \mathbf{x}_i, \; \sqrt{U^2 - \|\mathbf{x}_i\|^2} \right] \implies \|\tilde{\mathbf{x}}_i\|^2 = U^2\text{ (Constant norm!)}$$
+                Augment query as $\tilde{\mathbf{q}} = [\mathbf{q}, 0]$. Then:
+                $$\|\tilde{\mathbf{q}} - \tilde{\mathbf{x}}_i\|^2 = \|\mathbf{q}\|^2 + U^2 - 2\langle \mathbf{q}, \mathbf{x}_i \rangle$$
+                Minimizing $(d+1)$-dimensional $L_2$ distance is now rigorously identical to maximizing $d$-dimensional MIPS!</li>
+            </ul>
+          </li>
+          <li><strong>Option C is Ridiculous:</strong> GPUs are massively optimized for dot products (GEMM).</li>
+          <li><strong>Option D is False:</strong> Dot product is equivalent to $L_2$ distance <em>only when all vectors have identical norm</em>.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Problem 7.2.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.2.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-amazon">Amazon</span>
+        <span class="company-tag company-pinecone">Pinecone</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>ASSERTION-REASONING:</strong></p>
+        <p><strong>Assertion (A):</strong> In a distributed vector database sharded horizontally across $S = 100$ independent worker nodes using document-partitioned sharding, a scatter-gather query architecture experiences severe <strong>Tail Latency Amplification</strong>, where an individual worker node SLA of $\text{p99} \le 10\text{ ms}$ results in a cluster-wide query p99 latency that routinely exceeds $30\text{ ms}$.</p>
+        <p><strong>Reason (R):</strong> In document-partitioned scatter-gather routing, a client query must be broadcast to all $S$ shards simultaneously, and the aggregator cannot complete the response until the single slowest shard returns its local top-$k$ candidates; assuming independent worker latency distributions, the probability that a cluster query breaches the node-level p99 threshold is:
+        $$P(\text{Cluster Latency} > T_{\text{p99}}) = 1 - (1 - 0.01)^{100} \approx 63.4\%$$</p>
+        <p><strong>Options:</strong></p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A (Comprehensive Distributed Systems Analysis)</div>
+
+        <p class="step"><strong>Deep Architectural Analysis:</strong></p>
+        <p><strong>Evaluation of Assertion (A): True.</strong><br>
+        Scatter-gather fan-out across dozens or hundreds of shards is one of the most notorious performance killers in distributed database engineering (Google Dean &amp; Barroso, "The Tail at Scale", CACM 2013). Even though 99% of individual worker queries finish in $<10\text{ ms}$, overall user queries routinely wait for straggler nodes suffering from garbage collection pauses, noisy neighbor network contention, or CPU scheduling delays.</p>
+
+        <p class="step"><strong>Evaluation of Reason (R): True &amp; Explanatory.</strong><br>
+        Let $X_i$ be the latency of worker node $i \in \{1, \dots, S\}$. The overall query latency is governed by the order statistic:
+        $$T_{\text{cluster}} = \max(X_1, X_2, \dots, X_S)$$
+        For the cluster query to complete within $T_{\text{p99}}$, <em>every single one of the $S = 100$ nodes</em> must finish within $T_{\text{p99}}$.<br>
+        Under independence:
+        $$P(T_{\text{cluster}} \le T_{\text{p99}}) = \prod_{i=1}^{100} P(X_i \le T_{\text{p99}}) = (0.99)^{100} \approx 0.3660 \quad (36.6\%)$$
+        The probability of at least one straggler node exceeding the p99 threshold is the complement:
+        $$P(T_{\text{cluster}} > T_{\text{p99}}) = 1 - 0.3660 = \mathbf{0.6340 \quad (63.4\%!)!}$$
+        <em>Nearly two-thirds of all queries suffer tail latency degradation!</em><br>
+        <strong>Production Mitigations:</strong>
+        <ol>
+          <li><strong>Two-Level Hierarchical Routing:</strong> Use a coarse IVF clustering on the gateway node to route queries strictly to the top $P \ll S$ relevant shards (e.g. routing to only 4 shards instead of broadcasting to 100).</li>
+          <li><strong>Hedged Requests:</strong> If a shard has not responded within the 95th percentile duration ($7\text{ ms}$), dispatch a duplicate hedged request to a replica node and take whichever response arrives first.</li>
+        </ol></p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: PRODUCTION CODE LAB -->
+    <h3>5. Production Code Lab 7.2: High-Performance Product Quantizer from Scratch</h3>
+    <p>Below is an enterprise-grade Python implementation of Product Quantization and Asymmetric Distance Computation (ADC) using NumPy, illustrating codebook training and table-driven vector search.</p>
 
     <div class="code-lab">
-      <div class="code-lab-header">Code Lab 7.2 — Product Quantization &amp; ADC Engine</div>
+      <div class="code-lab-header">Code Lab 7.2 — Product Quantization &amp; ADC Engine from Scratch</div>
       <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch72_vector_search/product_quantizer.py" target="_blank">🔗 View in GitHub: part7_system_design/ch72_vector_search/product_quantizer.py</a></p>
 <pre><code>import numpy as np
 
 class ProductQuantizer:
-    def __init__(self, d=64, m=8, k=256):
-        self.d = d # Total dimension
-        self.m = m # Number of sub-vectors
-        self.d_sub = d // m # Dimension per sub-vector
-        self.k = k # Number of centroids (256 fits in uint8)
-        self.centroids = None # (m, k, d_sub)
+    def __init__(self, d: int, m: int, k_sub: int = 256):
+        assert d % m == 0, "Embedding dimension d must be divisible by sub-vector count m"
+        self.d = d
+        self.m = m
+        self.d_sub = d // m
+        self.k_sub = k_sub
+        # Codebooks shape: (m, k_sub, d_sub)
+        self.codebooks = np.zeros((m, k_sub, self.d_sub), dtype=np.float32)
 
-    def fit(self, X_train):
-        N = X_train.shape[0]
-        self.centroids = np.zeros((self.m, self.k, self.d_sub))
-        
-        # Train K-Means independently for each sub-space
+    def fit(self, training_data: np.ndarray, num_iterations: int = 20):
+        """Train k-means centroids for each orthogonal sub-vector space"""
+        N = training_data.shape[0]
         for j in range(self.m):
-            sub_X = X_train[:, j * self.d_sub : (j + 1) * self.d_sub]
-            # Fast random initialization for demonstration
-            random_idx = np.random.choice(N, self.k, replace=False)
-            self.centroids[j] = sub_X[random_idx]
+            sub_data = training_data[:, j * self.d_sub : (j + 1) * self.d_sub]
+            # Initialize centroids randomly from data samples
+            indices = np.random.choice(N, size=self.k_sub, replace=False)
+            centroids = sub_data[indices].copy()
 
-    def encode(self, X):
-        """Compress float32 vectors into uint8 byte codes"""
-        N = X.shape[0]
+            for _ in range(num_iterations):
+                # Compute squared distances between samples and centroids: (N, k_sub)
+                diff = sub_data[:, np.newaxis, :] - centroids[np.newaxis, :, :]
+                dists = np.sum(diff ** 2, axis=-1)
+                labels = np.argmin(dists, axis=1)
+
+                # Update centroids
+                for c in range(self.k_sub):
+                    members = sub_data[labels == c]
+                    if len(members) > 0:
+                        centroids[c] = members.mean(axis=0)
+
+            self.codebooks[j] = centroids
+
+    def encode(self, vectors: np.ndarray) -> np.ndarray:
+        """Compress float32 vectors into m uint8 bytes"""
+        N = vectors.shape[0]
         codes = np.zeros((N, self.m), dtype=np.uint8)
-
         for j in range(self.m):
-            sub_X = X[:, j * self.d_sub : (j + 1) * self.d_sub]
-            # Compute distance to all 256 centroids: (N, 256)
-            c = self.centroids[j]
-            dists = np.sum((sub_X[:, np.newaxis, :] - c[np.newaxis, :, :]) ** 2, axis=-1)
-            codes[:, j] = np.argmin(dists, axis=1)
-
+            sub_data = vectors[:, j * self.d_sub : (j + 1) * self.d_sub]
+            diff = sub_data[:, np.newaxis, :] - self.codebooks[j][np.newaxis, :, :]
+            dists = np.sum(diff ** 2, axis=-1)
+            codes[:, j] = np.argmin(dists, axis=1).astype(np.uint8)
         return codes
 
-    def compute_asymmetric_distances(self, query, codes):
-        """ADC: Query is uncompressed float32, database is compressed uint8 bytes!"""
-        # 1. Pre-compute query-to-centroid distance lookup table: (m, 256)
-        lookup_table = np.zeros((self.m, self.k))
+    def compute_distance_table(self, query: np.ndarray) -> np.ndarray:
+        """Pre-compute squared Euclidean distances between query sub-vectors and all centroids"""
+        # Shape: (m, k_sub)
+        distance_table = np.zeros((self.m, self.k_sub), dtype=np.float32)
         for j in range(self.m):
-            sub_q = query[j * self.d_sub : (j + 1) * self.d_sub]
-            lookup_table[j] = np.sum((self.centroids[j] - sub_q) ** 2, axis=-1)
+            q_sub = query[j * self.d_sub : (j + 1) * self.d_sub]
+            diff = self.codebooks[j] - q_sub[np.newaxis, :]
+            distance_table[j] = np.sum(diff ** 2, axis=-1)
+        return distance_table
 
-        # 2. Fast lookup: sum distances across sub-spaces
-        N = codes.shape[0]
-        distances = np.zeros(N)
+    def search_adc(self, query: np.ndarray, compressed_codes: np.ndarray, top_k: int = 5) -> tuple[np.ndarray, np.ndarray]:
+        """Asymmetric Distance Computation (ADC) via lookup table"""
+        dist_table = self.compute_distance_table(query) # (m, k_sub)
+        
+        # Accumulate distances using fast table lookups
+        # compressed_codes has shape (N, m)
+        N = compressed_codes.shape[0]
+        scores = np.zeros(N, dtype=np.float32)
         for j in range(self.m):
-            distances += lookup_table[j, codes[:, j]]
+            scores += dist_table[j, compressed_codes[:, j]]
 
-        return distances
+        top_k_indices = np.argpartition(scores, top_k)[:top_k]
+        top_k_indices = top_k_indices[np.argsort(scores[top_k_indices])]
+        return top_k_indices, scores[top_k_indices]
 
 if __name__ == "__main__":
     np.random.seed(42)
-    # 10,000 vectors of dimension 64
-    X = np.random.randn(10000, 64).astype(np.float32)
-    pq = ProductQuantizer(d=64, m=8, k=256)
-    pq.fit(X)
+    N = 10000
+    d = 128
+    m = 16 # 16 sub-vectors of dimension 8 -> 16 bytes per vector (8x compression)
+    data = np.random.randn(N, d).astype(np.float32)
 
-    # Encode database
-    compressed_codes = pq.encode(X)
-    print(f"Original Vector Size  : {X.nbytes / 1024:.1f} KB")
-    print(f"Compressed Codes Size : {compressed_codes.nbytes / 1024:.1f} KB (8x Memory Savings!)")
+    pq = ProductQuantizer(d=d, m=m, k_sub=256)
+    pq.fit(data[:2000]) # Train on 2000 vectors
+    codes = pq.encode(data)
+    print(f"Compressed {N} vectors from {data.nbytes / 1e6:.2f} MB to {codes.nbytes / 1e6:.2f} MB ({data.nbytes / codes.nbytes:.1f}x compression)!")
 
-    # Search with uncompressed query
-    query = np.random.randn(64).astype(np.float32)
-    approx_dists = pq.compute_asymmetric_distances(query, compressed_codes)
-    top_k = np.argsort(approx_dists)[:5]
-    print("Top 5 Nearest Neighbor Indices via ADC:", top_k)</code></pre>
+    query = np.random.randn(d).astype(np.float32)
+    top_indices, top_dists = pq.search_adc(query, codes, top_k=3)
+    print(f"ADC Top-3 Neighbor IDs: {top_indices}, Squared Distances: {np.round(top_dists, 3)}")</code></pre>
     </div>
 
     <!-- SECTION 6: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 7.2 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 7.2: Distributed Vector Search Engine with IVF-PQ</h3>
-        <p class="project-desc">Architect and deploy a distributed vector database engine featuring multi-threaded Product Quantization, Inverted File (IVF) centroid partitioning, and consistent hash routing across a multi-node cluster.</p>
+        <h3 class="project-title">Project 7.2: Billion-Scale Distributed Vector Search Engine with HNSW &amp; IVF-PQ</h3>
+        <p class="project-desc">Architect, benchmark, and deploy a distributed vector search cluster indexing 100,000,000 dense embeddings across sharded nodes, comparing HNSW graph traversal against IVF-PQ asymmetric distance lookup across QPS, p99 latency, and recall@10.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch72_vector_search/product_quantizer.py" target="_blank">🔗 Full Project Code: part7_system_design/ch72_vector_search/product_quantizer.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In massive multimodal search engines (Pinterest, Shopify), visual image catalogs contain over 500 million product embeddings. Storing uncompressed vectors in RAM requires tens of thousands of dollars in cloud infrastructure per month. In this project, you build an industrial IVF-PQ vector search service that indexes 10 million vectors in under 2GB of RAM, serving sub-10ms queries with 94% recall parity.</p>
+        <p><strong>Case Study Architecture:</strong> In massive-scale visual search (Pinterest, Google Lens), systems must search through a catalog of 2 billion images in under 15 milliseconds. In this project, you construct a tiered vector search architecture: deploying an in-memory IVF-PQ index on GPU/CPU worker shards, building a gateway scatter-gather aggregator with hedged request straggler mitigation, and evaluating recall trade-offs against exact brute-force baselines.</p>
       </div>
     </div>
   </div>
 </div>
+
 
 <!-- ======================================================================
      CHAPTER 7.3 — EDGE AI, MODEL COMPRESSION & QUANTIZATION
@@ -394,12 +1562,21 @@ if __name__ == "__main__":
   <div class="chapter-header">
     <span class="chapter-number">Chapter 7.3</span>
     <h2 class="chapter-title">Edge AI, Model Compression &amp; Quantization</h2>
-    <span class="chapter-subtitle">Quantization-Aware Training (QAT), Straight-Through Estimators, MobileNet &amp; ONNX</span>
+    <span class="chapter-subtitle">MobileNet Depthwise Convolutions, Uniform Affine INT8 Quantization, QAT, Straight-Through Estimators &amp; 2:4 Sparsity</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
   <div class="epigraph">
     <p>"Anyone can run a 70-billion parameter model in an air-conditioned datacenter consuming 500 Watts of power. An AI engineer makes neural networks run on a 3-Watt smartphone battery without making the device hot to the touch."</p>
+
+    <!-- FIGURE 7.3.1: quantization_mapping_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="quantization_mapping_diagram.png" alt="Figure 7.3.1: quantization_mapping_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 7.3.1:</em> Uniform affine quantization mapping continuous 32-bit floating-point weights into 8-bit integer grids. Calculating the optimal scale $S$ and zero-point $Z$ preserves network dynamic range while slashing memory bandwidth and VRAM requirements by 75%.
+      </p>
+    </div>
+
     <p class="attribution">— Edge AI Maxim</p>
   </div>
 
@@ -411,15 +1588,16 @@ if __name__ == "__main__":
     <p>Deploying AI models to edge devices (Apple iPhones, Android smartphones, DJI drones, Raspberry Pi microcontrollers, and VR headsets) requires engineering under severe physical constraints:</p>
     <ul>
       <li><strong>Thermal Envelopes:</strong> Edge devices have passive cooling with zero fans. Sustained compute exceeding <strong>$3$ to $5 \text{ Watts}$</strong> causes thermal throttling, rapidly draining batteries and degrading user experience.</li>
-      <li><strong>Memory Bandwidth &amp; Capacity:</strong> While cloud servers feature 80GB HBM3 memory running at 3.35 TB/s, smartphones share 4GB to 8GB of low-power LPDDR5 RAM across the operating system and camera pipeline.</li>
+      <li><strong>Memory Bandwidth &amp; Capacity:</strong> While cloud servers feature 80GB HBM3 memory running at 3.35 TB/s, smartphones share 4GB to 8GB of low-power LPDDR5 RAM ($50-100\text{ GB/s}$) across the operating system and camera pipeline.</li>
+      <li><strong>Dedicated Neural Accelerators:</strong> Modern edge SoCs deploy specialized NPUs (Apple Neural Engine ANE, Qualcomm Hexagon NPU, Google Tensor TPU) that deliver peak TOPS only when computations are mapped strictly to 8-bit or 16-bit integer SIMD tensors.</li>
     </ul>
 
     <!-- SECTION 2: DEPTHWISE SEPARABLE CONVOLUTIONS -->
     <h3>2. MobileNet: Depthwise Separable Convolutions (Howard et al., Google 2017)</h3>
     <p>Standard 2D convolutions perform spatial filtering and channel combination simultaneously in a single heavy operation. <strong>MobileNet</strong> factors this into two decoupled steps:</p>
     <ol>
-      <li><strong>Depthwise Convolution:</strong> Applies a single $K \times K$ convolutional filter per input channel independently (computes spatial features with zero inter-channel communication).</li>
-      <li><strong>Pointwise Convolution:</strong> Applies a $1 \times 1$ convolution across all channels, linearly combining features into $N$ output channels.</li>
+      <li><strong>Depthwise Convolution:</strong> Applies a single $D_K \times D_K$ convolutional filter per input channel independently (computes spatial features with zero inter-channel communication).</li>
+      <li><strong>Pointwise Convolution:</strong> Applies a $1 \times 1$ convolution across all channels, linearly combining spatial features into $N$ output channels.</li>
     </ol>
 
     <div class="real-world-box">
@@ -434,139 +1612,636 @@ if __name__ == "__main__":
       <p>Compute the ratio of computation:</p>
       $$\text{Ratio} = \frac{D_K^2 \cdot M \cdot D_F^2 + M \cdot N \cdot D_F^2}{D_K^2 \cdot M \cdot N \cdot D_F^2} = \frac{D_K^2 \cdot M + M \cdot N}{D_K^2 \cdot M \cdot N} = \mathbf{\frac{1}{N} + \frac{1}{D_K^2}}$$
       <p>For standard $3 \times 3$ filters ($D_K = 3$) with $N = 512$ channels:</p>
-      $$\text{Ratio} = \frac{1}{512} + \frac{1}{9} \approx 0.0019 + 0.1111 \approx \mathbf{0.113} \implies \mathbf{88.7\% \text{ Reduction in FLOPs!}}$$
-      <p><em>Depthwise Separable Convolutions deliver a nearly $9\times$ reduction in computational operations and parameter count with virtually zero loss in visual accuracy!</em></p>
+      $$\text{Ratio} = \frac{1}{512} + \frac{1}{9} \approx 0.00195 + 0.11111 \approx \mathbf{0.113} \implies \mathbf{88.7\% \text{ Reduction in FLOPs!}}$$
+      <p><em>Depthwise Separable Convolutions deliver an $8.8\times$ reduction in computational operations and parameter count with virtually zero loss in visual accuracy!</em></p>
     </div>
 
-    <!-- SECTION 3: QUANTIZATION-AWARE TRAINING -->
-    <h3>3. Quantization-Aware Training (QAT) &amp; Straight-Through Estimators</h3>
-    <p>Converting a trained 32-bit floating point model to 8-bit integers via Post-Training Quantization (PTQ) frequently causes severe accuracy degradation on compact edge models. <strong>Quantization-Aware Training (QAT)</strong> solves this by simulating 8-bit fixed-point quantization noise directly during model training.</p>
-
-    <h4>Uniform Affine Quantization Formula</h4>
-    <p>Maps continuous real float $r \in [r_{\min}, r_{\max}]$ to an 8-bit unsigned integer $q \in [0, 255]$:</p>
-    $$q = \text{clamp}\left( \left\lfloor \frac{r}{S} \right\rceil + Z, 0, 255 \right)$$
+    <!-- SECTION 3: QUANTIZATION THEORY -->
+    <h3>3. Uniform Affine Quantization &amp; Integer GEMM</h3>
+    <p>Converting a 32-bit floating point tensor $r \in [r_{\min}, r_{\max}]$ to an 8-bit unsigned integer $q \in [0, 255]$ maps continuous values to discrete grid steps:</p>
+    $$q = \text{clamp}\left( \left\lfloor \frac{r}{S} \right\rceil + Z, \; 0, \; 255 \right)$$
     $$S = \frac{r_{\max} - r_{\min}}{255}, \quad Z = \text{round}\left( -\frac{r_{\min}}{S} \right)$$
-    <p>Where $S$ is the positive real Scale Factor and $Z$ is the integer Zero-Point.</p>
+    <p>where $S > 0$ is the real Scale Factor and $Z \in \mathbb{Z}$ is the integer Zero-Point that maps real zero to an exact integer representation.</p>
 
-    <div class="key-insight">
-      <p><strong>The Straight-Through Estimator (STE)</strong><br>
-      The rounding function $\lfloor \cdot \rceil$ is a step function: its derivative is zero everywhere, and undefined at half-integers ($\frac{d}{dx} \lfloor x \rceil = 0$). Standard backpropagation would result in exact zero gradients, freezing the network.</p>
-      <p>The <strong>Straight-Through Estimator (STE)</strong> bypasses this non-differentiable operator during backpropagation by treating the derivative of rounding as the identity:</p>
-      $$\frac{\partial \lfloor x \rceil}{\partial x} \approx 1, \quad \text{for } x \in [\text{clip}_{\min}, \text{clip}_{\max}]$$
-      <p><em>The forward pass experiences realistic 8-bit fixed-point rounding noise, while the backward pass propagates smooth FP32 gradients, allowing weights to adapt and preserve 99.8% of full accuracy!</em></p>
-    </div>
+    <h4>Integer Arithmetic in Matrix Multiplication (GEMM)</h4>
+    <p>When computing $Y = X W$, the dequantized approximation is:</p>
+    $$\hat{Y}_{i, k} = \sum_{j=1}^D S_X(q_{X, i, j} - Z_X) \cdot S_W(q_{W, j, k} - Z_W) = S_X S_W \sum_{j=1}^D (q_{X, i, j} - Z_X)(q_{W, j, k} - Z_W)$$
+    <p>Expanding the product:</p>
+    $$\hat{Y}_{i, k} = S_X S_W \left( \sum_{j=1}^D q_{X, i, j} q_{W, j, k} - Z_W \sum_{j=1}^D q_{X, i, j} - Z_X \sum_{j=1}^D q_{W, j, k} + D \cdot Z_X Z_W \right)$$
+    <p><em>The Hardware Miracle:</em> The core summation $\sum q_X q_W$ is computed using fast 8-bit integer dot products (ARM NEON <code>SDOT</code>, Intel VNNI <code>VPDPBUSD</code>, NVIDIA <code>DP4A</code>) with 32-bit accumulation. The weight sum $\sum q_W$ and offset $D \cdot Z_X Z_W$ are <strong>pre-computed offline</strong> once!</p>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Edge AI</h3>
+    <!-- SECTION 4: QAT AND STE -->
+    <h3>4. Quantization-Aware Training (QAT) &amp; Straight-Through Estimators</h3>
+    <p>Post-Training Quantization (PTQ) often degrades compact edge networks. <strong>Quantization-Aware Training (QAT)</strong> models quantization noise during backprop using <strong>Fake-Quantization</strong>:</p>
+    $$\hat{r} = S \cdot \left( \text{clamp}\left( \left\lfloor \frac{r}{S} \right\rceil + Z, \; q_{\min}, \; q_{\max} \right) - Z \right)$$
+    <p>Because the rounding function $\lfloor x \rceil$ has derivative zero almost everywhere, standard backpropagation fails. The <strong>Straight-Through Estimator (STE - Bengio et al., 2013)</strong> models the gradient as an identity pass-through within dynamic range bounds:</p>
+    $$\frac{\partial \hat{r}}{\partial r} = \begin{cases} 1 & \text{if } r_{\min} \le r \le r_{\max} \\ 0 & \text{otherwise} \end{cases}$$
 
+    <!-- ======================================================================
+         SECTION 5: 4-TIER GRADED PRACTICE SUITE
+         ====================================================================== -->
+    <h3>4-Tier Graded Practice Suite — Edge AI &amp; Quantization</h3>
+    <p>Eight rigorous problems spanning MobileNet FLOPs arithmetic, uniform affine quantization calibration, integer GEMM offset tracing, STE backward propagation traces, Knowledge Distillation temperature proofs, 2:4 structured sparsity derivations, per-channel quantization traps, and bottleneck quantization collapses.</p>
+
+    <!-- TIER 1: NUMERICAL DRILLS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+    <!-- Problem 7.3.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 7.3.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="difficulty difficulty-medium">Medium</span>
         <span class="company-tag company-apple">Apple</span>
-        <span class="company-tag company-qualcomm">Qualcomm</span>
+        <span class="company-tag company-google">Google</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> You are deploying an image classification model to the Apple Neural Engine (ANE) on an iPhone 16. The model must have a binary weight footprint under $25 \text{ MB}$ and execute inference in $<4 \text{ ms}$. Compare <strong>Structured Channel Pruning</strong> vs. <strong>Unstructured Weight Pruning</strong> for hardware acceleration on mobile Neural Processing Units (NPUs).</p>
+        <p><strong>QUESTION:</strong> A computer vision model on an Apple Neural Engine (ANE) processes an intermediate feature map of dimensions $H = 56$, $W = 56$, and $M = 128$ input channels. The layer produces $N = 256$ output channels using a $3 \times 3$ filter ($D_K = 3$) with stride 1 and padding 1 (preserving spatial dimensions $56 \times 56$).</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the parameter count and Multiply-Accumulate (MAC) operations for a standard 2D convolution layer.</li>
+          <li>Calculate the parameter count and MAC operations for a Depthwise Separable Convolution layer (Depthwise $3 \times 3$ + Pointwise $1 \times 1$).</li>
+          <li>Compute the exact percentage reduction in parameter count and computational operations.</li>
+          <li>Calculate the memory bandwidth traffic required to read model weights from LPDDR5 RAM during a single forward inference pass in FP16 (2 bytes/param) for standard vs separable convolution.</li>
+        </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Hardware Acceleration Audit</div>
+        <div class="solution-label">✓ Step-by-Step MobileNet Arithmetic Solution</div>
 
-        <p class="step"><strong>Step 1: Unstructured (Fine-Grained) Pruning:</strong><br>
-        Individually sets weights to zero if $|w_{i, j}| &lt; \tau$. While this achieves 80% weight sparsity, the zero entries are scattered randomly across the weight matrix.<br>
-        <strong>The Hardware Penalty:</strong> Mobile NPUs and SIMD vector engines execute matrix multiplications using dense, wide vector registers (e.g. 128-bit or 256-bit registers). Loading scattered non-zero elements requires complex indirect memory index addressing and branching logic, causing CPU/NPU pipeline stalls. On standard mobile hardware, <strong>unstructured sparsity results in ZERO speedup or even runs SLOWER than dense matrices!</strong></p>
+        <p class="step"><strong>Step 1: Standard Convolution Calculations:</strong><br>
+        Weights parameter count:
+        $$P_{\text{std}} = D_K \times D_K \times M \times N = 3 \times 3 \times 128 \times 256 = \mathbf{294,912\text{ parameters}}$$
+        Multiply-Accumulate (MAC) operations ($H \times W$ spatial output locations):
+        $$\text{MACs}_{\text{std}} = H \times W \times P_{\text{std}} = 56 \times 56 \times 294,912 = 3,136 \times 294,912 = \mathbf{924,844,032\text{ MACs} \approx 924.84\text{ MMACs}}$$</p>
 
-        <p class="step"><strong>Step 2: Structured (Coarse-Grained) Channel Pruning:</strong><br>
-        Removes entire convolutional filter channels or linear neuron columns based on $L_1$-norm importance.<br>
-        <strong>The Hardware Advantage:</strong> When a channel is removed, the weight matrix is physically resized into a smaller, contiguous dense matrix ($W \in \mathbb{R}^{C_{\text{new}} \times C_{\text{in}}}$). The mobile NPU executes standard contiguous dense GEMM instructions at maximum hardware clock speed, delivering a <strong>direct $2\times$ to $4\times$ real-world speedup with zero special hardware requirements!</strong></p>
+        <p class="step"><strong>Step 2: Depthwise Separable Convolution Calculations:</strong><br>
+        <strong>(a) Depthwise Convolution ($3 \times 3$ spatial filter per channel):</strong><br>
+        Parameters:
+        $$P_{\text{dw}} = D_K \times D_K \times M = 3 \times 3 \times 128 = 1,152\text{ parameters}$$
+        MACs:
+        $$\text{MACs}_{\text{dw}} = H \times W \times P_{\text{dw}} = 3,136 \times 1,152 = 3,612,672\text{ MACs} \approx 3.61\text{ MMACs}$$<br>
+        <strong>(b) Pointwise Convolution ($1 \times 1$ channel projection):</strong><br>
+        Parameters:
+        $$P_{\text{pw}} = 1 \times 1 \times M \times N = 128 \times 256 = 32,768\text{ parameters}$$
+        MACs:
+        $$\text{MACs}_{\text{pw}} = H \times W \times P_{\text{pw}} = 3,136 \times 32,768 = 102,760,448\text{ MACs} \approx 102.76\text{ MMACs}$$<br>
+        <strong>Total Depthwise Separable Metrics:</strong>
+        $$P_{\text{sep}} = P_{\text{dw}} + P_{\text{pw}} = 1,152 + 32,768 = \mathbf{33,920\text{ parameters}}$$
+        $$\text{MACs}_{\text{sep}} = \text{MACs}_{\text{dw}} + \text{MACs}_{\text{pw}} = 3,612,672 + 102,760,448 = \mathbf{106,373,120\text{ MACs} \approx 106.37\text{ MMACs}}$$</p>
+
+        <p class="step"><strong>Step 3: Percentage Reductions:</strong><br>
+        Theoretical ratio from formula $\frac{1}{N} + \frac{1}{D_K^2}$:
+        $$\text{Ratio} = \frac{1}{256} + \frac{1}{9} \approx 0.003906 + 0.111111 = 0.115017 \quad (11.50\%)$$
+        Direct parameter reduction:
+        $$\text{Param Reduction} = \left(1 - \frac{33,920}{294,912}\right) \times 100\% = (1 - 0.115017) \times 100\% = \mathbf{88.50\% \text{ Reduction}}$$
+        Direct compute reduction:
+        $$\text{Compute Reduction} = \left(1 - \frac{106,373,120}{924,844,032}\right) \times 100\% = \mathbf{88.50\% \text{ Reduction}}$$</p>
+
+        <p class="step"><strong>Step 4: LPDDR5 Memory Traffic:</strong><br>
+        In FP16 precision ($2\text{ bytes per parameter}$):
+        <ul>
+          <li>Standard Conv: $294,912 \times 2\text{ bytes} = 589,824\text{ bytes} = \mathbf{589.82\text{ KB}}$</li>
+          <li>Separable Conv: $33,920 \times 2\text{ bytes} = 67,840\text{ bytes} = \mathbf{67.84\text{ KB}}$</li>
+        </ul>
+        $$\text{Bandwidth Traffic Saved} = 589.82\text{ KB} - 67.84\text{ KB} = 521.98\text{ KB per forward pass (88.5\% saved!)}$$</p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 7.3: Depthwise Separable Convolutions &amp; Knowledge Distillation</h3>
-    <p>Below is a production-grade PyTorch implementation of a Depthwise Separable Convolution block and Hinton's Knowledge Distillation loss function.</p>
+    <!-- Problem 7.3.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.2</span>
+        <span class="difficulty difficulty-medium">Medium</span>
+        <span class="company-tag company-qualcomm">Qualcomm</span>
+        <span class="company-tag company-arm">ARM</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An activation tensor in an edge Vision Transformer exhibits dynamic range $r \in [-2.40, +6.20]$. You are calibrating an 8-bit unsigned uniform affine quantizer ($q \in [0, 255]$).</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Calculate the exact scale factor $S$ to 8 decimal places and the integer zero-point $Z$.</li>
+          <li>Quantize the following real floating-point values into 8-bit integers:
+            $$r_1 = -2.40, \quad r_2 = 0.00, \quad r_3 = +4.15$$
+          </li>
+          <li>Dequantize the resulting integer values back to real floating-point representations $\hat{r}_1, \hat{r}_2, \hat{r}_3$, and calculate the absolute quantization error $|r_i - \hat{r}_i|$ for each.</li>
+          <li>Explain why preserving an exact integer representation for real zero ($r = 0.0$) is mathematically mandatory in deep learning inference.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Step-by-Step Affine Quantization Arithmetic</div>
 
-    <div class="code-lab">
-      <div class="code-lab-header">Code Lab 7.3 — Depthwise Separable Block &amp; Distillation Loss</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch73_edge_ai/mobilenet_block.py" target="_blank">🔗 View in GitHub: part7_system_design/ch73_edge_ai/mobilenet_block.py</a></p>
-<pre><code>import torch
-import torch.nn as nn
-import torch.nn.functional as F
+        <p class="step"><strong>Step 1: Scale Factor and Zero-Point Calculation:</strong><br>
+        The scale factor maps the continuous span to 255 discrete bins:
+        $$S = \frac{r_{\max} - r_{\min}}{q_{\max} - q_{\min}} = \frac{6.20 - (-2.40)}{255 - 0} = \frac{8.60}{255} \approx \mathbf{0.03372549}$$
+        The integer zero-point maps real $0.0$ to the discrete grid:
+        $$Z = \text{round}\left( -\frac{r_{\min}}{S} \right) = \text{round}\left( -\frac{-2.40}{0.03372549} \right) = \text{round}(71.1628) = \mathbf{71}$$</p>
 
-class DepthwiseSeparableConv(nn.Module):
-    """
-    MobileNet Depthwise Separable Convolution:
-    Depthwise (groups=in_ch) + Pointwise (1x1 Conv)
-    """
-    def __init__(self, in_channels, out_channels, stride=1):
-        super().__init__()
-        # 1. Depthwise Conv: groups=in_channels (1 filter per channel)
-        self.depthwise = nn.Conv2d(
-            in_channels, in_channels, kernel_size=3, stride=stride, padding=1, groups=in_channels, bias=False
-        )
-        self.bn1 = nn.BatchNorm2d(in_channels)
-        self.relu = nn.ReLU(inplace=True)
+        <p class="step"><strong>Step 2: Quantization of Values:</strong><br>
+        Quantization formula: $q = \text{clamp}\left( \text{round}(r / S) + Z, \; 0, \; 255 \right)$.<br><br>
+        <strong>For $r_1 = -2.40$:</strong>
+        $$q_1 = \text{round}\left( \frac{-2.40}{0.03372549} \right) + 71 = \text{round}(-71.1628) + 71 = -71 + 71 = \mathbf{0}$$
+        <strong>For $r_2 = 0.00$:</strong>
+        $$q_2 = \text{round}\left( \frac{0.00}{0.03372549} \right) + 71 = 0 + 71 = \mathbf{71}$$
+        <strong>For $r_3 = +4.15$:</strong>
+        $$q_3 = \text{round}\left( \frac{4.15}{0.03372549} \right) + 71 = \text{round}(123.052) + 71 = 123 + 71 = \mathbf{194}$$</p>
 
-        # 2. Pointwise Conv: 1x1 Conv across all channels
-        self.pointwise = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(out_channels)
+        <p class="step"><strong>Step 3: Dequantization and Quantization Error:</strong><br>
+        Dequantization formula: $\hat{r} = S \cdot (q - Z)$.<br><br>
+        <strong>For $q_1 = 0$:</strong>
+        $$\hat{r}_1 = 0.03372549 \times (0 - 71) = 0.03372549 \times (-71) \approx \mathbf{-2.39451}$$
+        $$\text{Error}_1 = |-2.40 - (-2.39451)| = \mathbf{0.00549}$$
+        <strong>For $q_2 = 71$:</strong>
+        $$\hat{r}_2 = 0.03372549 \times (71 - 71) = 0.03372549 \times 0 = \mathbf{0.00000}$$
+        $$\text{Error}_2 = |0.00 - 0.00000| = \mathbf{0.00000\text{ (Zero Error!)}}$$
+        <strong>For $q_3 = 194$:</strong>
+        $$\hat{r}_3 = 0.03372549 \times (194 - 71) = 0.03372549 \times 123 \approx \mathbf{4.14824}$$
+        $$\text{Error}_3 = |4.15 - 4.14824| = \mathbf{0.00176}$$</p>
 
-    def forward(self, x):
-        x = self.relu(self.bn1(self.depthwise(x)))
-        x = self.relu(self.bn2(self.pointwise(x)))
-        return x
-
-def knowledge_distillation_loss(student_logits, teacher_logits, labels, T=4.0, alpha=0.7):
-    """
-    Hinton Knowledge Distillation Loss:
-    L_total = (1 - alpha) * CrossEntropy + alpha * T^2 * KL_Divergence
-    """
-    # 1. Hard Cross-Entropy Loss with true ground truth
-    hard_loss = F.cross_entropy(student_logits, labels)
-
-    # 2. Soft KL Divergence Loss with softened teacher predictions
-    soft_student = F.log_softmax(student_logits / T, dim=-1)
-    soft_teacher = F.softmax(teacher_logits / T, dim=-1)
-    soft_loss = F.kl_div(soft_student, soft_teacher, reduction="batchmean") * (T ** 2)
-
-    return (1.0 - alpha) * hard_loss + alpha * soft_loss
-
-if __name__ == "__main__":
-    block = DepthwiseSeparableConv(in_channels=64, out_channels=128)
-    x = torch.randn(2, 64, 32, 32)
-    out = block(x)
-    print(f"Input Shape : {x.shape}")
-    print(f"Output Shape: {out.shape} (Channels expanded from 64 to 128!)")</code></pre>
+        <p class="step"><strong>Step 4: Architectural Importance of Exact Zero Representation:</strong><br>
+        In neural networks, zero values occur with high frequency due to:
+        <ul>
+          <li>ReLU activations: $\text{ReLU}(x) = \max(0, x)$ produces exact zeroes for 50%+ of neurons.</li>
+          <li>Zero-padding in convolutions: Boundaries of images are padded with exact zeroes.</li>
+        </ul>
+        If real $0.0$ did not map to an exact integer ($Z \notin \mathbb{Z}$), padding borders would map to non-zero values (e.g. $0.004$), corrupting spatial boundary convolutions, increasing energy consumption, and creating systemic activation drift!</p>
+      </div>
     </div>
 
-    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <!-- TIER 2: APPLIED ENGINEERING TRACES -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+    <!-- Problem 7.3.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.3</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-arm">ARM</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In high-performance mobile inference (ARM NEON / Apple Neural Engine), quantized matrix multiplication between an input activation vector $\mathbf{x} \in \mathbb{R}^4$ and a weight column $\mathbf{w} \in \mathbb{R}^4$ is evaluated using integer SIMD arithmetic.</p>
+        <p>The quantization parameters are:</p>
+        <ul>
+          <li>Activations (Asymmetric): $S_X = 0.05$, $Z_X = 120$. Quantized vector: $\mathbf{q}_X = [140, 110, 135, 120]$.</li>
+          <li>Weights (Symmetric): $S_W = 0.02$, $Z_W = 0$. Quantized vector: $\mathbf{q}_W = [25, -40, 15, -10]$.</li>
+        </ul>
+        <p>Construct an algorithmic trace table documenting the integer execution pipeline: (a) Direct SIMD dot-product accumulation $\sum q_X q_W$, (b) Offline pre-computed bias correction term, (c) 32-bit integer accumulation, (d) Re-scaling multiplier and bit-shift to produce output float $\hat{y}$, and (e) Verification against floating-point ground truth.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Algorithmic Integer GEMM Execution Trace</div>
+
+        <p class="step"><strong>Step 1: Mathematical Linearization of Terms:</strong><br>
+        The real value product is:
+        $$\hat{y} = S_X S_W \sum_{j=1}^4 (q_{X, j} - Z_X)(q_{W, j} - Z_W)$$
+        Since weights are symmetrically quantized ($Z_W = 0$), the formula simplifies:
+        $$\hat{y} = S_X S_W \left( \sum_{j=1}^4 q_{X, j} q_{W, j} - Z_X \sum_{j=1}^4 q_{W, j} \right)$$
+        Notice: $\sum q_{W, j}$ is completely independent of runtime activations and is <strong>pre-computed at model compilation time</strong>!</p>
+
+        <p class="step"><strong>Step 2: Algorithmic Step-by-Step Execution Trace:</strong></p>
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Phase</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Operation Description</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Hardware Subsystem</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Arithmetic Calculation</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Result Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1. Offline</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Weight Summation</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Model Compiler (AOT)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\sum q_W = 25 + (-40) + 15 + (-10)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$K_W = -10$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2. Offline</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Zero-Point Correction Offset</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Model Compiler (AOT)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-Z_X \times K_W = -120 \times (-10)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$C_{\text{offset}} = +1,200$</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3. Runtime</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Integer SIMD Dot Product</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">ARM NEON <code>SDOT</code> (4-way INT8)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$(140 \times 25) + (110 \times -40) + (135 \times 15) + (120 \times -10)$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$3500 - 4400 + 2025 - 1200 = \mathbf{-75}$</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>4. Runtime</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Integer Accumulation</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">32-bit Integer ALU</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\text{Accumulator} = -75 + C_{\text{offset}} = -75 + 1,200$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{1,125}$ (INT32)</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>5. Runtime</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Re-scaling to Real Domain</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">Fixed-Point Multiplier</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\hat{y} = S_X \times S_W \times 1,125 = (0.05 \times 0.02) \times 1,125 = 0.001 \times 1,125$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{+1.125\text{ (Output Float)}}$</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="step"><strong>Step 3: Verification against True Dequantized Dot Product:</strong><br>
+        Dequantize activation vector:
+        $$\mathbf{x} = S_X (\mathbf{q}_X - Z_X) = 0.05 \times [140-120, 110-120, 135-120, 120-120] = 0.05 \times [20, -10, 15, 0] = [1.0, -0.5, 0.75, 0.0]$$
+        Dequantize weight vector:
+        $$\mathbf{w} = S_W (\mathbf{q}_W - 0) = 0.02 \times [25, -40, 15, -10] = [0.50, -0.80, 0.30, -0.20]$$
+        Compute direct dot product:
+        $$\mathbf{x} \cdot \mathbf{w} = (1.0 \times 0.50) + (-0.5 \times -0.80) + (0.75 \times 0.30) + (0.0 \times -0.20) = 0.50 + 0.40 + 0.225 + 0.0 = \mathbf{+1.125}$$
+        <em>Exact match verified! The entire inner product ran using 8-bit integer SIMD with zero floating-point operations.</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 7.3.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.4</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Quantization-Aware Training (QAT), weight tensors undergo simulated fake-quantization during the forward pass, and gradients propagate during backward pass using the <strong>Straight-Through Estimator (STE)</strong>.</p>
+        <p>Consider a 5-element weight vector undergoing symmetric 2-bit quantization ($q \in \{-2, -1, 0, 1\}$) with clipping threshold $C = 1.0$ (scale $S = 1.0 / 2 = 0.5$):</p>
+        $$\mathbf{w} = [-1.8, \; -0.4, \; +0.2, \; +0.9, \; +1.6]$$
+        <p>The upstream loss gradient received during backward pass is:</p>
+        $$\mathbf{g}_{\text{upstream}} = \frac{\partial \mathcal{L}}{\partial \hat{\mathbf{w}}} = [+1.5, \; -2.0, \; +0.5, \; +3.0, \; -1.0]$$
+        <p>Construct an algorithmic trace table documenting: (a) Element index, (b) Initial weight $w_i$, (c) Clipped weight, (d) Discrete quantized grid point, (e) Fake-quantized output $\hat{w}_i$, (f) STE gradient filter mask $\mathbb{I}_{[-1, 1]}(w_i)$, and (g) Final passed gradient $\frac{\partial \mathcal{L}}{\partial w_i}$.</p>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Algorithmic STE Forward/Backward Propagation Trace</div>
+
+        <div class="table-container" style="overflow-x: auto; margin: 1em 0;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88em;">
+            <thead>
+              <tr style="background-color: #1b4965; color: #ffffff;">
+                <th style="padding: 8px; border: 1px solid #ccc;">$i$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Weight ($w_i$)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Clipped $w_{\text{clip}}$ ($[-1, 1]$)</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Quantized $q = \lfloor w / S \rceil$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Fake-Quant $\hat{w} = S \cdot q$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Upstream Gradient</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">STE Filter $\mathbb{I}_{[-1, 1]}$</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Passed Gradient $\frac{\partial \mathcal{L}}{\partial w_i}$</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>1</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-1.8$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-1.0$ (Clipped)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\lfloor -1.0 / 0.5 \rceil = -2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.5 \times (-2) = -1.0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+1.5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0$ (Out of bounds)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{0.0}$ (Zeroed out!)</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>2</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-0.4$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-0.4$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\lfloor -0.4 / 0.5 \rceil = -1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.5 \times (-1) = -0.5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-2.0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1$ (Inside bounds)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{-2.0}$ (Passed through)</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>3</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.2$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\lfloor +0.2 / 0.5 \rceil = 0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.5 \times 0 = 0.0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1$ (Inside bounds)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{+0.5}$ (Passed through)</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>4</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.9$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+0.9$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\lfloor +0.9 / 0.5 \rceil = +2 \to +1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.5 \times 1 = +0.5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+3.0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$1$ (Inside bounds)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{+3.0}$ (Passed through)</td>
+              </tr>
+              <tr style="background-color: #f8f9fa;">
+                <td style="padding: 8px; border: 1px solid #ccc;"><strong>5</strong></td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+1.6$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$+1.0$ (Clipped)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\lfloor +1.0 / 0.5 \rceil = +2 \to +1$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0.5 \times 1 = +0.5$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$-1.0$</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$0$ (Out of bounds)</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">$\mathbf{0.0}$ (Zeroed out!)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p><em>Conclusion: The Straight-Through Estimator allows interior weights to update smoothly while zeroing out gradients for weights outside the clipping envelope, preventing catastrophic gradient explosion!</em></p>
+      </div>
+    </div>
+
+    <!-- TIER 3: MATHEMATICAL PROOFS -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 3: FAANG Tier-1 / Research Lab Mathematical Proofs</h4>
+
+    <!-- Problem 7.3.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.5</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-google">Google</span>
+        <span class="company-tag company-toronto">Univ. of Toronto</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> In Hinton's Knowledge Distillation (Hinton et al., 2015), a compact student model with logits $\mathbf{z}_S \in \mathbb{R}^C$ is trained to match the softened probability distribution of a large teacher model with logits $\mathbf{z}_T \in \mathbb{R}^C$.</p>
+        <p>The soft distillation cross-entropy loss with distillation temperature $T > 0$ is:</p>
+        $$\mathcal{L}_{\text{KD}} = -\sum_{i=1}^C q_i(T) \ln p_i(T)$$
+        <p>where $q_i(T) = \frac{\exp(z_{T, i} / T)}{\sum_k \exp(z_{T, k} / T)}$ and $p_i(T) = \frac{\exp(z_{S, i} / T)}{\sum_k \exp(z_{S, k} / T)}$.</p>
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Derive the gradient of $\mathcal{L}_{\text{KD}}$ with respect to student logit $z_{S, i}$.</li>
+          <li>Using the Taylor expansion of the exponential function $\exp(x) \approx 1 + x$ for large $T$ (where $z_i / T \to 0$), prove that in the high-temperature limit ($T \to \infty$):
+            $$\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z_{S, i}} \approx \frac{1}{C T^2} \left( (z_{S, i} - \bar{z}_S) - (z_{T, i} - \bar{z}_T) \right)$$
+            where $\bar{z}_S = \frac{1}{C}\sum_k z_{S, k}$ and $\bar{z}_T = \frac{1}{C}\sum_k z_{T, k}$.
+          </li>
+          <li>Prove that minimizing distillation loss at high temperature is mathematically equivalent to minimizing Mean Squared Error (MSE) between zero-meaned teacher and student logits, and explain why multiplying $\mathcal{L}_{\text{KD}}$ by $T^2$ is mathematically essential.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Proof of High-Temperature KD Equivalence to Logit MSE</div>
+
+        <p class="step"><strong>Step 1: Gradient with Respect to Student Logits:</strong><br>
+        Recall that for softmax probabilities with temperature $T$, the derivative $\frac{\partial p_j(T)}{\partial z_{S, i}}$ is:
+        $$\frac{\partial p_j(T)}{\partial z_{S, i}} = \frac{1}{T} p_i(T)(\delta_{i, j} - p_j(T))$$
+        Differentiating $\mathcal{L}_{\text{KD}}$:
+        $$\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z_{S, i}} = -\sum_{j=1}^C \frac{q_j(T)}{p_j(T)} \frac{\partial p_j(T)}{\partial z_{S, i}} = -\sum_{j=1}^C \frac{q_j(T)}{p_j(T)} \left[ \frac{1}{T} p_i(T)(\delta_{i, j} - p_j(T)) \right]$$
+        $$= -\frac{1}{T} \left( q_i(T) - p_i(T) \sum_{j=1}^C q_j(T) \right)$$
+        Since $\sum_{j=1}^C q_j(T) = 1$:
+        $$\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z_{S, i}} = \mathbf{\frac{1}{T} \big( p_i(T) - q_i(T) \big)}$$</p>
+
+        <p class="step"><strong>Step 2: Taylor Expansion in High-Temperature Limit ($T \to \infty$):</strong><br>
+        When $T \gg |z_k|$, the exponent $z_k / T$ is close to zero. We apply the first-order Taylor expansion $e^x \approx 1 + x$:
+        $$\exp\left(\frac{z_{S, i}}{T}\right) \approx 1 + \frac{z_{S, i}}{T}$$
+        Summing across all $C$ classes:
+        $$\sum_{k=1}^C \exp\left(\frac{z_{S, k}}{T}\right) \approx \sum_{k=1}^C \left(1 + \frac{z_{S, k}}{T}\right) = C + \frac{1}{T}\sum_{k=1}^C z_{S, k} = C \left( 1 + \frac{\bar{z}_S}{T} \right)$$
+        where $\bar{z}_S = \frac{1}{C}\sum z_{S, k}$.<br>
+        Now expand the student softmax probability:
+        $$p_i(T) = \frac{1 + \frac{z_{S, i}}{T}}{C\left(1 + \frac{\bar{z}_S}{T}\right)} \approx \frac{1}{C} \left(1 + \frac{z_{S, i}}{T}\right)\left(1 - \frac{\bar{z}_S}{T}\right) \approx \frac{1}{C}\left(1 + \frac{z_{S, i} - \bar{z}_S}{T}\right)$$
+        Applying the exact same Taylor expansion to the teacher probabilities:
+        $$q_i(T) \approx \frac{1}{C}\left(1 + \frac{z_{T, i} - \bar{z}_T}{T}\right)$$
+        Subtracting the two probabilities:
+        $$p_i(T) - q_i(T) \approx \frac{1}{C} \left(1 + \frac{z_{S, i} - \bar{z}_S}{T} - 1 - \frac{z_{T, i} - \bar{z}_T}{T}\right) = \frac{1}{C T} \left( (z_{S, i} - \bar{z}_S) - (z_{T, i} - \bar{z}_T) \right)$$
+        Substituting back into the gradient from Step 1:
+        $$\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z_{S, i}} = \frac{1}{T} \big( p_i(T) - q_i(T) \big) \approx \mathbf{\frac{1}{C T^2} \Big( (z_{S, i} - \bar{z}_S) - (z_{T, i} - \bar{z}_T) \Big)} \quad \text{Q.E.D.}$$</p>
+
+        <p class="step"><strong>Step 3: Equivalence to Logit MSE &amp; Necessity of $T^2$:</strong><br>
+        Consider the Mean Squared Error loss between zero-meaned logits:
+        $$\mathcal{L}_{\text{MSE}} = \frac{1}{2 C} \sum_{i=1}^C \left( (z_{S, i} - \bar{z}_S) - (z_{T, i} - \bar{z}_T) \right)^2$$
+        The gradient is:
+        $$\frac{\partial \mathcal{L}_{\text{MSE}}}{\partial z_{S, i}} = \frac{1}{C} \left( (z_{S, i} - \bar{z}_S) - (z_{T, i} - \bar{z}_T) \right)$$
+        Comparing with our derivation in Step 2:
+        $$\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z_{S, i}} \approx \frac{1}{T^2} \frac{\partial \mathcal{L}_{\text{MSE}}}{\partial z_{S, i}}$$
+        <strong>Why the $T^2$ multiplier is essential:</strong><br>
+        Notice that the gradient of $\mathcal{L}_{\text{KD}}$ scales as $1/T^2$! If $T = 5$, the gradient magnitude is suppressed by $25\times$. If $T = 10$, gradients are suppressed by $100\times$!<br>
+        To prevent the distillation loss from being drowned out by the hard ground-truth label cross-entropy loss $\mathcal{L}_{\text{CE}}$, Hinton multiplies $\mathcal{L}_{\text{KD}}$ by $T^2$:
+        $$\mathcal{L}_{\text{total}} = (1 - \alpha)\mathcal{L}_{\text{CE}} + \alpha \mathbf{T^2} \mathcal{L}_{\text{KD}}$$
+        <em>This cancels the $1/T^2$ suppression, ensuring stable, balanced gradient updates regardless of temperature!</em></p>
+      </div>
+    </div>
+
+    <!-- Problem 7.3.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.6</span>
+        <span class="difficulty difficulty-expert">Expert</span>
+        <span class="company-tag company-nvidia">NVIDIA</span>
+        <span class="company-tag company-stanford">Stanford</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> NVIDIA Ampere, Ada Lovelace, and Hopper architectures feature hardware acceleration for <strong>2:4 Structured Sparsity</strong>: in every contiguous block of 4 weight values, at least 2 must be zero.</p>
+        <p>Let $\mathbf{w} = [w_1, w_2, w_3, w_4] \in \mathbb{R}^4$ be an arbitrary block of 4 weights. We seek the sparse projection $\hat{\mathbf{w}} \in \mathbb{R}^4$ that minimizes the Euclidean approximation error:</p>
+        $$\min_{\hat{\mathbf{w}}} \|\mathbf{w} - \hat{\mathbf{w}}\|_2^2 \quad \text{subject to } \|\hat{\mathbf{w}}\|_0 \le 2$$
+        <p><strong>Tasks:</strong></p>
+        <ol>
+          <li>Prove that the optimal projection $\hat{\mathbf{w}}^*$ is obtained by sorting the absolute values $|w_{(1)}| \le |w_{(2)}| \le |w_{(3)}| \le |w_{(4)}|$ and zeroing out the two smallest magnitudes:
+            $$\hat{w}_i^* = \begin{cases} w_i & \text{if } |w_i| \in \{|w_{(3)}|, |w_{(4)}|\} \\ 0 & \text{otherwise} \end{cases}$$
+          </li>
+          <li>For weight block $\mathbf{w} = [0.45, \; -0.82, \; 0.12, \; -0.95]$, compute the optimal sparse vector $\hat{\mathbf{w}}^*$ and calculate the exact squared approximation error $\|\mathbf{w} - \hat{\mathbf{w}}^*\|_2^2$.</li>
+          <li>Explain the microarchitectural mechanism by which 2:4 structured sparsity delivers an exact $2\times$ throughput speedup on NVIDIA Tensor Cores without incurring sparse matrix indexing overhead.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Mathematical Derivation of Optimal 2:4 Structured Sparsity</div>
+
+        <p class="step"><strong>Step 1: Proof of Optimal Projection via Component Analysis:</strong><br>
+        Let $\hat{\mathbf{w}}$ have at most 2 non-zero elements. Let index set $\mathcal{I} \subset \{1, 2, 3, 4\}$ with $|\mathcal{I}| = 2$ denote the indices of the zeroed elements ($\hat{w}_j = 0$ for $j \in \mathcal{I}$).<br>
+        For elements not zeroed ($k \notin \mathcal{I}$), setting $\hat{w}_k = w_k$ trivially minimizes $(w_k - \hat{w}_k)^2 = 0$.<br>
+        Therefore, the squared error is:
+        $$\|\mathbf{w} - \hat{\mathbf{w}}\|_2^2 = \sum_{j \in \mathcal{I}} (w_j - 0)^2 + \sum_{k \notin \mathcal{I}} (w_k - w_k)^2 = \sum_{j \in \mathcal{I}} w_j^2 = \sum_{j \in \mathcal{I}} |w_j|^2$$
+        To minimize the squared error, we must choose the 2-element index set $\mathcal{I}$ that minimizes $\sum_{j \in \mathcal{I}} |w_j|^2$.<br>
+        Because the objective is a separable sum of non-negative terms $|w_j|^2$, the global minimum is uniquely achieved by selecting the indices corresponding to the two smallest magnitudes in $\mathbf{w}$:
+        $$\mathcal{I}^* = \arg\min_{|\mathcal{I}|=2} \sum_{j \in \mathcal{I}} |w_j|^2 = \big\{ \text{indices of } |w_{(1)}| \text{ and } |w_{(2)}| \big\} \quad \text{Q.E.D.}$$</p>
+
+        <p class="step"><strong>Step 2: Numerical Projection Computation:</strong><br>
+        Given $\mathbf{w} = [0.45, \; -0.82, \; 0.12, \; -0.95]$:<br>
+        Compute absolute magnitudes:
+        $$|w_1| = 0.45, \quad |w_2| = 0.82, \quad |w_3| = 0.12, \quad |w_4| = 0.95$$
+        Sorting magnitudes in ascending order:
+        $$|w_{(1)}| = 0.12\ (w_3), \quad |w_{(2)}| = 0.45\ (w_1), \quad |w_{(3)}| = 0.82\ (w_2), \quad |w_{(4)}| = 0.95\ (w_4)$$
+        Zero out the two smallest elements ($w_1$ and $w_3$):
+        $$\hat{\mathbf{w}}^* = [\mathbf{0.0}, \; \mathbf{-0.82}, \; \mathbf{0.0}, \; \mathbf{-0.95}]$$
+        Squared approximation error:
+        $$\|\mathbf{w} - \hat{\mathbf{w}}^*\|_2^2 = |w_1|^2 + |w_3|^2 = (0.45)^2 + (0.12)^2 = 0.2025 + 0.0144 = \mathbf{0.2169}$$</p>
+
+        <p class="step"><strong>Step 3: Hardware Acceleration Mechanism:</strong><br>
+        In general unstructured sparsity, skipping zero multiplications requires pointer-based sparse formats (CSR / CSC) with high memory indirection overhead that destroys GPU SIMD parallelism.<br>
+        <strong>NVIDIA 2:4 Sparse Tensor Cores:</strong>
+        <ol>
+          <li>The model weights are compressed by $50\%$ in VRAM: each 4-element block stores only the 2 non-zero FP16 values ($2 \times 2\text{ bytes} = 4\text{ bytes}$) plus a 4-bit metadata index (2 bits per non-zero value, specifying original indices $0, 1, 2,$ or $3$).</li>
+          <li>At execution time, the Sparse Matrix Multiply unit uses the 4-bit index to multiplex and fetch the exact 2 matching activations from the dense input vector.</li>
+          <li>A modified MAC tree evaluates the two multiplications in parallel on half-sized hardware, <strong>doubling math throughput ($2\times$ TFLOPS) while cutting memory bandwidth traffic in half</strong>!</li>
+        </ol></p>
+      </div>
+    </div>
+
+    <!-- TIER 4: CONCEPTUAL TRAPS & ASSERTION-REASONING -->
+    <h4 style="color: #1b4965; border-bottom: 2px solid #1b4965; padding-bottom: 4px; margin-top: 2em;">Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+    <!-- Problem 7.3.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.7</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-qualcomm">Qualcomm</span>
+        <span class="company-tag company-apple">Apple</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>QUESTION:</strong> An engineer quantizes a convolutional neural network from FP32 to INT8 using symmetric quantization. For a depthwise convolution layer with 128 channels, the engineer evaluates two calibration strategies:</p>
+        <ul>
+          <li><strong>Strategy 1 (Per-Tensor Quantization):</strong> A single global scale factor $S = \frac{\max_{c, i, j} |w_{c, i, j}|}{127}$ is shared across all 128 channels.</li>
+          <li><strong>Strategy 2 (Per-Channel Quantization):</strong> Each of the 128 channels receives its own private scale factor $S_c = \frac{\max_{i, j} |w_{c, i, j}|}{127}$.</li>
+        </ul>
+        <p>In this layer, Channel 4 has extreme outlier weights reaching $\pm 8.5$, while all other 127 channels have weights strictly bounded within $\pm 0.3$. Which of the following correctly characterizes the outcome of Strategy 1 versus Strategy 2?</p>
+        <ol type="A">
+          <li>Strategy 1 achieves identical accuracy to Strategy 2 because batch normalization re-scales all channels prior to quantization.</li>
+          <li>In Strategy 1, the single outlier channel forces the global scale factor to $S = 8.5 / 127 \approx 0.067$. For the other 127 channels where weights are bounded by $\pm 0.3$, all weights are quantized to $\lfloor 0.3 / 0.067 \rceil \le 4$ discrete bins out of 255, destroying precision and zeroing out subtle features. Strategy 2 isolates Channel 4's scale ($S_4 = 0.067$) while preserving fine-grained scales ($S_c \approx 0.0024$) across the other 127 channels, maintaining full dynamic resolution.</li>
+          <li>Strategy 2 is physically impossible on ARM and mobile NPUs because SIMD registers cannot execute multiple scale factors simultaneously.</li>
+          <li>Strategy 1 causes integer overflow in the ALU accumulator because $8.5 \times 127 > 255$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: B (Exhaustive Distractor Analysis)</div>
+
+        <p class="step"><strong>Distractor Analysis:</strong></p>
+        <ul>
+          <li><strong>Option A is False:</strong> While batch normalization is folded into weights during compilation, folded weights still exhibit significant inter-channel variance.</li>
+          <li><strong>Option B is Correct:</strong>
+            <ul>
+              <li>In Per-Tensor Quantization, the global grid step is dictated by the maximum absolute element across the entire tensor:
+                $$S = \frac{8.5}{127} \approx 0.0669$$
+              </li>
+              <li>For the other 127 channels with weights in $[-0.3, +0.3]$:
+                $$\text{Max quantized integer} = \text{round}\left( \frac{0.3}{0.0669} \right) = \mathbf{4}$$
+              </li>
+              <li>Instead of using the full 255 integer range $[-127, +127]$, 99% of the layer's weights are squashed into only 9 discrete values $\{-4, -3, -2, -1, 0, 1, 2, 3, 4\}$. This massive loss of precision completely destroys visual feature filters!</li>
+              <li><strong>Per-Channel Quantization</strong> assigns 128 independent scale factors: Channel 4 uses $S_4 = 0.0669$, while normal channels use $S_c = 0.3 / 127 \approx 0.00236$, using all 255 integer levels across all channels.</li>
+            </ul>
+          </li>
+          <li><strong>Option C is False:</strong> Per-channel *weight* quantization is natively supported by virtually all modern hardware (TFLite, ONNX Runtime, TensorRT, CoreML, Qualcomm QNN). Because each output channel corresponds to a separate row of the GEMM, the per-channel scale factor is simply multiplied into the final scalar accumulator after the integer dot product completes!</li>
+          <li><strong>Option D is False:</strong> Integer accumulation occurs in 32-bit registers, which can hold values up to $\pm 2.14 \times 10^9$.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Problem 7.3.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 7.3.8</span>
+        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="company-tag company-apple">Apple</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>ASSERTION-REASONING:</strong></p>
+        <p><strong>Assertion (A):</strong> When deploying MobileNetV2 to edge microcontrollers, applying naive Post-Training Quantization (PTQ) causes severe, non-recoverable accuracy collapse on the narrow <strong>Linear Bottleneck Layers</strong> unless Quantization-Aware Training (QAT) with learnable clipping bounds (PACT) is utilized.</p>
+        <p><strong>Reason (R):</strong> MobileNetV2's linear bottlenecks deliberately omit non-linear ReLU activations to prevent manifold information destruction in low-dimensional space ($D = 16$ or $24$); consequently, bottleneck activations exhibit unbounded, heavy-tailed distributions with high dynamic range, making standard min-max PTQ calibration squash the majority of feature signals into a handful of quantization bins.</p>
+        <p><strong>Options:</strong></p>
+        <ol type="A">
+          <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+          <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+          <li>(A) is true, but (R) is false.</li>
+          <li>(A) is false, but (R) is true.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Correct Answer: A (Comprehensive Linear Bottleneck Analysis)</div>
+
+        <p class="step"><strong>Deep Architectural Analysis:</strong></p>
+        <p><strong>Evaluation of Assertion (A): True.</strong><br>
+        MobileNetV2 is notoriously difficult to quantize using standard PTQ. On ImageNet, naive INT8 PTQ drops top-1 accuracy from 72.0% down to under 50% (or even single digits). In contrast, QAT recovers full 71.8% accuracy.</p>
+
+        <p class="step"><strong>Evaluation of Reason (R): True &amp; Explanatory.</strong><br>
+        In MobileNetV2 (Sandler et al., Google 2018):
+        <ul>
+          <li>The inverted residual block expands channels by $6\times$ ($16 \to 96$), applies Depthwise Conv with ReLU6, and then projects back down to a narrow bottleneck ($96 \to 16$) using a linear projection layer with <strong>NO non-linearity</strong>.</li>
+          <li>The authors proved that applying non-linearities (like ReLU) in low-dimensional manifolds destroys information by zeroing out negative coordinates.</li>
+          <li>However, because there is no ReLU or ReLU6 capping the bottleneck activations, the distribution is unbounded and contains extreme positive and negative outliers.</li>
+          <li>Standard PTQ calibrators (like Min-Max or Percentile) observe these rare outliers and set a wide dynamic range $[r_{\min}, r_{\max}]$. This makes the scale factor $S = (r_{\max} - r_{\min}) / 255$ very large, squashing the dense cluster of core activations near zero into only 2 or 3 quantization levels!</li>
+          <li><strong>QAT with PACT (Parameterized Activation Clipping):</strong> Adds a learnable clipping parameter $\alpha$ trained via backpropagation. PACT finds the mathematically optimal trade-off between clipping outliers and preserving resolution in the central distribution, allowing MobileNetV2 to run in INT8 with zero accuracy degradation!</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- SECTION 6: PRODUCTION CODE LAB -->
+    <h3>5. Production Code Lab 7.3: Quantization-Aware Training (QAT) with STE in PyTorch</h3>
+    <p>Below is a clean, industrial PyTorch implementation of a custom Fake-Quantization module implementing the Straight-Through Estimator (STE) for uniform affine quantization.</p>
+
+    <div class="code-lab">
+      <div class="code-lab-header">Code Lab 7.3 — Quantization-Aware Training with Custom STE Autograd Function</div>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch73_edge_ai/qat_ste.py" target="_blank">🔗 View in GitHub: part7_system_design/ch73_edge_ai/qat_ste.py</a></p>
+<pre><code>import torch
+import torch.nn as nn
+
+class StraightThroughEstimator(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, r: torch.Tensor, scale: torch.Tensor, zero_point: torch.Tensor, qmin: int = 0, qmax: int = 255):
+        ctx.save_for_backward(r, scale, zero_point)
+        ctx.qmin = qmin
+        ctx.qmax = qmax
+
+        # 1. Quantize: q = clamp(round(r / S) + Z)
+        q = torch.clamp(torch.round(r / scale) + zero_point, qmin, qmax)
+        # 2. Dequantize: r_hat = S * (q - Z)
+        r_hat = scale * (q - zero_point)
+        return r_hat
+
+    @staticmethod
+    def backward(ctx, grad_output: torch.Tensor):
+        r, scale, zero_point = ctx.saved_tensors
+        qmin, qmax = ctx.qmin, ctx.qmax
+
+        # Straight-Through Estimator: Pass gradient strictly inside [r_min, r_max]
+        r_min = scale * (qmin - zero_point)
+        r_max = scale * (qmax - zero_point)
+        mask = (r >= r_min) & (r <= r_max)
+
+        grad_r = grad_output * mask.float()
+        return grad_r, None, None, None, None
+
+class FakeQuantizeAffine(nn.Module):
+    def __init__(self, num_bits: int = 8):
+        super().__init__()
+        self.qmin = 0
+        self.qmax = 2**num_bits - 1
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.training:
+            # Dynamically compute scale and zero-point
+            r_min = x.detach().min()
+            r_max = x.detach().max()
+            scale = (r_max - r_min) / (self.qmax - self.qmin)
+            scale = torch.clamp(scale, min=1e-8)
+            zero_point = torch.round(-r_min / scale)
+            zero_point = torch.clamp(zero_point, self.qmin, self.qmax)
+            return StraightThroughEstimator.apply(x, scale, zero_point, self.qmin, self.qmax)
+        else:
+            return x
+
+if __name__ == "__main__":
+    torch.manual_seed(42)
+    fake_quant = FakeQuantizeAffine(num_bits=8)
+    
+    # Input tensor with gradient tracking
+    x = torch.tensor([-2.5, -0.8, 0.0, 1.5, 4.2], requires_grad=True)
+    out = fake_quant(x)
+    loss = out.sum()
+    loss.backward()
+
+    print(f"Original Tensor      : {x.data}")
+    print(f"Fake-Quantized Output: {out.data}")
+    print(f"STE Gradients Passed : {x.grad}")</code></pre>
+    </div>
+
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 7.3 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 7.3: Sub-50MB Edge Visual Perception &amp; Classification Engine</h3>
-        <p class="project-desc">Architect, compress, and deploy an ultra-lightweight edge visual classification engine, applying Depthwise Separable Convolutions, Quantization-Aware Training (QAT) to INT8, Knowledge Distillation from a heavy ResNet-101 teacher, and exporting to ONNX Runtime for sub-5ms mobile execution.</p>
-        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch73_edge_ai/mobilenet_block.py" target="_blank">🔗 Full Project Code: part7_system_design/ch73_edge_ai/mobilenet_block.py</a></p>
+        <h3 class="project-title">Project 7.3: Mobile Edge Vision Classifier with QAT, ONNX &amp; CoreML Export</h3>
+        <p class="project-desc">Architect, train, and deploy an ultra-compact MobileNetV3 image classification model, performing Quantization-Aware Training with Straight-Through Estimators, folding batch normalization layers, and benchmarking INT8 execution on mobile NPUs with sub-5ms latency.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/ch73_edge_ai/qat_ste.py" target="_blank">🔗 Full Project Code: part7_system_design/ch73_edge_ai/qat_ste.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In autonomous aerial robotics (Skydio, military UAVs), onboard obstacle avoidance models must process 4K stereo camera streams on low-power NVIDIA Jetson Nano or Qualcomm Snapdragon chips. In this project, you construct a quantized visual perception pipeline that fits in under 25MB of RAM, consumes less than 3 Watts of power, and achieves 60 FPS real-time execution with zero cloud dependency.</p>
+        <p><strong>Case Study Architecture:</strong> In autonomous aerial robotics (DJI drones), onboard microcontrollers must run real-time obstacle avoidance models at 60 FPS under a strict 4-Watt power budget. In this project, you build an automated edge compression pipeline that trains a MobileNet backbone with 2:4 structured sparsity and 8-bit QAT, converts the graph to ONNX/TensorRT, and profiles latency, thermal dissipation, and memory bandwidth consumption.</p>
       </div>
     </div>
-  </div>
-</div>
-
-<div class="project-section">
-  <div class="project-header">
-    <span class="project-tag">Hands-On Capstone Project 7</span>
-    <h3 class="project-title">Billion-Scale Enterprise Recommendation &amp; Vector Intelligence Platform</h3>
-    <p class="project-desc">Synthesize all large-scale system design pillars—from Two-Tower dual encoder candidate retrieval and Inverted File Product Quantization (IVF-PQ) to distributed vector sharding, Quantization-Aware Training (QAT), and ONNX runtime edge deployment—into an industrial recommendation platform.</p>
-    <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part7_system_design/project7_recsys_scale/recsys_platform.py" target="_blank">🔗 Full Project Code: part7_system_design/project7_recsys_scale/recsys_platform.py</a></p>
-  </div>
-  <div class="project-body">
-    <p><strong>Architecture &amp; Production Pipeline:</strong> In this capstone project, you architect an end-to-end distributed recommendation system:</p>
-    <ul>
-      <li><strong>Two-Tower Retrieval Core:</strong> Pre-computes 10 million item embeddings, indexing them into a distributed IVF-PQ vector cluster with $48	imes$ RAM compression.</li>
-      <li><strong>Sub-10ms Candidate Retrieval:</strong> Evaluates the User Tower in real time, querying the vector cluster via Asymmetric Distance Computation with sub-5ms latency.</li>
-      <li><strong>Edge Compression:</strong> Distills heavy scoring models into an 8-bit quantized MobileNet backbone exported to ONNX for instantaneous client-side ranking.</li>
-    </ul>
   </div>
 </div>

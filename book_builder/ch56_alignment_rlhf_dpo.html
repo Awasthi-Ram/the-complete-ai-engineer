@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="alignment_rlhf_vs_dpo.png" alt="Figure 5.6.1: alignment rlhf vs dpo">
+        <div class="diagram-caption"><strong>Figure 5.6.1:</strong> LLM preference alignment paradigms. Left: Classical 3-stage RLHF trains a separate reward model on pairwise human ratings and optimizes the policy via PPO actor-critic with KL penalties. Right: Direct Preference Optimization (DPO) derives an exact closed-form implicit reward, optimizing policy weights directly on preference pairs without reinforcement learning instabilities.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 5.6 — PREFERENCE ALIGNMENT: RLHF, PPO & DPO
      ====================================================================== -->
@@ -5,7 +11,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 5.6</span>
     <h2 class="chapter-title">Preference Alignment: RLHF, PPO &amp; DPO</h2>
-    <span class="chapter-subtitle">Bradley-Terry Preference Models, KL Divergence Penalties &amp; The DPO Analytical Derivation</span>
+    <span class="chapter-subtitle">Bradley-Terry Preference Models, KL Divergence Penalties, DPO Closed-Form Derivation &amp; Constitutional AI</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -19,108 +25,510 @@
 
     <!-- SECTION 1: THE ALIGNMENT IMPERATIVE -->
     <h3>1. Why Supervised Fine-Tuning (SFT) Is Not Enough</h3>
-    <p>A base language model trained on trillions of internet tokens is a statistical continuation engine: if you ask it <em>"How do I hotwire a car?"</em>, it may complete the text with an instruction manual or movie dialogue because both are statistically probable on the internet.</p>
+    <p>A base foundation language model trained on trillions of internet tokens is essentially an unsupervised next-token predictor: if prompted with <em>"How do I hotwire a vehicle?"</em>, it may complete the text with an automotive repair manual or a burglary handbook because both are statistically probable on the internet.</p>
 
-    <p>Supervised Fine-Tuning (SFT) teaches the model instruction-following format using prompt-response pairs. However, SFT suffers from two major limitations:</p>
-    <ul>
-      <li><strong>Distribution Shift &amp; Exposure Bias:</strong> During generation, the model's own errors compound sequentially, steering it into unaligned states never seen during training.</li>
-      <li><strong>Symmetric Penalty Flaw:</strong> SFT penalizes all non-target tokens equally via cross-entropy loss. It cannot easily teach the model that response $A$ is <em>slightly better</em> than response $B$, but response $C$ is <em>dangerously unacceptable</em>.</li>
-    </ul>
-    <p>To produce models that are <strong>Helpful, Honest, and Harmless (HHH)</strong>, we must align the model using <strong>Human Preference Optimization</strong>.</p>
+    <p>While Supervised Fine-Tuning (SFT) teaches the model conversational turn-taking and instruction-following formats using prompt-response pairs, SFT suffers from two fundamental theoretical limitations:</p>
+    <ol>
+      <li><strong>Distribution Shift &amp; Exposure Bias:</strong> During training, cross-entropy loss conditions next tokens on ground-truth prefixes (teacher forcing). During open-ended generation, the model conditions tokens on its own previous outputs. As soon as the model makes a slight mistake, the sequence drifts into out-of-distribution states where compounding errors cause severe hallucination or degeneration.</li>
+      <li><strong>The Symmetric Cross-Entropy Flaw:</strong> Maximum Likelihood Estimation (MLE) penalizes all non-target tokens symmetrically. SFT cannot naturally teach a model that candidate response $A$ is <em>slightly superior</em> to candidate $B$, but candidate $C$ is <em>catastrophically dangerous</em>. It lacks an ordinal, graduated understanding of human values.</li>
+    </ol>
+
+    <p>To produce models that are <strong>Helpful, Honest, and Harmless (HHH)</strong>, modern AI engineering requires <strong>Preference Alignment</strong>.</p>
 
     <!-- SECTION 2: RLHF & PPO -->
     <h3>2. Reinforcement Learning from Human Feedback (RLHF)</h3>
-    <p>Pioneered by Christiano et al. (2017) and scaled in InstructGPT (Ouyang et al., 2022), <strong>RLHF</strong> aligns models through a three-stage pipeline:</p>
+    <p>Pioneered by Christiano et al. (2017) and scaled in InstructGPT (Ouyang et al., 2022), <strong>RLHF</strong> aligns models through a multi-stage reinforcement learning pipeline:</p>
 
     <h4>Stage 1: The Bradley-Terry Reward Model</h4>
-    <p>Human annotators are given prompt $x$ and two candidate model responses: preferred response $y_w$ (winner) and dispreferred response $y_l$ (loser). Under the <strong>Bradley-Terry (1952) Preference Model</strong>, the probability that a human prefers $y_w$ over $y_l$ is parameterized by a latent scalar reward function $r_\theta(x, y)$:</p>
+    <p>Human annotators (or advanced AI judges in RLAIF) evaluate prompt $x$ and pairwise model completions: preferred response $y_w$ (winner) and dispreferred response $y_l$ (loser). Under the classical <strong>Bradley-Terry (1952) Preference Model</strong>, the probability that a human prefers $y_w$ over $y_l$ is parameterized by a latent scalar reward function $r_\theta(x, y)$:</p>
     $$P(y_w \succ y_l \mid x) = \sigma\left( r_\theta(x, y_w) - r_\theta(x, y_l) \right) = \frac{1}{1 + \exp\left( -(r_\theta(x, y_w) - r_\theta(x, y_l)) \right)}$$
-    <p>The Reward Model is trained by minimizing the Negative Log-Likelihood loss:</p>
+    <p>The Reward Model is trained by minimizing the pairwise binary cross-entropy (negative log-likelihood) loss:</p>
     $$\mathcal{L}_{RM}(\theta) = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ \ln \sigma\left( r_\theta(x, y_w) - r_\theta(x, y_l) \right) \right]$$
 
     <h4>Stage 2: Proximal Policy Optimization (PPO)</h4>
-    <p>Once trained, the reward model $r_\theta$ provides feedback to optimize the policy model $\pi_\phi$ using Reinforcement Learning. To prevent the policy from deviating too far from the original language model (which would cause linguistic degeneration and grammar collapse), we add a <strong>Kullback-Leibler (KL) Divergence penalty</strong> against reference model $\pi_{\text{ref}}$:</p>
+    <p>Once trained, the reward model $r_\theta$ acts as an automated critic providing scalar feedback to optimize the policy model $\pi_\phi$. If we optimize purely for reward, the model will rapidly exploit blind spots in the reward model—generating repetitive, sycophantic, or grammatically garbled text that achieves high reward scores (a phenomenon known as <strong>Reward Hacking</strong> or <em>Goodhart's Law</em>). To prevent this, we regularize the policy using a <strong>Kullback-Leibler (KL) Divergence penalty</strong> against the frozen initial reference model $\pi_{\text{ref}}$:</p>
     $$\max_\phi \mathbb{E}_{x \sim \mathcal{D}, y \sim \pi_\phi} \left[ r_\theta(x, y) - \beta D_{\text{KL}}\left( \pi_\phi(y \mid x) \parallel \pi_{\text{ref}}(y \mid x) \right) \right]$$
-    <p>Where $\beta$ controls the strength of the KL regularization anchor.</p>
+    <p>where $\beta$ controls the strength of the KL regularization anchor.</p>
 
     <div class="key-insight">
-      <p><strong>The Operational Nightmare of PPO:</strong><br>
-      To execute PPO, an enterprise must concurrently fit <strong>four massive models into GPU memory simultaneously</strong>:
+      <h4>⚠️ The Infrastructure Nightmare of PPO</h4>
+      <p>To execute PPO, an enterprise must concurrently host <strong>four massive neural networks in GPU VRAM simultaneously</strong>:</p>
       <ol>
-        <li><strong>Actor Policy ($\pi_\phi$):</strong> Generating new tokens and receiving gradient updates.</li>
-        <li><strong>Critic / Value Network ($V_\psi$):</strong> Estimating expected generalized advantage values.</li>
-        <li><strong>Reference Model ($\pi_{\text{ref}}$):</strong> Computing baseline log-probabilities for KL penalty (frozen).</li>
-        <li><strong>Reward Model ($r_\theta$):</strong> Scoring generated completions (frozen).</li>
+        <li><strong>Actor Policy ($\pi_\phi$):</strong> Generates tokens and receives backpropagation gradients.</li>
+        <li><strong>Critic / Value Network ($V_\psi$):</strong> Estimates expected Generalized Advantage values.</li>
+        <li><strong>Reference Model ($\pi_{\text{ref}}$):</strong> Computes baseline token log-probabilities for the KL penalty (frozen).</li>
+        <li><strong>Reward Model ($r_\theta$):</strong> Evaluates scalar rewards on completed sequences (frozen).</li>
       </ol>
-      <em>PPO requires dozens of 80GB GPUs, suffers from unstable hyperparameter sensitivity, and frequently collapses into reward hacking.</em></p>
+      <p>PPO requires dozens of 80GB GPUs, suffers from extreme hyperparameter fragility (learning rates, clipping thresholds, GAE $\lambda$), and frequently diverges.</p>
     </div>
 
     <!-- SECTION 3: DIRECT PREFERENCE OPTIMIZATION -->
-    <h3>3. Direct Preference Optimization (DPO): Rafailov et al., Stanford 2023</h3>
-    <p>In 2023, Rafael Rafailov et al. solved the PPO crisis with a brilliant mathematical insight: <strong>we can eliminate the reward model entirely and optimize the policy directly!</strong></p>
+    <h3>3. Direct Preference Optimization (DPO): Stanford 2023</h3>
+    <p>In 2023, Rafael Rafailov, Archit Sharma, Eric Mitchell, Stefano Ermon, Christopher D. Manning, and Chelsea Finn introduced <strong>Direct Preference Optimization (DPO)</strong>, proving that the constrained RL problem has an exact closed-form analytical solution that eliminates the reward model and reinforcement learning entirely!</p>
 
     <div class="real-world-box">
-      <h4>🏆 The DPO Mathematical Derivation</h4>
-      <p>Consider the constrained RL objective:</p>
-      $$\max_\pi \mathbb{E}_{x, y \sim \pi} [r(x, y)] - \beta D_{\text{KL}}(\pi(y \mid x) \parallel \pi_{\text{ref}}(y \mid x))$$
-      <p>Using calculus of variations, the optimal policy $\pi^*$ that maximizes this objective has an exact closed-form analytical solution:</p>
+      <h4>🏆 The DPO Closed-Form Analytical Derivation</h4>
+      <p>Consider the KL-constrained RL objective:</p>
+      $$\max_\pi \mathbb{E}_{x \sim \mathcal{D}} \left[ \mathbb{E}_{y \sim \pi(y \mid x)} [r(x, y)] - \beta D_{\text{KL}}(\pi(y \mid x) \parallel \pi_{\text{ref}}(y \mid x)) \right]$$
+      <p>Expanding the KL divergence definition:</p>
+      $$D_{\text{KL}}(\pi(y \mid x) \parallel \pi_{\text{ref}}(y \mid x)) = \sum_y \pi(y \mid x) \ln \frac{\pi(y \mid x)}{\pi_{\text{ref}}(y \mid x)}$$
+      <p>The objective inside the expectation over $x$ becomes:</p>
+      $$\max_\pi \sum_y \pi(y \mid x) r(x, y) - \beta \sum_y \pi(y \mid x) \ln \frac{\pi(y \mid x)}{\pi_{\text{ref}}(y \mid x)} = \max_\pi -\beta \sum_y \pi(y \mid x) \ln \frac{\pi(y \mid x)}{\pi_{\text{ref}}(y \mid x) \exp\left( \frac{1}{\beta} r(x, y) \right)}$$
+      <p>Define the normalized probability distribution $\pi^*(y \mid x)$:</p>
       $$\pi^*(y \mid x) = \frac{1}{Z(x)} \pi_{\text{ref}}(y \mid x) \exp\left( \frac{1}{\beta} r(x, y) \right)$$
-      <p>Where $Z(x) = \sum_y \pi_{\text{ref}}(y \mid x) \exp\left( \frac{1}{\beta} r(x, y) \right)$ is the partition function. Now, take the natural logarithm of both sides and solve for reward $r(x, y)$:</p>
-      $$\ln \pi^*(y \mid x) = \ln \pi_{\text{ref}}(y \mid x) + \frac{1}{\beta} r(x, y) - \ln Z(x)$$
-      $$r(x, y) = \beta \ln\left( \frac{\pi^*(y \mid x)}{\pi_{\text{ref}}(y \mid x)} \right) + \beta \ln Z(x)$$
+      <p>where $Z(x) = \sum_y \pi_{\text{ref}}(y \mid x) \exp\left( \frac{1}{\beta} r(x, y) \right)$ is the partition function. Rewriting the sum:</p>
+      $$-\beta \sum_y \pi(y \mid x) \left[ \ln \frac{\pi(y \mid x)}{\pi^*(y \mid x)} - \ln Z(x) \right] = \beta \ln Z(x) - \beta D_{\text{KL}}(\pi(y \mid x) \parallel \pi^*(y \mid x))$$
+      <p>Because $Z(x)$ is independent of $\pi$ and $D_{\text{KL}}(\cdot \parallel \cdot) \ge 0$ with equality if and only if both distributions are identical, the objective is strictly maximized when:</p>
+      $$\mathbf{\pi(y \mid x) = \pi^*(y \mid x) = \frac{1}{Z(x)} \pi_{\text{ref}}(y \mid x) \exp\left( \frac{1}{\beta} r(x, y) \right)}$$
+
+      <p>Now, solve for the ground-truth reward $r(x, y)$ by taking the natural logarithm:</p>
+      $$r(x, y) = \beta \ln \frac{\pi^*(y \mid x)}{\pi_{\text{ref}}(y \mid x)} + \beta \ln Z(x)$$
       <p>Substitute this reparameterized reward into the Bradley-Terry preference model $P(y_w \succ y_l \mid x) = \sigma(r(x, y_w) - r(x, y_l))$:</p>
       $$r(x, y_w) - r(x, y_l) = \left[ \beta \ln \frac{\pi^*(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} + \beta \ln Z(x) \right] - \left[ \beta \ln \frac{\pi^*(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)} + \beta \ln Z(x) \right]$$
-      <p>Notice the mathematical beauty: <strong>The unknown partition function $\beta \ln Z(x)$ cancels out completely!</strong></p>
+      <p><strong>The partition function $\beta \ln Z(x)$ cancels out completely!</strong></p>
       $$r(x, y_w) - r(x, y_l) = \beta \ln \frac{\pi^*(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \ln \frac{\pi^*(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)}$$
       <p>This yields the celebrated <strong>Direct Preference Optimization (DPO) Loss Function</strong>:</p>
-      $$\mathcal{L}_{\text{DPO}}(\theta; \pi_{\text{ref}}) = -\mathbb{E}_{(x, y_w, y_l)} \left[ \ln \sigma \left( \beta \ln \frac{\pi_\theta(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \ln \frac{\pi_\theta(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)} \right) \right]$$
+      $$\mathcal{L}_{\text{DPO}}(\theta; \pi_{\text{ref}}) = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ \ln \sigma \left( \beta \ln \frac{\pi_\theta(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \ln \frac{\pi_\theta(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)} \right) \right]$$
     </div>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Alignment &amp; DPO</h3>
+    <!-- SECTION 4: THE POST-DPO LANDSCAPE -->
+    <h3>4. The Modern Alignment Frontier: KTO, IPO &amp; Constitutional AI</h3>
+    <div class="table-container" style="overflow-x: auto; margin: 1.5em 0;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.92em;">
+        <thead>
+          <tr style="background-color: #1b4965; color: #ffffff;">
+            <th style="padding: 10px; border: 1px solid #ccc;">Alignment Method</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Input Data Requirement</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Key Mathematical Mechanism</th>
+            <th style="padding: 10px; border: 1px solid #ccc;">Primary Advantage</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>PPO (RLHF)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Pairwise preferences $(x, y_w, y_l)$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Clipped surrogate actor-critic with explicit reward model.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Can explore unseen generation trajectories during RL loop.</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>DPO</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Pairwise preferences $(x, y_w, y_l)$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Direct closed-form policy reparameterization of Bradley-Terry.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Zero reward model, stable supervised-like convergence.</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>KTO (Kahneman-Tversky)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Unpaired binary feedback $(x, y, \text{good/bad})$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Prospect theory value function with loss aversion coefficient $\lambda_D$.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Does not require expensive paired ranking data (e.g. real user thumbs-up/down).</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ccc;"><strong>IPO (Identity Preference)</strong></td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Pairwise preferences $(x, y_w, y_l)$</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Quadratic regularizer preventing unbounded log-ratio divergence.</td>
+            <td style="padding: 10px; border: 1px solid #ccc;">Prevents policy degeneration on deterministic preference labels.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
+    <!-- SECTION 5: FAANG PRACTICE SUITE -->
+    <h3>FAANG &amp; Research Lab Practice Suite — Alignment &amp; DPO</h3>
+    <p>Master the exact numerical calculations, reward probability metrics, Lagrangian variations proofs, and conceptual failure modes powering frontier LLM alignment.</p>
+
+    <!-- PROBLEM 5.6.1 -->
     <div class="problem">
       <div class="problem-header">
         <span class="problem-number">Problem 5.6.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
+        <span class="difficulty difficulty-easy">Tier 1: Direct Formula Drill</span>
         <span class="company-tag company-openai">OpenAI</span>
         <span class="company-tag company-anthropic">Anthropic</span>
       </div>
       <div class="problem-question">
-        <p><strong>QUESTION:</strong> Analyze the gradient of the DPO loss function with respect to parameter vector $\theta$.</p>
+        <p><strong>Bradley-Terry Reward Model Probability &amp; Negative Log-Likelihood Arithmetic:</strong></p>
+        <p>A Reward Model $r_\theta(x, y)$ evaluates prompt $x$ and two candidate responses $y_w$ and $y_l$. Under the Bradley-Terry preference model, the probability that $y_w$ is preferred over $y_l$ is given by:</p>
+        $$P(y_w \succ y_l \mid x) = \sigma\left( r_\theta(x, y_w) - r_\theta(x, y_l) \right) = \frac{1}{1 + e^{-\Delta r}}$$
+        <p>where $\Delta r = r_\theta(x, y_w) - r_\theta(x, y_l)$. The loss for a single pair is $\mathcal{L}_{\text{RM}} = -\ln P(y_w \succ y_l \mid x)$.</p>
         <ol>
-          <li>Derive the analytical gradient $\nabla_\theta \mathcal{L}_{\text{DPO}}$.</li>
-          <li>Explain the physical role of the weighting factor $\sigma(\hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w))$ and how it prevents over-optimizing pairs that the model already correctly separates.</li>
+          <li>For Pair 1: The model outputs $r_\theta(x, y_w) = 2.40$ and $r_\theta(x, y_l) = -0.80$. Calculate $\Delta r$, preference probability $P(y_w \succ y_l)$, and loss $\mathcal{L}_1$.</li>
+          <li>For Pair 2: An adversarial example where the model erroneously assigns a higher reward to the bad response: $r_\theta(x, y_w) = -1.20$ and $r_\theta(x, y_l) = 1.50$. Calculate $\Delta r$, preference probability $P(y_w \succ y_l)$, and loss $\mathcal{L}_2$.</li>
+          <li>Calculate the average mini-batch loss $\frac{1}{2}(\mathcal{L}_1 + \mathcal{L}_2)$.</li>
         </ol>
       </div>
       <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
 
-        <p class="step"><strong>Step 1: Analytical Gradient Derivation:</strong><br>
-        Let $\hat{r}_\theta(x, y) = \beta \ln \frac{\pi_\theta(y \mid x)}{\pi_{\text{ref}}(y \mid x)}$. The DPO loss is:
-        $$\mathcal{L}_{\text{DPO}} = -\ln \sigma\left( \hat{r}_\theta(x, y_w) - \hat{r}_\theta(x, y_l) \right)$$
-        Let $u = \hat{r}_\theta(x, y_w) - \hat{r}_\theta(x, y_l)$. Using the derivative of negative log-sigmoid $-\frac{d}{du} \ln \sigma(u) = 1 - \sigma(u) = \sigma(-u)$:
-        $$\nabla_\theta \mathcal{L}_{\text{DPO}} = -\left[ 1 - \sigma\left(\hat{r}_\theta(x, y_w) - \hat{r}_\theta(x, y_l)\right) \right] \nabla_\theta \left( \hat{r}_\theta(x, y_w) - \hat{r}_\theta(x, y_l) \right)$$
-        Using the identity $1 - \sigma(u) = \sigma(-u)$:
-        $$\nabla_\theta \mathcal{L}_{\text{DPO}} = -\sigma\left( \hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w) \right) \left[ \beta \nabla_\theta \ln \pi_\theta(y_w \mid x) - \beta \nabla_\theta \ln \pi_\theta(y_l \mid x) \right]$$</p>
+        <p class="step"><strong>Step 1: Pair 1 Calculations:</strong><br>
+        $$\Delta r = 2.40 - (-0.80) = 2.40 + 0.80 = \mathbf{+3.20}$$
+        Evaluating the sigmoid:
+        $$P(y_w \succ y_l) = \sigma(3.20) = \frac{1}{1 + e^{-3.20}} = \frac{1}{1 + 0.04076} = \frac{1}{1.04076} \approx \mathbf{0.9608 \text{ (96.08\%)}}$$
+        Negative Log-Likelihood Loss:
+        $$\mathcal{L}_1 = -\ln(0.9608) \approx \mathbf{0.03998}$$</p>
 
-        <p class="step"><strong>Step 2: Physical Interpretation of the Gradient:</strong>
-        <ul>
-          <li><strong>Direction of the Update:</strong> The term $\nabla_\theta \ln \pi_\theta(y_w \mid x) - \nabla_\theta \ln \pi_\theta(y_l \mid x)$ explicitly <strong>increases the log-likelihood of the preferred response $y_w$</strong> while simultaneously <strong>decreasing the log-likelihood of the dispreferred response $y_l$</strong>!</li>
-          <li><strong>Dynamic Adaptive Weighting:</strong> The scalar weight in front is $\sigma(\hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w))$. Notice:
-            <ul>
-              <li>If the model currently assigns a much higher implicit reward to the wrong answer $y_l$ ($\hat{r}_\theta(x, y_l) \gg \hat{r}_\theta(x, y_w)$), the weight approaches $\sigma(+\infty) \approx \mathbf{1.0}$, applying maximum gradient force to correct the mistake!</li>
-              <li>If the model already correctly prefers the winning answer ($\hat{r}_\theta(x, y_w) \gg \hat{r}_\theta(x, y_l)$), the weight approaches $\sigma(-\infty) \approx \mathbf{0.0}$, naturally vanishing and preventing destructive over-optimization!</li>
-            </ul>
-          </li>
-        </ul>
-        <strong>Result: DPO behaves like an automated focal loss, automatically prioritizing hard, incorrectly ranked samples without hyperparameter tuning!</strong></p>
+        <p class="step"><strong>Step 2: Pair 2 Calculations (Adversarial / Misranked):</strong><br>
+        $$\Delta r = -1.20 - 1.50 = \mathbf{-2.70}$$
+        Evaluating the sigmoid:
+        $$P(y_w \succ y_l) = \sigma(-2.70) = \frac{1}{1 + e^{2.70}} = \frac{1}{1 + 14.8797} = \frac{1}{15.8797} \approx \mathbf{0.06297 \text{ (6.30\%)}}$$
+        Negative Log-Likelihood Loss:
+        $$\mathcal{L}_2 = -\ln(0.06297) = \ln(15.8797) \approx \mathbf{2.7650}$$</p>
+
+        <p class="step"><strong>Step 3: Average Mini-Batch Loss:</strong><br>
+        $$\bar{\mathcal{L}} = \frac{\mathcal{L}_1 + \mathcal{L}_2}{2} = \frac{0.03998 + 2.7650}{2} = \frac{2.80498}{2} = \mathbf{1.4025}$$
+        Notice how the misranked pair contributes over $98.5\%$ of the total loss ($2.765 / 2.805$), driving strong gradient updates to invert the model's erroneous reward predictions.</p>
       </div>
     </div>
 
-    <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 5.6: DPO Loss Function from Scratch</h3>
-    <p>Below is a clean, production-grade PyTorch implementation of the exact Direct Preference Optimization loss function.</p>
+    <!-- PROBLEM 5.6.2 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.6.2</span>
+        <span class="difficulty difficulty-medium">Tier 1: Direct Formula Drill</span>
+        <span class="company-tag company-google">Google DeepMind</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>DPO Loss &amp; Implicit Reward Margin Step-by-Step Calculation:</strong></p>
+        <p>In Direct Preference Optimization (DPO), the implicit reward assigned by policy $\pi_\theta$ to response $y$ given prompt $x$ relative to reference model $\pi_{\text{ref}}$ is:</p>
+        $$\hat{r}_\theta(x, y) = \beta \ln \frac{\pi_\theta(y \mid x)}{\pi_{\text{ref}}(y \mid x)} = \beta \left( \ln \pi_\theta(y \mid x) - \ln \pi_{\text{ref}}(y \mid x) \right)$$
+        <p>The DPO loss for a pair $(x, y_w, y_l)$ is:</p>
+        $$\mathcal{L}_{\text{DPO}} = -\ln \sigma \left( \hat{r}_\theta(x, y_w) - \hat{r}_\theta(x, y_l) \right)$$
+        <p>Given regularization parameter $\beta = 0.10$ and the following log-probabilities:</p>
+        <ul>
+          <li>$\ln \pi_\theta(y_w \mid x) = -2.30, \quad \ln \pi_{\text{ref}}(y_w \mid x) = -2.80$</li>
+          <li>$\ln \pi_\theta(y_l \mid x) = -4.50, \quad \ln \pi_{\text{ref}}(y_l \mid x) = -3.20$</li>
+        </ul>
+        <ol>
+          <li>Calculate the implicit reward $\hat{r}_\theta(x, y_w)$ for the preferred response.</li>
+          <li>Calculate the implicit reward $\hat{r}_\theta(x, y_l)$ for the dispreferred response.</li>
+          <li>Compute the implicit reward margin $\Delta \hat{r} = \hat{r}_\theta(x, y_w) - \hat{r}_\theta(x, y_l)$.</li>
+          <li>Calculate the resulting DPO loss $\mathcal{L}_{\text{DPO}}$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Arithmetic Solution</div>
+
+        <p class="step"><strong>Step 1: Implicit Reward for Preferred Response $y_w$:</strong><br>
+        $$\hat{r}_\theta(x, y_w) = 0.10 \times \left( -2.30 - (-2.80) \right) = 0.10 \times (+0.50) = \mathbf{+0.0500}$$
+        Because $\pi_\theta$ assigns higher probability to $y_w$ than the reference model, the implicit reward is positive.</p>
+
+        <p class="step"><strong>Step 2: Implicit Reward for Dispreferred Response $y_l$:</strong><br>
+        $$\hat{r}_\theta(x, y_l) = 0.10 \times \left( -4.50 - (-3.20) \right) = 0.10 \times (-1.30) = \mathbf{-0.1300}$$
+        Because $\pi_\theta$ suppresses the probability of $y_l$ relative to reference, its implicit reward is penalized negatively.</p>
+
+        <p class="step"><strong>Step 3: Implicit Reward Margin $\Delta \hat{r}$:</strong><br>
+        $$\Delta \hat{r} = \hat{r}_\theta(x, y_w) - \hat{r}_\theta(x, y_l) = 0.0500 - (-0.1300) = \mathbf{+0.1800}$$</p>
+
+        <p class="step"><strong>Step 4: DPO Loss Calculation:</strong><br>
+        $$\mathcal{L}_{\text{DPO}} = -\ln \sigma(0.1800)$$
+        Computing sigmoid:
+        $$\sigma(0.1800) = \frac{1}{1 + e^{-0.1800}} = \frac{1}{1 + 0.83527} = \frac{1}{1.83527} \approx 0.54488$$
+        Taking negative natural logarithm:
+        $$\mathcal{L}_{\text{DPO}} = -\ln(0.54488) \approx \mathbf{0.6072}$$
+        The model correctly places $y_w$ above $y_l$ by a margin of $+0.18$, resulting in a well-calibrated loss of $0.6072$.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.6.3 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.6.3</span>
+        <span class="difficulty difficulty-medium">Tier 2: Applied Engineering Trace</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-meta">Meta</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>PPO Token-Level Reward with KL Penalty Trajectory Trace:</strong></p>
+        <p>In standard RLHF with PPO, an episodic completion consists of $T = 4$ generated tokens. The reward model evaluates only the complete sequence, returning a terminal scalar reward $r(x, y) = +2.40$ at the final token $t = 4$.</p>
+        <p>At each token step $t$, a per-token KL divergence penalty is applied:</p>
+        $$R_t = \begin{cases} -\beta \left( \ln \pi_\phi(y_t \mid x, y_{&lt;t}) - \ln \pi_{\text{ref}}(y_t \mid x, y_{&lt;t}) \right) &amp; \text{for } t = 1, 2, 3 \\ r(x, y) - \beta \left( \ln \pi_\phi(y_4 \mid x, y_{&lt;4}) - \ln \pi_{\text{ref}}(y_4 \mid x, y_{&lt;4}) \right) &amp; \text{for } t = 4 \end{cases}$$
+        <p>KL penalty coefficient $\beta = 0.05$. Per-token log-probabilities under policy $\pi_\phi$ and reference $\pi_{\text{ref}}$ are:</p>
+        <ul>
+          <li>Token 1: $\ln \pi_\phi = -1.20, \quad \ln \pi_{\text{ref}} = -1.50$</li>
+          <li>Token 2: $\ln \pi_\phi = -0.80, \quad \ln \pi_{\text{ref}} = -0.60$</li>
+          <li>Token 3: $\ln \pi_\phi = -2.50, \quad \ln \pi_{\text{ref}} = -1.00$ (Severe distribution drift!)</li>
+          <li>Token 4: $\ln \pi_\phi = -0.50, \quad \ln \pi_{\text{ref}} = -0.50$</li>
+        </ul>
+        <ol>
+          <li>Calculate the exact per-token reward $R_1, R_2, R_3, R_4$.</li>
+          <li>Calculate the total episodic return $G = \sum_{t=1}^4 R_t$.</li>
+          <li>Identify which token incurs the largest KL penalty, and explain how this prevents the policy from drifting into degenerate output distributions.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Algorithmic Trace</div>
+
+        <p class="step"><strong>Step 1: Per-Token Reward Arithmetic:</strong><br>
+        Given $\beta = 0.05$:
+        <ul>
+          <li><u>Token 1:</u>
+          $$\Delta \ln \pi_1 = -1.20 - (-1.50) = +0.30$$
+          $$R_1 = -0.05 \times (+0.30) = \mathbf{-0.0150}$$</li>
+          <li><u>Token 2:</u>
+          $$\Delta \ln \pi_2 = -0.80 - (-0.60) = -0.20$$
+          $$R_2 = -0.05 \times (-0.20) = \mathbf{+0.0100}$$</li>
+          <li><u>Token 3:</u>
+          $$\Delta \ln \pi_3 = -2.50 - (-1.00) = -1.50$$
+          Wait: $\ln \pi_\phi - \ln \pi_{\text{ref}} = -2.50 - (-1.00) = -1.50$.
+          $$R_3 = -0.05 \times (-1.50) = \mathbf{+0.0750}$$
+          <em>(Note: If $\pi_\phi$ places higher probability, say $\ln \pi_\phi = -0.20$ vs $\ln \pi_{\text{ref}} = -1.50$, then $\ln(\pi/\pi_{\text{ref}}) = +1.30$, yielding penalty $-0.065$). Here, token 3 is lower probability under policy, so ratio is $e^{-1.5}$.</em></li>
+          <li><u>Token 4 (Terminal Token with Base Reward):</u>
+          $$\Delta \ln \pi_4 = -0.50 - (-0.50) = 0.00$$
+          $$R_4 = r(x, y) - 0.05 \times (0.00) = 2.40 - 0.00 = \mathbf{+2.4000}$$</li>
+        </ul></p>
+
+        <p class="step"><strong>Step 2: Total Episodic Return:</strong><br>
+        $$G = R_1 + R_2 + R_3 + R_4 = -0.0150 + 0.0100 + 0.0750 + 2.4000 = \mathbf{+2.4700}$$</p>
+
+        <p class="step"><strong>Step 3: Role of the KL Penalty:</strong><br>
+        At each token step, whenever the policy increases the probability of a token far above what the pre-trained reference model expected ($\pi_\phi \gg \pi_{\text{ref}}$), the term $\ln(\pi_\phi / \pi_{\text{ref}}) &gt; 0$ results in a negative immediate reward penalty. This mathematically tethers the policy to the natural language distribution of the base model, preventing catastrophic language breakdown and gibberish generation while seeking high rewards.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.6.4 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.6.4</span>
+        <span class="difficulty difficulty-hard">Tier 2: Applied Engineering Trace</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-google">Google</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>PPO Clipped Surrogate Objective &amp; Advantage Tracing:</strong></p>
+        <p>The core PPO policy update maximizes the clipped surrogate objective:</p>
+        $$L^{\text{CLIP}}(\theta) = \hat{\mathbb{E}}_t \left[ \min\left( r_t(\theta) \hat{A}_t, \, \text{clip}(r_t(\theta), 1 - \epsilon, 1 + \epsilon) \hat{A}_t \right) \right]$$
+        <p>where $r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}$ is the probability ratio, $\hat{A}_t$ is the estimated advantage, and clipping parameter $\epsilon = 0.20$.</p>
+        <p>Evaluate $L^{\text{CLIP}}$ for two distinct action steps:</p>
+        <ol>
+          <li><strong>Case 1 (Positive Advantage):</strong> $\hat{A}_1 = +2.50$, and current probability ratio $r_1(\theta) = 1.35$. Calculate the unclipped objective, the clipped objective, and the final minimum value. State whether the gradient is clipped.</li>
+          <li><strong>Case 2 (Negative Advantage):</strong> $\hat{A}_2 = -1.80$, and current probability ratio $r_2(\theta) = 0.65$. Calculate the unclipped objective, the clipped objective, and the final minimum value. State whether the gradient is clipped.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Step-by-Step Algorithmic Trace</div>
+
+        <p class="step"><strong>Step 1: Case 1 Trace ($\hat{A}_1 = +2.50$, $r_1 = 1.35$):</strong><br>
+        Clipping bounds: $[1 - \epsilon, 1 + \epsilon] = [1 - 0.20, 1 + 0.20] = [0.80, 1.20]$.<br>
+        Unclipped term:
+        $$\text{Term}_{\text{unclipped}} = r_1 \hat{A}_1 = 1.35 \times 2.50 = \mathbf{+3.375}$$
+        Clipped ratio: $\text{clip}(1.35, 0.80, 1.20) = 1.20$.<br>
+        Clipped term:
+        $$\text{Term}_{\text{clipped}} = 1.20 \times 2.50 = \mathbf{+3.000}$$
+        Surrogate objective:
+        $$L_1 = \min(3.375, 3.000) = \mathbf{+3.000}$$
+        <strong>Status: Clipped.</strong> Because the policy already improved this good action beyond the allowable trust region ($r_1 = 1.35 &gt; 1.20$), the objective is capped at $3.000$. The gradient with respect to $\theta$ becomes zero, preventing an excessively large destructive policy update.</p>
+
+        <p class="step"><strong>Step 2: Case 2 Trace ($\hat{A}_2 = -1.80$, $r_2 = 0.65$):</strong><br>
+        Unclipped term:
+        $$\text{Term}_{\text{unclipped}} = r_2 \hat{A}_2 = 0.65 \times (-1.80) = \mathbf{-1.170}$$
+        Clipped ratio: $\text{clip}(0.65, 0.80, 1.20) = 0.80$.<br>
+        Clipped term:
+        $$\text{Term}_{\text{clipped}} = 0.80 \times (-1.80) = \mathbf{-1.440}$$
+        Surrogate objective:
+        $$L_2 = \min(-1.170, -1.440) = \mathbf{-1.440}$$
+        <strong>Status: Clipped.</strong> Because the action has negative advantage ($\hat{A}_2 &lt; 0$) and the policy has already reduced its probability well below $0.80$ ($r_2 = 0.65 &lt; 0.80$), clipping to $-1.440$ establishes a pessimistic lower bound, cutting off further gradients and stabilizing training.</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.6.5 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.6.5</span>
+        <span class="difficulty difficulty-hard">Tier 3: FAANG / Research Lab Proof</span>
+        <span class="company-tag company-stanford">Stanford</span>
+        <span class="company-tag company-anthropic">Anthropic</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Mathematical Proof: Derivation of the Optimal Policy in KL-Constrained RL via Calculus of Variations:</strong></p>
+        <p>Consider the optimization problem for an arbitrary prompt $x$:</p>
+        $$\max_{\pi} \sum_{y} \pi(y \mid x) r(x, y) - \beta \sum_{y} \pi(y \mid x) \ln \frac{\pi(y \mid x)}{\pi_{\text{ref}}(y \mid x)}$$
+        <p>subject to the probability normalization constraint $\sum_y \pi(y \mid x) = 1$, with $\pi(y \mid x) \ge 0$.</p>
+        <ol>
+          <li>Formulate the Lagrangian functional $\mathcal{F}(\pi, \lambda)$ using Lagrange multiplier $\lambda \in \mathbb{R}$.</li>
+          <li>Take the functional derivative $\frac{\partial \mathcal{F}}{\partial \pi(y \mid x)}$ and set it to zero.</li>
+          <li>Solve for $\pi^*(y \mid x)$ in terms of $\lambda, \beta, r(x, y)$, and $\pi_{\text{ref}}(y \mid x)$.</li>
+          <li>Eliminate the Lagrange multiplier $\lambda$ using the constraint $\sum_y \pi^*(y \mid x) = 1$, and prove that:
+          $$\pi^*(y \mid x) = \frac{1}{Z(x)} \pi_{\text{ref}}(y \mid x) \exp\left( \frac{1}{\beta} r(x, y) \right)$$
+          where $Z(x) = \sum_y \pi_{\text{ref}}(y \mid x) \exp\left( \frac{1}{\beta} r(x, y) \right)$.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Mathematical Proof</div>
+
+        <p class="step"><strong>Part 1: The Lagrangian Formulation:</strong><br>
+        Let $\pi(y)$ denote $\pi(y \mid x)$ and $\pi_{\text{ref}}(y)$ denote $\pi_{\text{ref}}(y \mid x)$ for a fixed prompt $x$.
+        We wish to maximize:
+        $$J(\pi) = \sum_y \pi(y) r(x, y) - \beta \sum_y \pi(y) \left[ \ln \pi(y) - \ln \pi_{\text{ref}}(y) \right]$$
+        subject to $g(\pi) = \sum_y \pi(y) - 1 = 0$.<br>
+        The Lagrangian functional is:
+        $$\mathcal{F}(\pi, \lambda) = \sum_y \pi(y) r(x, y) - \beta \sum_y \pi(y) \ln \pi(y) + \beta \sum_y \pi(y) \ln \pi_{\text{ref}}(y) - \lambda \left( \sum_y \pi(y) - 1 \right)$$</p>
+
+        <p class="step"><strong>Part 2: Functional Derivative:</strong><br>
+        Differentiating with respect to $\pi(y)$ for a specific response $y$:
+        $$\frac{\partial \mathcal{F}}{\partial \pi(y)} = r(x, y) - \beta \left( \ln \pi(y) + 1 \right) + \beta \ln \pi_{\text{ref}}(y) - \lambda$$
+        Setting $\frac{\partial \mathcal{F}}{\partial \pi(y)} = 0$ for optimality:
+        $$r(x, y) - \beta \ln \pi(y) - \beta + \beta \ln \pi_{\text{ref}}(y) - \lambda = 0$$</p>
+
+        <p class="step"><strong>Part 3: Solving for $\pi(y)$:</strong><br>
+        Isolate $\ln \pi(y)$:
+        $$\beta \ln \pi(y) = r(x, y) + \beta \ln \pi_{\text{ref}}(y) - (\lambda + \beta)$$
+        Dividing by $\beta$:
+        $$\ln \pi(y) = \ln \pi_{\text{ref}}(y) + \frac{1}{\beta} r(x, y) - \left( \frac{\lambda}{\beta} + 1 \right)$$
+        Exponentiating both sides:
+        $$\pi^*(y) = \pi_{\text{ref}}(y) \exp\left( \frac{1}{\beta} r(x, y) \right) \exp\left( -\left(\frac{\lambda}{\beta} + 1\right) \right)$$</p>
+
+        <p class="step"><strong>Part 4: Eliminating Lagrange Multiplier $\lambda$:</strong><br>
+        Enforcing the normalization constraint $\sum_y \pi^*(y) = 1$:
+        $$\sum_y \pi_{\text{ref}}(y) \exp\left( \frac{1}{\beta} r(x, y) \right) \exp\left( -\left(\frac{\lambda}{\beta} + 1\right) \right) = 1$$
+        Pulling the constant factor outside the summation:
+        $$\exp\left( -\left(\frac{\lambda}{\beta} + 1\right) \right) \sum_y \pi_{\text{ref}}(y) \exp\left( \frac{1}{\beta} r(x, y) \right) = 1$$
+        $$\exp\left( -\left(\frac{\lambda}{\beta} + 1\right) \right) = \frac{1}{\sum_y \pi_{\text{ref}}(y) \exp\left( \frac{1}{\beta} r(x, y) \right)} = \frac{1}{Z(x)}$$
+        Substituting this back into the expression for $\pi^*(y)$:
+        $$\mathbf{\pi^*(y \mid x) = \frac{1}{Z(x)} \pi_{\text{ref}}(y \mid x) \exp\left( \frac{1}{\beta} r(x, y) \right)}$$
+        where $Z(x) = \sum_y \pi_{\text{ref}}(y \mid x) \exp\left( \frac{1}{\beta} r(x, y) \right)$ is the normalizing partition function. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.6.6 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.6.6</span>
+        <span class="difficulty difficulty-hard">Tier 3: FAANG / Research Lab Proof</span>
+        <span class="company-tag company-openai">OpenAI</span>
+        <span class="company-tag company-google">Google Brain</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Mathematical Proof: DPO Gradient Dynamics &amp; Implicit Negative Guidance:</strong></p>
+        <p>Recall the DPO loss function:</p>
+        $$\mathcal{L}_{\text{DPO}}(\theta) = -\ln \sigma\left( \beta \ln \frac{\pi_\theta(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \ln \frac{\pi_\theta(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)} \right)$$
+        <ol>
+          <li>Prove that the gradient of $\mathcal{L}_{\text{DPO}}$ with respect to model parameters $\theta$ is:
+          $$\nabla_\theta \mathcal{L}_{\text{DPO}}(\theta) = -\beta \, \sigma\left( \hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w) \right) \left[ \nabla_\theta \ln \pi_\theta(y_w \mid x) - \nabla_\theta \ln \pi_\theta(y_l \mid x) \right]$$
+          where $\hat{r}_\theta(x, y) = \beta \ln \frac{\pi_\theta(y \mid x)}{\pi_{\text{ref}}(y \mid x)}$.</li>
+          <li>Prove that the scalar multiplier $w(x, y_w, y_l) = \sigma\left( \hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w) \right)$ acts as an automated adaptive sample-weighting function that:
+            <ul>
+              <li>Vanishes ($w \to 0$) when the model correctly ranks the pair with high confidence.</li>
+              <li>Reaches maximum ($w \to 1$) when the model severely misranks the pair ($\hat{r}_\theta(y_l) \gg \hat{r}_\theta(y_w)$).</li>
+            </ul>
+          </li>
+          <li>Prove that DPO enforces <strong>implicit negative guidance</strong>: why subtracting $\nabla_\theta \ln \pi_\theta(y_l \mid x)$ prevents the policy from simply inflating token lengths or emitting generic pleasantries.</li>
+        </ol>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Mathematical Proof</div>
+
+        <p class="step"><strong>Part 1: Gradient Derivation:</strong><br>
+        Let $u = \hat{r}_\theta(x, y_w) - \hat{r}_\theta(x, y_l) = \beta \ln \frac{\pi_\theta(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \ln \frac{\pi_\theta(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)}$.
+        The loss is $\mathcal{L}_{\text{DPO}} = -\ln \sigma(u)$.
+        By the chain rule:
+        $$\nabla_\theta \mathcal{L}_{\text{DPO}} = -\frac{d \ln \sigma(u)}{du} \nabla_\theta u$$
+        Using the derivative of log-sigmoid:
+        $$\frac{d}{du} \ln \sigma(u) = \frac{\sigma'(u)}{\sigma(u)} = \frac{\sigma(u)(1 - \sigma(u))}{\sigma(u)} = 1 - \sigma(u) = \sigma(-u)$$
+        Therefore:
+        $$\nabla_\theta \mathcal{L}_{\text{DPO}} = -\sigma(-u) \nabla_\theta u$$
+        Since $-u = -(\hat{r}_\theta(x, y_w) - \hat{r}_\theta(x, y_l)) = \hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w)$:
+        $$\sigma(-u) = \sigma\left( \hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w) \right)$$
+        Computing $\nabla_\theta u$:
+        $$\nabla_\theta u = \beta \nabla_\theta \left( \ln \pi_\theta(y_w \mid x) - \ln \pi_{\text{ref}}(y_w \mid x) - \ln \pi_\theta(y_l \mid x) + \ln \pi_{\text{ref}}(y_l \mid x) \right)$$
+        Since the reference model $\pi_{\text{ref}}$ is frozen ($\nabla_\theta \ln \pi_{\text{ref}} = 0$):
+        $$\nabla_\theta u = \beta \left( \nabla_\theta \ln \pi_\theta(y_w \mid x) - \nabla_\theta \ln \pi_\theta(y_l \mid x) \right)$$
+        Multiplying together:
+        $$\mathbf{\nabla_\theta \mathcal{L}_{\text{DPO}}(\theta) = -\beta \, \sigma\left( \hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w) \right) \left[ \nabla_\theta \ln \pi_\theta(y_w \mid x) - \nabla_\theta \ln \pi_\theta(y_l \mid x) \right]} \quad \blacksquare$$</p>
+
+        <p class="step"><strong>Part 2: Adaptive Sample Weighting:</strong><br>
+        Let $w = \sigma\left( \hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w) \right)$:
+        <ol>
+          <li><strong>Well-Separated Pairs:</strong> When $\hat{r}_\theta(x, y_w) \gg \hat{r}_\theta(x, y_l)$ (e.g. margin $\Delta \hat{r} = +5.0$):
+          $$\hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w) = -5.0 \implies w = \sigma(-5.0) = \frac{1}{1 + e^5} \approx 0.0067 \to 0$$
+          The gradient naturally vanishes. The model stops wasting capacity refining examples it has already mastered.</li>
+          <li><strong>Misranked Pairs:</strong> When the model erroneously prefers the loser ($\hat{r}_\theta(x, y_l) \gg \hat{r}_\theta(x, y_w)$, say margin is $-5.0$):
+          $$\hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w) = +5.0 \implies w = \sigma(+5.0) \approx 0.9933 \to 1$$
+          The update applies maximum gradient force to aggressively correct the inversion! DPO behaves like an automated focal loss without extra hyperparameters. $\blacksquare$</li>
+        </ol></p>
+
+        <p class="step"><strong>Part 3: Proof of Implicit Negative Guidance:</strong><br>
+        In standard SFT, the update is strictly positive: $\nabla_\theta \ln \pi_\theta(y_{\text{target}} \mid x)$, which pushes probability mass upward on target tokens. However, SFT cannot explicitly penalize toxic or incorrect completions without seeing exhaustive negative examples.<br>
+        In DPO, the gradient direction is:
+        $$\Delta \mathbf{g} = \nabla_\theta \ln \pi_\theta(y_w \mid x) - \nabla_\theta \ln \pi_\theta(y_l \mid x)$$
+        Under gradient descent ($\theta \leftarrow \theta - \eta \nabla \mathcal{L}$):
+        The minus sign turns $-\nabla \mathcal{L}$ into $+\beta w [\nabla \ln \pi(y_w) - \nabla \ln \pi(y_l)]$.
+        This directly <strong>increases $\ln \pi(y_w)$</strong> while <strong>actively decreasing $\ln \pi(y_l)$</strong>!
+        This dual dynamic guarantees that probability mass taken away from dispreferred response $y_l$ is transferred directly to preferred response $y_w$, preventing the model from degenerating into repetitive filler tokens. $\blacksquare$</p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.6.7 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.6.7</span>
+        <span class="difficulty difficulty-medium">Tier 4: Conceptual Trap MCQ</span>
+        <span class="company-tag company-anthropic">Anthropic</span>
+        <span class="company-tag company-openai">OpenAI</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap: The "Length Bias / Verbosity Hacking" in Alignment:</strong></p>
+        <p>During RLHF or DPO alignment, models frequently exhibit a significant increase in average generation length (often doubling in output token count) even when prompts do not ask for detailed explanations. An engineer observes that evaluating on AlpacaEval or MT-Bench shows soaring win-rates against GPT-4, but human experts find the responses bloated and sycophantic.</p>
+        <p>Which of the following describes the <strong>mathematical root cause</strong> of this verbosity bias and the most effective mitigation?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> Human annotators and LLM judges have an inherent heuristic cognitive bias toward longer, well-formatted responses (confusing verbosity with comprehensiveness). The reward model learns this correlation: $r(x, y) \propto |y|$. Consequently, the policy exploits this correlation by generating verbose filler. Mitigation: Length-normalized reward penalties or length-controlled DPO.</li>
+          <li><strong>(B)</strong> The Softmax temperature in DPO defaults to $1.0$, which causes the entropy of token generation to collapse to zero.</li>
+          <li><strong>(C)</strong> The KL divergence term $D_{\text{KL}}(\pi_\theta \parallel \pi_{\text{ref}})$ increases linearly with sequence length, which forces the optimizer to generate more tokens to minimize loss.</li>
+          <li><strong>(D)</strong> FlashAttention-2 allocates memory in chunks of 128 tokens, forcing the model to complete full 128-token blocks.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Distractor Analysis &amp; Architectural Rationale</div>
+
+        <p class="step"><strong>Correct Answer: (A)</strong></p>
+
+        <p class="step"><strong>Exhaustive Distractor Analysis:</strong><br>
+        <ul>
+          <li><strong>Why (A) is Correct:</strong> In human preference datasets (and GPT-4 synthetic annotations), human crowd-workers systematically rate longer responses as "more helpful" because length gives the appearance of thoroughness. The reward model (or DPO preference pairs) absorbs this spurious correlation: $r(x, y) \approx r_{\text{content}} + \gamma \cdot \text{len}(y)$ with $\gamma &gt; 0$. During alignment, the policy takes the path of least resistance to maximize reward—inflating responses with formatting bullet points, boilerplate disclaimers, and unnecessary restatements of the question (<em>verbosity hacking</em>). Modern solutions include <strong>Length-Controlled DPO (LC-DPO)</strong>, adding an explicit length penalty to the implicit reward margin: $\Delta r_{\text{calibrated}} = \Delta r - \alpha (\text{len}(y_w) - \text{len}(y_l))$.</li>
+          <li><strong>Why (B) is Incorrect:</strong> Softmax temperature is an inference decoding parameter, not a loss formulation parameter. Furthermore, entropy collapse would result in short, repetitive loops, not expansive, coherent long responses.</li>
+          <li><strong>Why (C) is Incorrect:</strong> The KL divergence penalty enters with a <em>negative sign</em> in the reward maximization objective ($r - \beta D_{\text{KL}}$). Because $D_{\text{KL}}$ is non-negative and generally accumulates with sequence length, longer sequences incur <em>larger</em> penalties, which opposes length expansion rather than causing it.</li>
+          <li><strong>Why (D) is Incorrect:</strong> FlashAttention kernel tile sizes have zero influence on token generation stopping conditions (which are governed strictly by the emission of the `&lt;|end_of_text|&gt;` EOS token).</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- PROBLEM 5.6.8 -->
+    <div class="problem">
+      <div class="problem-header">
+        <span class="problem-number">Problem 5.6.8</span>
+        <span class="difficulty difficulty-hard">Tier 4: Conceptual Trap MCQ</span>
+        <span class="company-tag company-deepmind">DeepMind</span>
+        <span class="company-tag company-stanford">Stanford</span>
+      </div>
+      <div class="problem-question">
+        <p><strong>Conceptual Trap: Unbounded Likelihood Displacement in DPO vs. Identity Preference Optimization (IPO):</strong></p>
+        <p>In DPO, the loss function is $-\ln \sigma(\beta \Delta \ln \pi / \pi_{\text{ref}})$. When trained on preference datasets where human annotators have deterministic or noisy label agreement, what catastrophic failure mode can occur in DPO that motivated Azar et al. (DeepMind, 2023) to introduce <strong>Identity Preference Optimization (IPO)</strong>?</p>
+        <ul style="list-style-type: none; padding-left: 0;">
+          <li><strong>(A)</strong> DPO's loss has no global minimum for deterministic preferences ($P(y_w \succ y_l) = 1$); the loss asymptotically approaches zero only as $\frac{\pi_\theta(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} \to \infty$ and $\pi_\theta(y_l \mid x) \to 0$, causing unbounded drift of the policy, catastrophic reduction of generation entropy, and severe degradation on greedy decoding.</li>
+          <li><strong>(B)</strong> DPO can only be trained with learning rates below $10^{-8}$, causing training to stall indefinitely.</li>
+          <li><strong>(C)</strong> DPO inherently swaps the roles of $y_w$ and $y_l$ whenever the reference model has higher cross-entropy than the policy.</li>
+          <li><strong>(D)</strong> DPO cannot be used with BFloat16 precision due to underflow in the sigmoid denominator.</li>
+        </ul>
+      </div>
+      <div class="solution">
+        <div class="solution-label">✓ Complete Distractor Analysis &amp; Architectural Rationale</div>
+
+        <p class="step"><strong>Correct Answer: (A)</strong></p>
+
+        <p class="step"><strong>Exhaustive Distractor Analysis:</strong><br>
+        <ul>
+          <li><strong>Why (A) is Correct:</strong> The function $-\ln \sigma(u)$ is strictly decreasing and convex, with $-\ln \sigma(u) \to 0$ only as $u \to +\infty$. If a dataset contains deterministic preference labels, DPO will continually push the implicit reward margin $u = \beta \ln \frac{\pi_\theta(y_w)}{\pi_{\text{ref}}(y_w)} - \beta \ln \frac{\pi_\theta(y_l)}{\pi_{\text{ref}}(y_l)}$ toward $+\infty$. This causes the policy distribution to become infinitely peaked on a tiny set of training tokens, destroying general reasoning capabilities and inducing severe generation collapse.
+          To solve this, Azar et al. (DeepMind) proposed <strong>Identity Preference Optimization (IPO)</strong>, which replaces the log-sigmoid with a root-mean-squared error regularizer targeting a calibrated margin:
+          $$\mathcal{L}_{\text{IPO}}(\theta) = \mathbb{E} \left[ \left( \ln \frac{\pi_\theta(y_w)}{\pi_{\text{ref}}(y_w)} - \ln \frac{\pi_\theta(y_l)}{\pi_{\text{ref}}(y_l)} - \frac{\tau^{-1}}{2} \right)^2 \right]$$
+          Because IPO penalizes the squared deviation from a target margin $\frac{1}{2\tau}$, it strictly prevents the log-ratios from diverging to infinity!</li>
+          <li><strong>Why (B) is Incorrect:</strong> DPO trains with standard learning rates between $5 \times 10^{-7}$ and $2 \times 10^{-6}$, which is standard for post-training alignment.</li>
+          <li><strong>Why (C) is Incorrect:</strong> DPO never swaps winner and loser labels; the loss formula is strictly asymmetric ($y_w$ is positive, $y_l$ is negative).</li>
+          <li><strong>Why (D) is Incorrect:</strong> DPO is almost exclusively trained in BFloat16/FP16 mixed precision in production libraries (TRL, Axolotl). PyTorch's `F.logsigmoid` is numerically stabilized to avoid underflow.</li>
+        </ul></p>
+      </div>
+    </div>
+
+    <!-- SECTION 6: CODE LAB -->
+    <h3>5. Production Code Lab 5.6: Direct Preference Optimization Engine from Scratch</h3>
+    <p>Below is an enterprise-grade PyTorch implementation of the exact DPO Loss with numerically stabilized log-sigmoid computation and implicit reward tracking.</p>
 
     <div class="code-lab">
       <div class="code-lab-header">Code Lab 5.6 — Direct Preference Optimization (DPO) Loss Engine</div>
@@ -130,59 +538,79 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class DPOLoss(nn.Module):
-    def __init__(self, beta=0.1):
+    def __init__(self, beta: float = 0.1, label_smoothing: float = 0.0):
         super().__init__()
         self.beta = beta
+        self.label_smoothing = label_smoothing
 
-    def forward(self, policy_chosen_logps, policy_rejected_logps,
-                        reference_chosen_logps, reference_rejected_logps):
+    def forward(
+        self,
+        policy_chosen_logps: torch.Tensor,
+        policy_rejected_logps: torch.Tensor,
+        reference_chosen_logps: torch.Tensor,
+        reference_rejected_logps: torch.Tensor
+    ):
         """
-        policy_chosen_logps   : log pi_theta(y_w | x)
-        policy_rejected_logps : log pi_theta(y_l | x)
-        reference_chosen_logps: log pi_ref(y_w | x)
-        reference_rejected_logps: log pi_ref(y_l | x)
+        policy_chosen_logps      : log pi_theta(y_w | x) [Batch]
+        policy_rejected_logps    : log pi_theta(y_l | x) [Batch]
+        reference_chosen_logps   : log pi_ref(y_w | x)   [Batch]
+        reference_rejected_logps : log pi_ref(y_l | x)   [Batch]
         """
         # 1. Compute log ratios
         pi_logratios = policy_chosen_logps - policy_rejected_logps
         ref_logratios = reference_chosen_logps - reference_rejected_logps
 
-        # 2. Compute implicit rewards difference: beta * (log(pi_w/ref_w) - log(pi_l/ref_l))
+        # 2. Compute implicit reward margin: beta * (log(pi_w/ref_w) - log(pi_l/ref_l))
         logits = self.beta * (pi_logratios - ref_logratios)
 
-        # 3. DPO Loss: -E[log sigma(logits)]
-        losses = -F.logsigmoid(logits)
+        # 3. Numerically stabilized DPO Loss with optional label smoothing
+        if self.label_smoothing > 0.0:
+            losses = (
+                -F.logsigmoid(logits) * (1 - self.label_smoothing)
+                - F.logsigmoid(-logits) * self.label_smoothing
+            )
+        else:
+            losses = -F.logsigmoid(logits)
 
-        # 4. Implicit reward margins for monitoring
-        chosen_rewards = self.beta * (policy_chosen_logps - reference_chosen_logps).detach()
-        rejected_rewards = self.beta * (policy_rejected_logps - reference_rejected_logps).detach()
+        # 4. Compute detached implicit reward metrics for evaluation
+        with torch.no_grad():
+            chosen_rewards = self.beta * (policy_chosen_logps - reference_chosen_logps)
+            rejected_rewards = self.beta * (policy_rejected_logps - reference_rejected_logps)
+            reward_acc = (chosen_rewards > rejected_rewards).float().mean()
+            reward_margin = (chosen_rewards - rejected_rewards).mean()
 
-        return losses.mean(), chosen_rewards.mean(), rejected_rewards.mean()
+        return losses.mean(), chosen_rewards.mean(), rejected_rewards.mean(), reward_acc, reward_margin
 
 if __name__ == "__main__":
     dpo = DPOLoss(beta=0.1)
-    # Simulated log-probabilities across batch of 4 pairs
-    pol_w = torch.tensor([-1.2, -0.8, -2.1, -1.5])
-    pol_l = torch.tensor([-2.5, -3.1, -1.9, -4.0])
-    ref_w = torch.tensor([-1.5, -1.0, -2.0, -1.8])
-    ref_l = torch.tensor([-1.8, -2.0, -2.2, -2.5])
 
-    loss, r_w, r_l = dpo(pol_w, pol_l, ref_w, ref_l)
-    print(f"DPO Batch Loss        : {loss.item():.4f}")
-    print(f"Mean Chosen Reward    : {r_w.item():.4f}")
-    print(f"Mean Rejected Reward  : {r_l.item():.4f}")
-    print(f"Reward Accuracy Margin: {(r_w - r_l).item():.4f}")</code></pre>
+    # Simulated log-probabilities across batch of 4 prompt-completion pairs
+    pol_w = torch.tensor([-1.20, -0.80, -2.10, -1.50])
+    pol_l = torch.tensor([-2.50, -3.10, -1.90, -4.00])
+    ref_w = torch.tensor([-1.50, -1.00, -2.00, -1.80])
+    ref_l = torch.tensor([-1.80, -2.00, -2.20, -2.50])
+
+    loss, r_w, r_l, acc, margin = dpo(pol_w, pol_l, ref_w, ref_l)
+    print("--- DPO Loss Execution & Reward Metric Verification ---")
+    print(f"Batch Loss               : {loss.item():.4f}")
+    print(f"Mean Chosen Reward       : {r_w.item():.4f}")
+    print(f"Mean Rejected Reward     : {r_l.item():.4f}")
+    print(f"Implicit Reward Margin   : {margin.item():.4f}")
+    print(f"Reward Ranking Accuracy  : {acc.item() * 100:.1f}%")
+    assert acc.item() >= 0.75
+    print("[SUCCESS] DPO Engine Verified.")</code></pre>
     </div>
 
-    <!-- SECTION 6: END OF CHAPTER PROJECT -->
+    <!-- SECTION 7: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 5.6 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 5.6: Automated Alignment &amp; Preference Optimization Suite</h3>
-        <p class="project-desc">Build an automated preference optimization pipeline using Hugging Face <code>trl</code> (DPOTrainer) that aligns a fine-tuned model against a synthetic preference dataset, tracks implicit reward accuracy, and evaluates safety adherence benchmarks.</p>
+        <h3 class="project-title">Project 5.6: Enterprise Preference Optimization &amp; Safety Alignment Suite</h3>
+        <p class="project-desc">Build an end-to-end automated preference optimization pipeline using Hugging Face <code>trl</code> (DPOTrainer) that aligns an instruction-tuned foundation model against synthetic safety preference pairs, logs implicit reward margins to Weights &amp; Biases, and evaluates safety adherence across Anthropic Red-Teaming benchmarks.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part5_transformers_llms/ch56_alignment_dpo/dpo_scratch.py" target="_blank">🔗 Full Project Code: part5_transformers_llms/ch56_alignment_dpo/dpo_scratch.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In customer-facing banking assistants, an AI that promises inaccurate interest rates creates legal exposure. In this project, you construct a continuous alignment pipeline using DPO that penalizes speculative financial advice and elevates conservative, compliant disclosures across 20,000 regulatory dialogue pairs.</p>
+        <p><strong>Case Study Architecture:</strong> In customer-facing banking assistants, an AI that promises speculative returns or inaccurate loan approval creates existential legal liability. In this project, you construct a continuous alignment pipeline using DPO that penalizes hallucinated financial guarantees and elevates conservative, compliant disclosures across 20,000 regulatory dialogue pairs.</p>
       </div>
     </div>
   </div>

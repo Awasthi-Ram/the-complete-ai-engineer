@@ -11,6 +11,15 @@
 
   <div class="epigraph">
     <p>"Calculus is the most powerful weapon of thought yet devised by the wit of man."</p>
+
+    <!-- FIGURE 1.2.1: autograd_dag_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="autograd_dag_diagram.png" alt="Figure 1.2.1: autograd_dag_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 1.2.1:</em> Computational graph for automatic differentiation. The forward pass evaluates intermediate operations from inputs to scalar loss $L$. The reverse pass traverses adjoints in reverse topological order via Vector-Jacobian Products (VJPs), calculating exact gradients for all parameters simultaneously in a single sweep.
+      </p>
+    </div>
+
     <p class="attribution">— Wallace B. Smith</p>
   </div>
 
@@ -68,73 +77,283 @@
     <div class="key-insight">
       <p><strong>Why Deep Learning Uses Reverse-Mode Autograd (Backpropagation):</strong></p>
       <ul>
-        <li><strong>Forward-Mode Autograd (JVPs):</strong> Computes $\frac{\partial \mathbf{y}}{\partial x_i}$ by propagating derivatives forward alongside activations. It requires <strong>1 forward pass per input variable</strong>. Optimal when inputs $n \ll \text{outputs } m$.</li>
+        <li><strong>Forward-Mode Autograd (JVPs):</strong> Evaluates derivatives alongside activations using Dual Numbers ($a + b\epsilon$ where $\epsilon^2 = 0$). It requires <strong>1 forward pass per input parameter</strong>. Optimal when inputs $n \ll \text{outputs } m$.</li>
         <li><strong>Reverse-Mode Autograd (VJPs):</strong> Executes 1 forward pass to evaluate activations and build the computational tape, then executes <strong>1 single backward pass</strong> to compute the exact gradients of the scalar loss $\mathcal{L}$ with respect to ALL $d$ parameters simultaneously! Because deep learning has millions of inputs ($n \gg 1$) but only ONE scalar loss ($m = 1$), reverse-mode is infinitely superior.</li>
       </ul>
     </div>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Calculus &amp; Gradients</h3>
+    <!-- SECTION 4: THE 4-TIER GRADED PRACTICE SUITE -->
+    <div class="practice-set">
+      <h3>The 4-Tier Graded Practice Suite — Chapter 1.2</h3>
+      <p class="section-intro">Master multivariable gradients, Hessian curvature analysis, dual number arithmetic, and automatic differentiation through 8 rigorous graded problems.</p>
 
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 1.2.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
-        <span class="company-tag company-google">Google DeepMind</span>
-        <span class="company-tag company-openai">OpenAI</span>
+      <!-- ==================== TIER 1: FORMULA DRILLS ==================== -->
+      <h4>Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.2.1</span>
+          <span class="difficulty difficulty-easy">Level 1: Formula Drill</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Consider the multivariable function $f(x, y) = 3x^2 y - 2x e^y + y^3$.
+          <ol>
+            <li>Compute the analytical gradient vector $\nabla f(x, y)$.</li>
+            <li>Evaluate the gradient at point $P = (1, 0)$.</li>
+            <li>Compute the directional derivative of $f$ at $(1, 0)$ in the direction of vector $\mathbf{v} = [3, 4]^T$.</li>
+          </ol></p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Solution</div>
+          <p class="step"><strong>Step 1: Compute First-Order Partial Derivatives:</strong><br>
+          $$\frac{\partial f}{\partial x} = \frac{\partial}{\partial x}(3x^2 y - 2x e^y + y^3) = 6x y - 2e^y$$
+          $$\frac{\partial f}{\partial y} = \frac{\partial}{\partial y}(3x^2 y - 2x e^y + y^3) = 3x^2 - 2x e^y + 3y^2$$
+          $$\nabla f(x, y) = \begin{bmatrix} 6xy - 2e^y \\ 3x^2 - 2x e^y + 3y^2 \end{bmatrix}$$</p>
+
+          <p class="step"><strong>Step 2: Evaluate Gradient at $P = (1, 0)$:</strong><br>
+          $$\frac{\partial f}{\partial x}(1, 0) = 6(1)(0) - 2e^0 = 0 - 2(1) = -2$$
+          $$\frac{\partial f}{\partial y}(1, 0) = 3(1)^2 - 2(1)e^0 + 3(0)^2 = 3 - 2(1) + 0 = 1$$
+          $$\nabla f(1, 0) = \begin{bmatrix} -2 \\ 1 \end{bmatrix}$$</p>
+
+          <p class="step"><strong>Step 3: Compute Directional Derivative:</strong><br>
+          Normalize vector $\mathbf{v}$:
+          $$\|\mathbf{v}\|_2 = \sqrt{3^2 + 4^2} = \sqrt{25} = 5 \implies \mathbf{u} = \begin{bmatrix} 3/5 \\ 4/5 \end{bmatrix} = \begin{bmatrix} 0.6 \\ 0.8 \end{bmatrix}$$
+          $$D_{\mathbf{u}} f(1, 0) = \nabla f(1, 0) \cdot \mathbf{u} = (-2 \times 0.6) + (1 \times 0.8) = -1.2 + 0.8 = \mathbf{-0.4}$$</p>
+        </div>
       </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> In classification models, the Softmax activation function maps raw logit scores $\mathbf{z} \in \mathbb{R}^C$ into probabilities $\mathbf{p} \in \mathbb{R}^C$:
-        $$p_i = \frac{e^{z_i}}{\sum_{k=1}^C e^{z_k}}$$
-        The model is trained using Cross-Entropy loss with ground-truth one-hot label vector $\mathbf{y} \in \{0, 1\}^C$:
-        $$\mathcal{L}_{CE} = -\sum_{k=1}^C y_k \ln(p_k)$$
-        Prove analytically from first principles that the gradient of the loss with respect to logit $z_i$ is given by the remarkably simple expression:
-        $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = p_i - y_i$$</p>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.2.2</span>
+          <span class="difficulty difficulty-easy">Level 1: Formula Drill</span>
+          <span class="company-tag company-amazon">Amazon</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Given the scalar loss surface $f(x, y) = x^3 - 3x y^2 + 2y$:
+          <ol>
+            <li>Compute the $2 \times 2$ Hessian matrix $H(x, y)$.</li>
+            <li>Evaluate $H(x, y)$ at the point $(2, 1)$.</li>
+            <li>Calculate the determinant of $H(2, 1)$ and classify the local curvature (minimum, maximum, or saddle point).</li>
+          </ol></p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Solution</div>
+          <p class="step"><strong>Step 1: Compute Second-Order Derivatives:</strong><br>
+          First derivatives: $\frac{\partial f}{\partial x} = 3x^2 - 3y^2$, $\frac{\partial f}{\partial y} = -6xy + 2$.<br>
+          Second derivatives:
+          $$\frac{\partial^2 f}{\partial x^2} = 6x, \quad \frac{\partial^2 f}{\partial y^2} = -6x, \quad \frac{\partial^2 f}{\partial x \partial y} = -6y = \frac{\partial^2 f}{\partial y \partial x}$$
+          $$H(x, y) = \begin{bmatrix} 6x & -6y \\ -6y & -6x \end{bmatrix}$$</p>
+
+          <p class="step"><strong>Step 2: Evaluate at $(2, 1)$:</strong>
+          $$H(2, 1) = \begin{bmatrix} 6(2) & -6(1) \\ -6(1) & -6(2) \end{bmatrix} = \begin{bmatrix} 12 & -6 \\ -6 & -12 \end{bmatrix}$$</p>
+
+          <p class="step"><strong>Step 3: Classify Curvature:</strong>
+          $$\det(H) = (12 \times -12) - (-6 \times -6) = -144 - 36 = \mathbf{-180 &lt; 0}$$
+          Because the determinant of the $2 \times 2$ symmetric Hessian is negative, the eigenvalues have opposite signs ($\lambda_1 > 0$ and $\lambda_2 < 0$).
+          <strong>Conclusion: The point $(2, 1)$ is an INDEFINITE SADDLE POINT.</strong></p>
+        </div>
       </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
 
-        <p class="step"><strong>Step 1: Compute the Jacobian of the Softmax Function:</strong><br>
-        Notice that $p_j$ depends on <em>all</em> logits because $\sum_k e^{z_k}$ is in the denominator. We must evaluate $\frac{\partial p_j}{\partial z_i}$ for two cases: $j = i$ and $j \neq i$.<br>
-        Let $S = \sum_{k=1}^C e^{z_k}$. Then $p_j = \frac{e^{z_j}}{S}$.</p>
-        <ul>
-          <li><strong>Case 1 ($j = i$):</strong> Using quotient rule:
-          $$\frac{\partial p_i}{\partial z_i} = \frac{e^{z_i} S - e^{z_i} e^{z_i}}{S^2} = \frac{e^{z_i}}{S} \left( \frac{S - e^{z_i}}{S} \right) = p_i (1 - p_i)$$</li>
-          <li><strong>Case 2 ($j \neq i$):</strong> The numerator $e^{z_j}$ is constant with respect to $z_i$:
-          $$\frac{\partial p_j}{\partial z_i} = \frac{0 \cdot S - e^{z_j} e^{z_i}}{S^2} = -\frac{e^{z_j}}{S} \frac{e^{z_i}}{S} = -p_j p_i$$</li>
-        </ul>
-        Unifying both cases using the Kronecker delta $\delta_{ij}$ (where $\delta_{ij}=1$ if $i=j$, else $0$):
-        $$\frac{\partial p_j}{\partial z_i} = p_j (\delta_{ij} - p_i)$$
+      <!-- ==================== TIER 2: APPLIED TRACES ==================== -->
+      <h4>Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
 
-        <p class="step"><strong>Step 2: Apply the Multivariable Chain Rule to Cross-Entropy Loss:</strong><br>
-        $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = \sum_{j=1}^C \frac{\partial \mathcal{L}_{CE}}{\partial p_j} \frac{\partial p_j}{\partial z_i}$$
-        Since $\mathcal{L}_{CE} = -\sum_{k=1}^C y_k \ln(p_k)$, the derivative with respect to probability $p_j$ is:
-        $$\frac{\partial \mathcal{L}_{CE}}{\partial p_j} = -\frac{y_j}{p_j}$$</p>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.2.3</span>
+          <span class="difficulty difficulty-medium">Level 2: Dual Numbers Trace</span>
+          <span class="company-tag company-meta">Meta</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Forward-Mode Automatic Differentiation evaluates derivatives using <strong>Dual Numbers</strong>: numbers of the form $z = a + b \epsilon$, where $a, b \in \mathbb{R}$ and $\epsilon$ is an infinitesimal nilpotent quantity satisfying $\epsilon^2 = 0$.
+          <ol>
+            <li>Prove that for any differentiable function $f$, $f(x + \epsilon) = f(x) + f'(x) \epsilon$.</li>
+            <li>Using dual number arithmetic with zero skipped steps, evaluate $f(x) = \frac{x^2 + 1}{x - 3}$ and its exact derivative at $x = 5$.</li>
+          </ol></p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Solution</div>
+          <p class="step"><strong>Step 1: Taylor Expansion of Dual Numbers:</strong><br>
+          Expand $f(x + \epsilon)$ as a Taylor series around $x$:
+          $$f(x + \epsilon) = f(x) + f'(x)\epsilon + \frac{f''(x)}{2!} \epsilon^2 + \frac{f'''(x)}{3!} \epsilon^3 + \dots$$
+          Since $\epsilon^2 = 0$, all higher-order terms vanish identically:
+          $$f(x + \epsilon) = f(x) + f'(x)\epsilon \quad \checkmark$$
+          Evaluating $f$ on dual input $x + 1\epsilon$ computes the function value in the real part and the exact derivative in the dual part!</p>
 
-        <p class="step"><strong>Step 3: Substitute and Simplify:</strong>
-        $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = \sum_{j=1}^C \left( -\frac{y_j}{p_j} \right) \left[ p_j (\delta_{ij} - p_i) \right]$$
-        Cancel $p_j$ in the product:
-        $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = -\sum_{j=1}^C y_j (\delta_{ij} - p_i) = -\sum_{j=1}^C y_j \delta_{ij} + \sum_{j=1}^C y_j p_i$$
-        Evaluate each sum:
-        <ul>
-          <li>$\sum_{j=1}^C y_j \delta_{ij} = y_i$ (all terms vanish except when $j = i$).</li>
-          <li>$\sum_{j=1}^C y_j p_i = p_i \sum_{j=1}^C y_j = p_i (1) = p_i$ (since $\mathbf{y}$ is a one-hot distribution summing to 1).</li>
-        </ul>
-        Combining terms:
-        $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = p_i - y_i$$
-        <em>Mathematical Elegance:</em> The gradient is simply <strong>(Predicted Probability $-$ True Probability)</strong>! If the model predicts $p_i = 0.9$ when true label $y_i = 1.0$, the gradient error signal is $-0.1$, gently nudging logit $z_i$ upward.</p>
+          <p class="step"><strong>Step 2: Trace $f(x)$ at $x = 5$ with Dual Input $x = 5 + 1\epsilon$:</strong><br>
+          Numerator $N$:
+          $$N = (5 + \epsilon)^2 + 1 = (25 + 10\epsilon + \epsilon^2) + 1 = 25 + 10\epsilon + 0 + 1 = 26 + 10\epsilon$$
+          Denominator $D$:
+          $$D = (5 + \epsilon) - 3 = 2 + 1\epsilon$$
+          Division of Dual Numbers $\frac{a + b\epsilon}{c + d\epsilon}$:
+          $$\frac{26 + 10\epsilon}{2 + 1\epsilon} = \frac{(26 + 10\epsilon)(2 - 1\epsilon)}{(2 + 1\epsilon)(2 - 1\epsilon)} = \frac{52 - 26\epsilon + 20\epsilon - 10\epsilon^2}{4 - \epsilon^2} = \frac{52 - 6\epsilon}{4} = 13 - 1.5\epsilon$$
+          Extract components:
+          $$f(5) = \mathbf{13.0}, \quad f'(5) = \mathbf{-1.5}$$
+          Verify analytically via quotient rule:
+          $$f'(x) = \frac{2x(x-3) - (x^2+1)(1)}{(x-3)^2} \implies f'(5) = \frac{2(5)(2) - (26)(1)}{2^2} = \frac{20 - 26}{4} = \frac{-6}{4} = -1.5 \quad \checkmark$$</p>
+        </div>
       </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.2.4</span>
+          <span class="difficulty difficulty-medium">Level 2: Reverse-Mode Graph Tape</span>
+          <span class="company-tag company-tesla">Tesla</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Consider the computational graph for $f(x_1, x_2) = \ln(x_1 x_2) + x_1^2$ evaluated at $x_1 = 2, x_2 = 3$.
+          <ol>
+            <li>Decompose the computation into elementary nodes $v_1, v_2, v_3, v_4, v_5$ and compute the forward values.</li>
+            <li>Execute the reverse-mode autograd pass, computing the adjoints $\bar{v}_i = \frac{\partial f}{\partial v_i}$ to find $\frac{\partial f}{\partial x_1}$ and $\frac{\partial f}{\partial x_2}$.</li>
+          </ol></p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Solution</div>
+          <p class="step"><strong>Step 1: Forward Computational Tape:</strong><br>
+          - Input node 1: $v_1 = x_1 = 2.0$<br>
+          - Input node 2: $v_2 = x_2 = 3.0$<br>
+          - Intermediate 1: $v_3 = v_1 \times v_2 = 2 \times 3 = 6.0$<br>
+          - Intermediate 2: $v_4 = \ln(v_3) = \ln(6) \approx 1.79176$<br>
+          - Intermediate 3: $v_5 = v_1^2 = 2^2 = 4.0$<br>
+          - Output node: $v_6 = v_4 + v_5 = 1.79176 + 4.0 = \mathbf{5.79176}$</p>
+
+          <p class="step"><strong>Step 2: Reverse-Mode Adjoint Propagation ($\bar{v}_i = \frac{\partial f}{\partial v_i}$):</strong><br>
+          - Initialize seed: $\bar{v}_6 = \frac{\partial v_6}{\partial v_6} = 1.0$<br>
+          - For $v_5$: $\bar{v}_5 = \bar{v}_6 \times \frac{\partial v_6}{\partial v_5} = 1.0 \times 1 = 1.0$<br>
+          - For $v_4$: $\bar{v}_4 = \bar{v}_6 \times \frac{\partial v_6}{\partial v_4} = 1.0 \times 1 = 1.0$<br>
+          - For $v_3$: $\bar{v}_3 = \bar{v}_4 \times \frac{\partial v_4}{\partial v_3} = 1.0 \times \frac{1}{v_3} = \frac{1}{6.0} \approx 0.16667$<br>
+          - For $v_2$: $\bar{v}_2 = \bar{v}_3 \times \frac{\partial v_3}{\partial v_2} = \frac{1}{6.0} \times v_1 = \frac{2.0}{6.0} = \mathbf{\frac{1}{3} \approx 0.3333}$<br>
+          - For $v_1$ (accumulate gradients from both $v_3$ and $v_5$ paths):
+          $$\bar{v}_1 = \left(\bar{v}_3 \times \frac{\partial v_3}{\partial v_1}\right) + \left(\bar{v}_5 \times \frac{\partial v_5}{\partial v_1}\right) = \left(\frac{1}{6.0} \times v_2\right) + (1.0 \times 2 v_1) = \left(\frac{3}{6}\right) + (1 \times 4) = 0.5 + 4.0 = \mathbf{4.5}$$
+          Verify analytically:
+          $$\frac{\partial f}{\partial x_1} = \frac{1}{x_1} + 2x_1 = \frac{1}{2} + 4 = 4.5 \quad \checkmark$$
+          $$\frac{\partial f}{\partial x_2} = \frac{1}{x_2} = \frac{1}{3} \approx 0.3333 \quad \checkmark$$</p>
+        </div>
+      </div>
+
+      <!-- ==================== TIER 3: FAANG INTERVIEWS ==================== -->
+      <h4>Tier 3: FAANG &amp; Research Lab Interview Challenges</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.2.5</span>
+          <span class="difficulty difficulty-hard">Level 3: FAANG Challenge</span>
+          <span class="company-tag company-google">Google DeepMind</span>
+          <span class="company-tag company-openai">OpenAI</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In classification models, the Softmax activation function maps raw logit scores $\mathbf{z} \in \mathbb{R}^C$ into probabilities $\mathbf{p} \in \mathbb{R}^C$:
+          $$p_i = \frac{e^{z_i}}{\sum_{k=1}^C e^{z_k}}$$
+          The model is trained using Cross-Entropy loss with ground-truth one-hot label vector $\mathbf{y} \in \{0, 1\}^C$:
+          $$\mathcal{L}_{CE} = -\sum_{k=1}^C y_k \ln(p_k)$$
+          Prove analytically from first principles that the gradient of the loss with respect to logit $z_i$ is given by the remarkably simple expression:
+          $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = p_i - y_i$$</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
+          <p class="step"><strong>Step 1: Compute the Jacobian of the Softmax Function:</strong><br>
+          Let $S = \sum_{k=1}^C e^{z_k}$. Then $p_j = \frac{e^{z_j}}{S}$. We compute $\frac{\partial p_j}{\partial z_i}$ across two cases:</p>
+          <ul>
+            <li><strong>Case 1 ($j = i$):</strong>
+            $$\frac{\partial p_i}{\partial z_i} = \frac{e^{z_i} S - e^{z_i} e^{z_i}}{S^2} = \frac{e^{z_i}}{S} \left( 1 - \frac{e^{z_i}}{S} \right) = p_i (1 - p_i)$$</li>
+            <li><strong>Case 2 ($j \neq i$):</strong>
+            $$\frac{\partial p_j}{\partial z_i} = \frac{0 \cdot S - e^{z_j} e^{z_i}}{S^2} = -\frac{e^{z_j}}{S} \frac{e^{z_i}}{S} = -p_j p_i$$</li>
+          </ul>
+          Using the Kronecker delta $\delta_{ij}$:
+          $$\frac{\partial p_j}{\partial z_i} = p_j (\delta_{ij} - p_i)$$
+
+          <p class="step"><strong>Step 2: Apply the Chain Rule through Cross-Entropy Loss:</strong><br>
+          $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = \sum_{j=1}^C \frac{\partial \mathcal{L}_{CE}}{\partial p_j} \frac{\partial p_j}{\partial z_i}$$
+          Since $\mathcal{L}_{CE} = -\sum_k y_k \ln(p_k)$, we have $\frac{\partial \mathcal{L}_{CE}}{\partial p_j} = -\frac{y_j}{p_j}$.
+          Substitute into the sum:
+          $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = \sum_{j=1}^C \left( -\frac{y_j}{p_j} \right) \left[ p_j (\delta_{ij} - p_i) \right] = -\sum_{j=1}^C y_j (\delta_{ij} - p_i)$$
+          Expand the summation:
+          $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = -\sum_{j=1}^C y_j \delta_{ij} + \sum_{j=1}^C y_j p_i$$
+          Since $\delta_{ij} = 1$ only when $j = i$, the first term collapses to $-y_i$. Since $\mathbf{y}$ is a probability distribution ($\sum_{j=1}^C y_j = 1$), the second term simplifies to $p_i \sum_{j=1}^C y_j = p_i (1) = p_i$.
+          $$\frac{\partial \mathcal{L}_{CE}}{\partial z_i} = p_i - y_i \quad \blacksquare$$</p>
+        </div>
+      </div>
+
+      <!-- ==================== TIER 4: CONCEPTUAL MCQS ==================== -->
+      <h4>Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.2.6</span>
+          <span class="difficulty difficulty-medium">Level 4: Conceptual MCQ</span>
+          <span class="company-tag company-apple">Apple</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Why is second-order optimization (Newton's method: $\Delta \mathbf{w} = -H^{-1} \nabla \mathcal{L}$) virtually never applied directly to train modern deep neural networks with billions of parameters?</p>
+          <ol type="A">
+            <li>The Hessian matrix cannot be computed for non-convex functions.</li>
+            <li>Inverting a $d \times d$ Hessian matrix requires $O(d^3)$ time and $O(d^2)$ memory, which for $d = 70 \times 10^9$ requires over $10^{19}$ Gigabytes of RAM.</li>
+            <li>Second-order optimization converges significantly slower than first-order gradient descent.</li>
+            <li>Newton's method is mathematically unstable on quadratic objectives.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Correct Answer: [B] &amp; Detailed Explanation</div>
+          <p class="step"><strong>Analysis:</strong> For a model with $d$ parameters, the Hessian has $d^2$ elements. If $d = 10^9$, storing $H$ alone requires $10^{18} \times 4 \text{ bytes} = 4 \text{ Exabytes}$ of VRAM, and inverting it via Gaussian elimination costs $O(d^3) \approx 10^{27}$ operations. This is why deep learning relies exclusively on first-order methods (SGD, AdamW) or implicit Hessian-Vector Products (HVP).</p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.2.7</span>
+          <span class="difficulty difficulty-medium">Level 4: Assertion-Reasoning</span>
+          <span class="company-tag company-microsoft">Microsoft</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Read the following Assertion and Reason carefully, then choose the correct option:</p>
+          <p><strong>Assertion (A):</strong> In high-dimensional deep learning loss landscapes ($d \gg 1000$), critical points where $\nabla \mathcal{L} = \mathbf{0}$ are almost always saddle points rather than local minima.</p>
+          <p><strong>Reason (R):</strong> For a critical point to be a local minimum, all $d$ eigenvalues of the Hessian must be strictly positive simultaneously; for random eigenvalues, the probability of this occurring decays exponentially as $2^{-d}$.</p>
+          <ol type="A">
+            <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+            <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+            <li>(A) is true, but (R) is false.</li>
+            <li>Both (A) and (R) are false.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Correct Answer: [A] &amp; Detailed Explanation</div>
+          <p class="step"><strong>Analysis:</strong> Both (A) and (R) are true (Dauphin et al., NeurIPS 2014). At any critical point, if each eigenvalue has equal probability of being positive or negative, the chance that all $d$ eigenvalues are positive is $(1/2)^d$. For $d = 10^6$, $(1/2)^{10^6} \approx 0$. Virtually all critical points encountered in deep learning have both positive and negative curvature directions (saddle points), which standard SGD with momentum escapes effortlessly.</p>
+        </div>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.2.8</span>
+          <span class="difficulty difficulty-medium">Level 4: Conceptual Trap MCQ</span>
+          <span class="company-tag company-google">Google Brain</span>
+          <span class="company-tag company-meta">Meta</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> When calling PyTorch's <code>torch.autograd.grad(outputs=y, inputs=x, grad_outputs=v)</code> where $\mathbf{y} \in \mathbb{R}^m$ and $\mathbf{x} \in \mathbb{R}^n$, what mathematical operation is actually executed under the hood?</p>
+          <ol type="A">
+            <li>PyTorch computes and stores the full $m \times n$ Jacobian matrix $\mathbf{J}$ in GPU VRAM, then computes the matrix-vector product $\mathbf{J} \mathbf{v}$.</li>
+            <li>PyTorch evaluates the Vector-Jacobian Product (VJP) $\mathbf{v}^T \mathbf{J} \in \mathbb{R}^{1 \times n}$ directly by reverse-mode graph traversal without ever instantiating or allocating memory for the $m \times n$ Jacobian matrix.</li>
+            <li>PyTorch evaluates the Jacobian-Vector Product (JVP) $\mathbf{J} \mathbf{v} \in \mathbb{R}^{m \times 1}$ via forward-mode dual number propagation.</li>
+            <li>PyTorch approximates the gradient using central finite differences $\frac{\mathbf{y}(\mathbf{x} + \epsilon \mathbf{v}) - \mathbf{y}(\mathbf{x} - \epsilon \mathbf{v})}{2\epsilon}$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Correct Answer: [B] &amp; Detailed Explanation</div>
+          <p class="step"><strong>Analysis:</strong> Option B is correct. In deep neural networks, a hidden layer might have $m = 100,000$ activations and $n = 100,000$ inputs. Allocating the full Jacobian matrix would require $100,000 \times 100,000 \times 4 \text{ bytes} = 40 \text{ GB}$ of VRAM for a <em>single layer</em>! Instead, reverse-mode automatic differentiation implements the chain rule from the output back to the input, computing the Vector-Jacobian Product (VJP) $\mathbf{v}^T \mathbf{J}$ directly. Each intermediate operation only implements a primitive VJP function (e.g., for matrix multiplication $\mathbf{Y} = \mathbf{X}\mathbf{W}$, the VJP is $\frac{\partial \mathcal{L}}{\partial \mathbf{X}} = \mathbf{V} \mathbf{W}^T$), completely bypassing the materialization of the gigantic Jacobian tensor.</p>
+        </div>
+      </div>
+
     </div>
 
     <!-- SECTION 5: CODE LAB -->
     <h3>5. Production Code Lab 1.2: A Micro-Autograd Engine from Scratch</h3>
-    <p>To understand reverse-mode automatic differentiation, we build a micro-autograd engine from scratch in pure Python with a dynamic computational graph and topological sorting.</p>
+    <p>Below is a production-grade scalar autograd engine implementing the computational graph tape, backward dynamic dispatch, and gradient accumulation.</p>
 
     <div class="code-lab">
       <div class="code-lab-header">Code Lab 1.2 — Micro-Autograd Scalar Engine</div>
-      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch12_calculus_autograd/micro_autograd.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch12_calculus_autograd/micro_autograd.py</a></p>
+      <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch12_calculus/autograd_engine.py" target="_blank">🔗 View in GitHub: part1_mathematics/ch12_calculus/autograd_engine.py</a></p>
 <pre><code>class Value:
-    """A scalar node in the reverse-mode autograd computational graph."""
+    """Stores a scalar value and its gradient in a computational tape."""
+    __slots__ = ('data', 'grad', '_prev', '_op', '_backward')
+
     def __init__(self, data, _children=(), _op=''):
         self.data = float(data)
         self.grad = 0.0
@@ -161,7 +380,7 @@
         return out
 
     def backward(self):
-        # Build topological sort of the computational DAG
+        # Topological sort of the computational graph
         topo = []
         visited = set()
         def build_topo(v):
@@ -172,7 +391,7 @@
                 topo.append(v)
         build_topo(self)
 
-        self.grad = 1.0 # Base case: dL/dL = 1.0
+        self.grad = 1.0
         for node in reversed(topo):
             node._backward()
 
@@ -180,26 +399,30 @@
         return f"Value(data={self.data:.4f}, grad={self.grad:.4f})"
 
 if __name__ == "__main__":
-    # Test: L = (x * y) + (y * 2)
-    x = Value(3.0)
-    y = Value(-4.0)
-    L = (x * y) + (y * 2.0)
+    # Test autograd on: L = (x * y) + z
+    x = Value(2.0)
+    y = Value(-3.0)
+    z = Value(10.0)
+    L = (x * y) + z
     L.backward()
-    print(f"L value : {L.data}") # -12 + -8 = -20
-    print(f"dL/dx   : {x.grad}") # y = -4.0
-    print(f"dL/dy   : {y.grad}") # x + 2 = 5.0</code></pre>
+
+    print("--- Autograd Engine Verification ---")
+    print(f"L Value : {L.data:.2f} (Expected: 4.00)")
+    print(f"dL/dx   : {x.grad:.2f} (Expected: -3.00)")
+    print(f"dL/dy   : {y.grad:.2f} (Expected: 2.00)")
+    print(f"dL/dz   : {z.grad:.2f} (Expected: 1.00)")</code></pre>
     </div>
 
     <!-- SECTION 6: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 1.2 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 1.2: Custom Autograd Engine &amp; Neural Optimization Suite</h3>
-        <p class="project-desc">Extend your custom scalar autograd engine with activation functions (ReLU, Tanh, Sigmoid), build a multi-layer perceptron entirely out of pure Python <code>Value</code> nodes, and train it on non-linear synthetic data using analytical backpropagation.</p>
-        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch12_calculus_autograd/micro_autograd.py" target="_blank">🔗 Full Project Code: part1_mathematics/ch12_calculus_autograd/micro_autograd.py</a></p>
+        <h3 class="project-title">Project 1.2: Tensor-Valued Automatic Differentiation Engine with Reverse-Mode VJPs</h3>
+        <p class="project-desc">Extend scalar autograd to multi-dimensional tensors, implementing reverse-mode Vector-Jacobian Products (VJPs) for matrix multiplication, 2D convolutions, and Softmax-Cross-Entropy layers.</p>
+        <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part1_mathematics/ch12_calculus/autograd_engine.py" target="_blank">🔗 Full Project Code: part1_mathematics/ch12_calculus/autograd_engine.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> Deep learning libraries like PyTorch are not magical black boxes; they are C++ implementations of reverse-mode automatic differentiation tracking directed acyclic graphs (DAGs). In this project, you implement the complete backward chain rule for forward passes, topological graph linearization, gradient accumulation, and gradient descent updates without importing a single third-party framework.</p>
+        <p><strong>Case Study Architecture:</strong> All modern deep learning frameworks (PyTorch, JAX) are fundamentally graph autograd engines. In this capstone project, you implement an automated gradient verification suite (Finite Difference Gradient Checking) that asserts numerical gradients match machine autograd gradients to within $10^{-7}$ relative error across complex neural architectures.</p>
       </div>
     </div>
   </div>

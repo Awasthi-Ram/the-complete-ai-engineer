@@ -5,7 +5,7 @@
   <div class="chapter-header">
     <span class="chapter-number">Chapter 1.5</span>
     <h2 class="chapter-title">Convex Optimization &amp; Duality</h2>
-    <span class="chapter-subtitle">Convex Sets, The Lagrangian, KKT Conditions &amp; The Dual Problem</span>
+    <span class="chapter-subtitle">Convex Sets, Epigraphs, The Lagrangian, KKT Conditions &amp; Duality Theory</span>
     <span class="chapter-ornament">✦</span>
   </div>
 
@@ -17,96 +17,475 @@
   <div class="chapter-body">
     <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <!-- SECTION 1: CONVEXITY -->
+    <!-- SECTION 1: CONVEXITY GEOMETRY -->
     <h3>1. The Geometry of Convexity</h3>
-    <p>In general non-convex optimization, finding a global minimum is NP-hard: algorithms easily get trapped in poor local minima or stranded on high-dimensional saddle points. However, in <strong>Convex Optimization</strong>, any local minimum is guaranteed to be a <strong>Global Minimum</strong>. Support Vector Machines, Logistic Regression, Lasso, and Ridge Regression are all convex optimization problems.</p>
+    <p>In general non-convex optimization (such as training multi-layer neural networks), finding the true global minimum is NP-hard: algorithms easily get trapped in sub-optimal local minima, meander through flat plateaus, or stall indefinitely on high-dimensional saddle points. However, in <strong>Convex Optimization</strong>, geometry guarantees that <strong>any local minimum is automatically a Global Minimum</strong>. Classical machine learning algorithms—Support Vector Machines, Logistic Regression, Lasso ($L_1$), Ridge ($L_2$), and Softmax regression—are all strictly convex optimization problems.</p>
 
-    <h4>Convex Sets &amp; Convex Functions</h4>
-    <p>A set $C \subseteq \mathbb{R}^d$ is <strong>convex</strong> if the line segment connecting any two points in $C$ lies entirely within $C$:
-    $$\forall \mathbf{x}, \mathbf{y} \in C, \ \alpha \in [0, 1] \implies \alpha \mathbf{x} + (1 - \alpha) \mathbf{y} \in C$$</p>
+    <h4>Convex Sets</h4>
+    <p>A set $C \subseteq \mathbb{R}^d$ is <strong>convex</strong> if the line segment connecting any two arbitrary points in $C$ lies entirely within $C$:</p>
+    $$\forall \mathbf{x}, \mathbf{y} \in C, \ \alpha \in [0, 1] \implies \alpha \mathbf{x} + (1 - \alpha) \mathbf{y} \in C$$
 
-    <p>A function $f: C \to \mathbb{R}$ is <strong>convex</strong> if its epigraph (the region on or above its graph) is a convex set:
-    $$f(\alpha \mathbf{x} + (1 - \alpha) \mathbf{y}) \le \alpha f(\mathbf{x}) + (1 - \alpha) f(\mathbf{y}), \quad \forall \alpha \in [0, 1]$$</p>
+    <p>Fundamental convex sets in AI include:</p>
+    <ul>
+      <li><strong>Hyperplanes &amp; Half-spaces:</strong> $\{\mathbf{x} \mid \mathbf{a}^T \mathbf{x} = b\}$ and $\{\mathbf{x} \mid \mathbf{a}^T \mathbf{x} \le b\}$ (linear decision boundaries).</li>
+      <li><strong>Euclidean Balls &amp; Ellipsoids:</strong> $\{\mathbf{x} \mid \|\mathbf{x} - \mathbf{x}_c\|_2 \le r\}$ and $\{\mathbf{x} \mid (\mathbf{x} - \mathbf{x}_c)^T \mathbf{P}^{-1} (\mathbf{x} - \mathbf{x}_c) \le 1\}$ ($\mathbf{P} \succ 0$).</li>
+      <li><strong>The Probability Simplex:</strong> $\Delta^n = \{\mathbf{p} \in \mathbb{R}^n \mid \sum_{i=1}^n p_i = 1, \ p_i \ge 0\}$ (the space of valid categorical distributions).</li>
+      <li><strong>Positive Semi-Definite Cone:</strong> $\mathbb{S}_+^n = \{\mathbf{X} \in \mathbb{R}^{n \times n} \mid \mathbf{X} = \mathbf{X}^T, \ \mathbf{z}^T \mathbf{X} \mathbf{z} \ge 0 \ \forall \mathbf{z}\}$ (the space of covariance matrices and kernel matrices).</li>
+    </ul>
+
+    <h4>Convex Functions</h4>
+    <p>A function $f: C \to \mathbb{R}$ defined on a convex domain $C$ is <strong>convex</strong> if the chord connecting $( \mathbf{x}, f(\mathbf{x}) )$ and $( \mathbf{y}, f(\mathbf{y}) )$ lies entirely on or above the graph of $f$:</p>
+    $$f(\alpha \mathbf{x} + (1 - \alpha) \mathbf{y}) \le \alpha f(\mathbf{x}) + (1 - \alpha) f(\mathbf{y}), \quad \forall \mathbf{x}, \mathbf{y} \in C, \ \alpha \in [0, 1]$$
+    <p>Equivalently, a function is convex if and only if its <strong>Epigraph</strong> $\text{epi}(f) = \{(\mathbf{x}, t) \in \mathbb{R}^{d+1} \mid f(\mathbf{x}) \le t\}$ is a convex set.</p>
 
     <div class="key-insight">
-      <p><strong>First-Order Characterization of Convexity:</strong><br>
-      A differentiable function $f$ is convex if and only if its first-order Taylor approximation is a global lower bound:</p>
-      $$f(\mathbf{y}) \ge f(\mathbf{x}) + \nabla f(\mathbf{x})^T (\mathbf{y} - \mathbf{x}), \quad \forall \mathbf{x}, \mathbf{y}$$
-      <p><em>Geometric Meaning:</em> The tangent hyperplane to a convex function always lies completely below the function!</p>
+      <p><strong>First- and Second-Order Conditions for Convexity:</strong></p>
+      <ul>
+        <li><strong>First-Order Condition (Global Underestimator):</strong> A continuously differentiable function $f$ is convex if and only if its first-order Taylor expansion forms a global lower bound everywhere:
+        $$f(\mathbf{y}) \ge f(\mathbf{x}) + \nabla f(\mathbf{x})^T (\mathbf{y} - \mathbf{x}), \quad \forall \mathbf{x}, \mathbf{y} \in C$$
+        <em>Geometric Meaning:</em> The tangent hyperplane to a convex function always lies completely below the function graph!</li>
+        <li><strong>Second-Order Condition (Positive Semi-Definite Curvature):</strong> A twice-differentiable function $f$ is convex if and only if its Hessian matrix is positive semi-definite everywhere:
+        $$\nabla^2 f(\mathbf{x}) \succeq 0 \quad (\mathbf{z}^T \nabla^2 f(\mathbf{x}) \mathbf{z} \ge 0, \ \forall \mathbf{z} \in \mathbb{R}^d, \ \mathbf{x} \in C)$$</li>
+        <li><strong>Strong Convexity:</strong> $f$ is $m$-strongly convex ($m &gt; 0$) if $\nabla^2 f(\mathbf{x}) \succeq m \mathbf{I}$. Strongly convex functions have quadratic curvature bounded from below, guaranteeing unique global minima and linear convergence rates $\mathcal{O}((1 - m/L)^k)$ for gradient descent!</li>
+      </ul>
     </div>
 
-    <!-- SECTION 2: CONSTRAINED OPTIMIZATION & KKT -->
-    <h3>2. Constrained Optimization &amp; The Karush-Kuhn-Tucker (KKT) Conditions</h3>
-    <p>In engineering, we rarely optimize without constraints (e.g. latency must be under 20ms, budget must not exceed $10,000, weights must sum to 1). A standard mathematical optimization problem is formulated as:</p>
-    $$\min_{\mathbf{x}} f_0(\mathbf{x}) \quad \text{subject to } f_i(\mathbf{x}) \le 0 \ (i=1,\dots,m), \quad h_j(\mathbf{x}) = 0 \ (j=1,\dots,p)$$
+    <!-- SECTION 2: CONSTRAINED OPTIMIZATION & DUALITY -->
+    <h3>2. Constrained Optimization &amp; Lagrange Duality</h3>
+    <p>In production AI engineering, we rarely optimize objectives in an unconstrained vacuum: inference latency must be $\le 20\text{ms}$, model weight norms must be $\le C$, probabilities must sum to $1.0$. A standard mathematical optimization problem is formulated as:</p>
+    $$\min_{\mathbf{x}} f_0(\mathbf{x}) \quad \text{subject to } \begin{cases} f_i(\mathbf{x}) \le 0, & i = 1, \dots, m \quad (\text{Inequality Constraints}) \\ h_j(\mathbf{x}) = 0, & j = 1, \dots, p \quad (\text{Equality Constraints}) \end{cases}$$
+    <p>where $f_0, f_i, h_j: \mathbb{R}^d \to \mathbb{R}$. The set of all $\mathbf{x}$ satisfying all $m+p$ constraints is called the <strong>Feasible Set</strong> $\mathcal{D}_{\text{feas}}$. The primal optimal value is denoted $p^* = \min_{\mathbf{x} \in \mathcal{D}_{\text{feas}}} f_0(\mathbf{x})$.</p>
 
-    <h4>The Lagrangian Function</h4>
-    <p>We convert the constrained problem into an unconstrained objective by introducing Lagrange multiplier vectors $\boldsymbol{\lambda} \in \mathbb{R}^m$ (with $\lambda_i \ge 0$) and $\boldsymbol{\nu} \in \mathbb{R}^p$:</p>
+    <h4>The Lagrangian Function &amp; Dual Problem</h4>
+    <p>We incorporate constraints directly into the objective by defining the <strong>Lagrangian</strong> $\mathcal{L}: \mathbb{R}^d \times \mathbb{R}^m \times \mathbb{R}^p \to \mathbb{R}$ with Lagrange multiplier vectors $\boldsymbol{\lambda} \in \mathbb{R}^m$ (with $\lambda_i \ge 0$) and $\boldsymbol{\nu} \in \mathbb{R}^p$:</p>
     $$\mathcal{L}(\mathbf{x}, \boldsymbol{\lambda}, \boldsymbol{\nu}) = f_0(\mathbf{x}) + \sum_{i=1}^m \lambda_i f_i(\mathbf{x}) + \sum_{j=1}^p \nu_j h_j(\mathbf{x})$$
 
+    <p>The <strong>Lagrange Dual Function</strong> $g(\boldsymbol{\lambda}, \boldsymbol{\nu})$ is the infimum of the Lagrangian over all primal variables $\mathbf{x}$:</p>
+    $$g(\boldsymbol{\lambda}, \boldsymbol{\nu}) = \inf_{\mathbf{x} \in \mathcal{D}} \mathcal{L}(\mathbf{x}, \boldsymbol{\lambda}, \boldsymbol{\nu}) = \inf_{\mathbf{x} \in \mathcal{D}} \left[ f_0(\mathbf{x}) + \sum_{i=1}^m \lambda_i f_i(\mathbf{x}) + \sum_{j=1}^p \nu_j h_j(\mathbf{x}) \right]$$
+
     <div class="real-world-box">
-      <h4>🏆 The Karush-Kuhn-Tucker (KKT) Conditions</h4>
-      <p>For any optimization problem with differentiable objective and constraint functions, if strong duality holds, the optimal primal point $\mathbf{x}^*$ and dual points $(\boldsymbol{\lambda}^*, \boldsymbol{\nu}^*)$ must satisfy four conditions:</p>
+      <h4>🏆 Fundamental Properties of Lagrange Duality</h4>
       <ol>
-        <li><strong>Stationarity:</strong> $\nabla_{\mathbf{x}} \mathcal{L}(\mathbf{x}^*, \boldsymbol{\lambda}^*, \boldsymbol{\nu}^*) = \nabla f_0(\mathbf{x}^*) + \sum_{i=1}^m \lambda_i^* \nabla f_i(\mathbf{x}^*) + \sum_{j=1}^p \nu_j^* \nabla h_j(\mathbf{x}^*) = \mathbf{0}$.</li>
-        <li><strong>Primal Feasibility:</strong> $f_i(\mathbf{x}^*) \le 0 \ (\forall i)$, and $h_j(\mathbf{x}^*) = 0 \ (\forall j)$.</li>
-        <li><strong>Dual Feasibility:</strong> $\lambda_i^* \ge 0 \ (\forall i)$.</li>
-        <li><strong>Complementary Slackness:</strong> $\lambda_i^* f_i(\mathbf{x}^*) = 0 \ (\forall i)$.</li>
+        <li><strong>Universal Concavity of the Dual:</strong> The dual function $g(\boldsymbol{\lambda}, \boldsymbol{\nu})$ is the pointwise infimum of a family of affine functions in $(\boldsymbol{\lambda}, \boldsymbol{\nu})$. Therefore, <strong>$g(\boldsymbol{\lambda}, \boldsymbol{\nu})$ is ALWAYS concave</strong>, even if the primal objective $f_0$ and constraints $f_i$ are wildly non-convex! Maximizing the dual is always a convex optimization problem!</li>
+        <li><strong>Weak Duality ($d^* \le p^*$):</strong> For any feasible primal $\tilde{\mathbf{x}}$ and dual feasible $(\boldsymbol{\lambda} \ge 0, \boldsymbol{\nu})$, $g(\boldsymbol{\lambda}, \boldsymbol{\nu}) \le f_0(\tilde{\mathbf{x}})$. The maximum of the dual $d^* = \max_{\boldsymbol{\lambda} \ge 0, \boldsymbol{\nu}} g(\boldsymbol{\lambda}, \boldsymbol{\nu})$ is always a lower bound on the primal optimum:
+        $$d^* \le p^*$$
+        The non-negative difference $(p^* - d^*) \ge 0$ is the <strong>Duality Gap</strong>.</li>
+        <li><strong>Strong Duality &amp; Slater's Condition ($d^* = p^*$):</strong> If $p^* = d^*$, the duality gap is zero. For convex optimization problems, strong duality holds if <strong>Slater's Condition</strong> is satisfied: there exists at least one strictly feasible point $\mathbf{x} \in \text{relint}(\mathcal{D})$ such that:
+        $$f_i(\mathbf{x}) &lt; 0 \quad (\forall i = 1, \dots, m), \qquad h_j(\mathbf{x}) = 0 \quad (\forall j = 1, \dots, p)$$</li>
       </ol>
     </div>
 
-    <p><strong>The Magic of Complementary Slackness:</strong> Condition 4 asserts that for every inequality constraint $i$, either $\lambda_i^* = 0$ OR $f_i(\mathbf{x}^*) = 0$:</p>
+    <!-- SECTION 3: KKT CONDITIONS -->
+    <h3>3. The Karush-Kuhn-Tucker (KKT) Optimality Conditions</h3>
+    <p>When strong duality holds and functions are differentiable, the primal optimal point $\mathbf{x}^*$ and dual optimal points $(\boldsymbol{\lambda}^*, \boldsymbol{\nu}^*)$ must satisfy four necessary conditions established by Harold W. Kuhn and Albert W. Tucker (1951) and William Karush (1939):</p>
+
+    <div class="proof-box">
+      <h4>The 4 KKT Conditions</h4>
+      <ol>
+        <li><strong>Stationarity:</strong> The gradient of the Lagrangian with respect to primal variables vanishes:
+        $$\nabla_{\mathbf{x}} \mathcal{L}(\mathbf{x}^*, \boldsymbol{\lambda}^*, \boldsymbol{\nu}^*) = \nabla f_0(\mathbf{x}^*) + \sum_{i=1}^m \lambda_i^* \nabla f_i(\mathbf{x}^*) + \sum_{j=1}^p \nu_j^* \nabla h_j(\mathbf{x}^*) = \mathbf{0}$$</li>
+        <li><strong>Primal Feasibility:</strong> The optimal point must satisfy all original constraints:
+        $$f_i(\mathbf{x}^*) \le 0 \quad (\forall i=1,\dots,m), \qquad h_j(\mathbf{x}^*) = 0 \quad (\forall j=1,\dots,p)$$</li>
+        <li><strong>Dual Feasibility:</strong> Inequality multipliers must be non-negative:
+        $$\lambda_i^* \ge 0 \quad (\forall i=1,\dots,m)$$</li>
+        <li><strong>Complementary Slackness:</strong> The product of multiplier and constraint is identically zero:
+        $$\lambda_i^* f_i(\mathbf{x}^*) = 0 \quad (\forall i=1,\dots,m)$$</li>
+      </ol>
+    </div>
+
+    <h4>The Power of Complementary Slackness in Machine Learning</h4>
+    <p>Condition 4 enforces that for every inequality constraint $i \in \{1, \dots, m\}$:</p>
+    $$\text{Either } \lambda_i^* = 0 \quad \text{OR} \quad f_i(\mathbf{x}^*) = 0$$
     <ul>
-      <li>If the constraint is <em>inactive</em> at the optimum ($f_i(\mathbf{x}^*) &lt; 0$), then its multiplier <strong>must be zero</strong> ($\lambda_i^* = 0$). It exerts zero influence on the solution.</li>
-      <li>If $\lambda_i^* &gt; 0$, the constraint is <em>active</em> on the boundary ($f_i(\mathbf{x}^*) = 0$).</li>
+      <li><strong>Inactive Constraint ($f_i(\mathbf{x}^*) &lt; 0$):</strong> The point lies strictly inside the constraint boundary. By complementary slackness, its multiplier <strong>must be zero</strong> ($\lambda_i^* = 0$). The constraint has zero influence on the solution.</li>
+      <li><strong>Active Constraint ($f_i(\mathbf{x}^*) = 0$):</strong> The solution is pinned against the boundary wall, with multiplier $\lambda_i^* \ge 0$ representing the marginal shadow price / force exerted by the boundary.</li>
     </ul>
-    <p>This is the exact mathematical reason why Support Vector Machines (SVMs) ignore 99% of training data: only the data points lying directly on the margin boundary have $\lambda_i^* &gt; 0$ (the Support Vectors)!</p>
+    <p><strong>The SVM Support Vector Revelation:</strong> In Support Vector Machines, $f_i(\mathbf{w}, b) = 1 - y_i(\mathbf{w}^T \mathbf{x}_i + b) \le 0$. For any training sample correctly classified outside the margin ($y_i(\mathbf{w}^T \mathbf{x}_i + b) &gt; 1$), complementary slackness forces $\alpha_i^* = 0$! Only the tiny fraction of data points sitting directly on the margin boundary ($y_i(\mathbf{w}^T \mathbf{x}_i + b) = 1$) have $\alpha_i^* &gt; 0$. These points are the <strong>Support Vectors</strong>—all other training points can be deleted from memory without changing the model!</p>
 
-    <!-- SECTION 3: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Optimization &amp; KKT</h3>
-
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 1.5.1</span>
-        <span class="difficulty difficulty-hard">Hard</span>
-        <span class="company-tag company-google">Google</span>
-        <span class="company-tag company-meta">Meta</span>
+    <!-- SECTION 4: PRACTICE SUITE -->
+    <div class="practice-set">
+      <div class="practice-header">
+        <span class="set-tag">Complete 4-Tier Practice Suite</span>
+        <h3 class="set-title">Chapter 1.5 Practice Problems &amp; Tier-1 AI Challenge Suite</h3>
+        <p class="set-desc">Master the mathematics of convex sets, Lagrangian duality, KKT conditions, and constrained optimization through numerical calculations, algorithmic traces, FAANG research derivations, and conceptual trap questions.</p>
       </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> In a Hard-Margin Support Vector Machine, we seek a hyperplane $(\mathbf{w}, b)$ that separates two classes with maximum geometric margin $\frac{2}{\|\mathbf{w}\|_2}$. This is formulated as the convex primal problem:
-        $$\min_{\mathbf{w}, b} \frac{1}{2} \|\mathbf{w}\|_2^2 \quad \text{subject to } 1 - y_i (\mathbf{w}^T \mathbf{x}_i + b) \le 0, \quad \forall i=1,\dots,N$$
-        Apply the KKT conditions to derive the exact dual optimization problem in terms of multipliers $\alpha_i \ge 0$.</p>
+
+      <!-- TIER 1: NUMERICAL WARM-UP -->
+      <h4>Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.5.1</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Consider the bivariate quadratic objective function:
+          $$f(x_1, x_2) = 2x_1^2 + 2x_1 x_2 + 3x_2^2 - 4x_1 + 6x_2$$
+          <ol>
+            <li>Compute the gradient vector $\nabla f(x_1, x_2)$ and Hessian matrix $\mathbf{H} = \nabla^2 f(x_1, x_2)$.</li>
+            <li>Prove whether $f$ is strictly convex by analyzing the eigenvalues and determinant of $\mathbf{H}$.</li>
+            <li>Find the unique global unconstrained minimizer $\mathbf{x}^* = (x_1^*, x_2^*)$ and the minimum value $f^*$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
+
+          <p class="step"><strong>Step 1: Compute Gradient and Hessian:</strong>
+          $$\frac{\partial f}{\partial x_1} = 4x_1 + 2x_2 - 4, \qquad \frac{\partial f}{\partial x_2} = 2x_1 + 6x_2 + 6$$
+          $$\nabla f(x_1, x_2) = \begin{bmatrix} 4x_1 + 2x_2 - 4 \\ 2x_1 + 6x_2 + 6 \end{bmatrix}$$
+          Hessian matrix:
+          $$\mathbf{H} = \begin{bmatrix} \frac{\partial^2 f}{\partial x_1^2} & \frac{\partial^2 f}{\partial x_1 \partial x_2} \\ \frac{\partial^2 f}{\partial x_2 \partial x_1} & \frac{\partial^2 f}{\partial x_2^2} \end{bmatrix} = \begin{bmatrix} 4 & 2 \\ 2 & 6 \end{bmatrix}$$</p>
+
+          <p class="step"><strong>Step 2: Prove Strict Convexity:</strong><br>
+          For a $2 \times 2$ symmetric matrix, positive definiteness is confirmed if all principal minors are strictly positive (Sylvester's criterion):
+          $$\Delta_1 = 4 &gt; 0$$
+          $$\Delta_2 = \det(\mathbf{H}) = (4)(6) - (2)(2) = 24 - 4 = 20 &gt; 0$$
+          Eigenvalues from characteristic equation $\det(\mathbf{H} - \lambda \mathbf{I}) = \lambda^2 - \text{tr}(\mathbf{H})\lambda + \det(\mathbf{H}) = 0$:
+          $$\lambda^2 - 10\lambda + 20 = 0 \implies \lambda = \frac{10 \pm \sqrt{100 - 80}}{2} = 5 \pm \sqrt{5}$$
+          Since $\sqrt{5} \approx 2.236$, $\lambda_1 \approx 7.236 &gt; 0$ and $\lambda_2 \approx 2.764 &gt; 0$.<br>
+          Both eigenvalues are strictly positive ($\mathbf{H} \succ 0$), proving that $f$ is <strong>strictly (and strongly) convex</strong> over $\mathbb{R}^2$.</p>
+
+          <p class="step"><strong>Step 3: Solve for Global Minimum:</strong><br>
+          Set $\nabla f = \mathbf{0}$:
+          $$\begin{cases} 4x_1 + 2x_2 = 4 \\ 2x_1 + 6x_2 = -6 \end{cases}$$
+          Multiply the second equation by 2: $4x_1 + 12x_2 = -12$.<br>
+          Subtract the first equation: $(4x_1 + 12x_2) - (4x_1 + 2x_2) = -12 - 4 \implies 10x_2 = -16 \implies x_2^* = -1.6$.<br>
+          Substitute back into first equation:
+          $$4x_1 + 2(-1.6) = 4 \implies 4x_1 - 3.2 = 4 \implies 4x_1 = 7.2 \implies x_1^* = 1.8$$
+          Optimal point: $\mathbf{x}^* = (1.8, -1.6)$.<br>
+          Evaluate $f^*$:
+          $$f(1.8, -1.6) = 2(1.8)^2 + 2(1.8)(-1.6) + 3(-1.6)^2 - 4(1.8) + 6(-1.6)$$
+          $$f^* = 2(3.24) + 2(-2.88) + 3(2.56) - 7.2 - 9.6 = 6.48 - 5.76 + 7.68 - 16.8 = \mathbf{-8.40}$$
+          <strong>Result: The unique global minimum is $\mathbf{x}^* = (1.8, -1.6)$ with $f^* = -8.40$.</strong></p>
+        </div>
       </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
 
-        <p class="step"><strong>Step 1: Construct the Lagrangian:</strong><br>
-        Introduce dual variables $\alpha_i \ge 0$ for each of the $N$ constraints:
-        $$\mathcal{L}(\mathbf{w}, b, \boldsymbol{\alpha}) = \frac{1}{2} \|\mathbf{w}\|_2^2 + \sum_{i=1}^N \alpha_i \left[ 1 - y_i (\mathbf{w}^T \mathbf{x}_i + b) \right]$$
-        $$\mathcal{L}(\mathbf{w}, b, \boldsymbol{\alpha}) = \frac{1}{2} \mathbf{w}^T \mathbf{w} + \sum_{i=1}^N \alpha_i - \sum_{i=1}^N \alpha_i y_i \mathbf{w}^T \mathbf{x}_i - b \sum_{i=1}^N \alpha_i y_i$$</p>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.5.2</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-meta">Meta</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Minimize $f_0(x, y) = x^2 + 2y^2$ subject to the equality constraint $h(x, y) = x + y - 6 = 0$.
+          <ol>
+            <li>Construct the Lagrangian $\mathcal{L}(x, y, \nu)$.</li>
+            <li>Apply the stationarity conditions to find the optimal primal solution $(x^*, y^*)$ and optimal Lagrange multiplier $\nu^*$.</li>
+            <li>Explain the physical interpretation of the multiplier $\nu^* = \frac{\partial f^*}{\partial c}$ when the constraint is perturbed to $x + y = 6 + \Delta c$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
 
-        <p class="step"><strong>Step 2: Apply KKT Stationarity Conditions:</strong><br>
-        Differentiate $\mathcal{L}$ with respect to primal variables $\mathbf{w}$ and $b$ and set to zero:
-        $$\nabla_{\mathbf{w}} \mathcal{L} = \mathbf{w} - \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i = \mathbf{0} \implies \mathbf{w}^* = \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i$$
-        $$\frac{\partial \mathcal{L}}{\partial b} = -\sum_{i=1}^N \alpha_i y_i = 0 \implies \sum_{i=1}^N \alpha_i y_i = 0$$</p>
+          <p class="step"><strong>Step 1: Construct the Lagrangian:</strong>
+          $$\mathcal{L}(x, y, \nu) = x^2 + 2y^2 + \nu(x + y - 6)$$</p>
 
-        <p class="step"><strong>Step 3: Substitute Back to Form the Dual Objective:</strong><br>
-        Substitute $\mathbf{w}^* = \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i$ and $\sum_{i=1}^N \alpha_i y_i = 0$ into $\mathcal{L}$:</p>
-        <ul>
-          <li>The term $-b \sum_{i=1}^N \alpha_i y_i = -b(0) = 0$ vanishes completely!</li>
-          <li>$\frac{1}{2} \|\mathbf{w}^*\|_2^2 = \frac{1}{2} \sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i^T \mathbf{x}_j)$.</li>
-          <li>$-\sum_{i=1}^N \alpha_i y_i (\mathbf{w}^{*T} \mathbf{x}_i) = -\sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i^T \mathbf{x}_j)$.</li>
-        </ul>
-        <p>Combining these terms yields the famous <strong>SVM Dual Optimization Problem</strong>:
-        $$\max_{\boldsymbol{\alpha}} \left[ \sum_{i=1}^N \alpha_i - \frac{1}{2} \sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i \cdot \mathbf{x}_j) \right]$$
-        $$\text{subject to } \alpha_i \ge 0, \quad \sum_{i=1}^N \alpha_i y_i = 0$$
-        <em>The Kernel Trick Revealed:</em> Notice that features appear <strong>only as inner products $\mathbf{x}_i \cdot \mathbf{x}_j$</strong>! This allows us to replace $\mathbf{x}_i \cdot \mathbf{x}_j$ with a non-linear Kernel function $K(\mathbf{x}_i, \mathbf{x}_j)$, lifting data into infinite-dimensional Hilbert spaces without ever computing the high-dimensional coordinates!</p>
+          <p class="step"><strong>Step 2: Differentiate and Solve System of Equations:</strong>
+          $$\frac{\partial \mathcal{L}}{\partial x} = 2x + \nu = 0 \implies x = -\frac{\nu}{2}$$
+          $$\frac{\partial \mathcal{L}}{\partial y} = 4y + \nu = 0 \implies y = -\frac{\nu}{4}$$
+          $$\frac{\partial \mathcal{L}}{\partial \nu} = x + y - 6 = 0$$
+          Substitute $x$ and $y$ into the constraint:
+          $$\left(-\frac{\nu}{2}\right) + \left(-\frac{\nu}{4}\right) = 6 \implies -\frac{3\nu}{4} = 6 \implies -3\nu = 24 \implies \boldsymbol{\nu^* = -8}$$
+          Now recover the optimal primal coordinates:
+          $$x^* = -\frac{-8}{2} = \mathbf{4}, \qquad y^* = -\frac{-8}{4} = \mathbf{2}$$
+          Primal optimal objective value:
+          $$f^* = (4)^2 + 2(2)^2 = 16 + 2(4) = 16 + 8 = \mathbf{24}$$</p>
+
+          <p class="step"><strong>Step 3: Sensitivity Interpretation of Multiplier:</strong><br>
+          In optimization, the Lagrange multiplier $\nu^*$ represents the <strong>shadow price</strong>: the rate of change of the optimal value with respect to constraint relaxation:
+          $$\frac{\partial f^*}{\partial c} = -\nu^* = -(-8) = +8$$
+          If the constraint right-hand side increases by small $\Delta c = 0.1$ ($x + y = 6.1$), the minimum cost increases approximately by $8 \times 0.1 = 0.8$ ($f^*_{\text{new}} \approx 24.8$).</p>
+        </div>
+      </div>
+
+      <!-- TIER 2: APPLIED ENGINEERING & ALGORITHMIC TRACING -->
+      <h4>Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.5.3</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-amazon">Amazon</span>
+          <span class="company-tag company-apple">Apple</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Solve the following constrained quadratic program by rigorously checking all KKT complementary slackness conditions by hand:</p>
+          $$\min_{x_1, x_2} f_0(x_1, x_2) = (x_1 - 4)^2 + (x_2 - 4)^2 \quad \text{subject to } x_1 + x_2 \le 5, \quad x_1 \ge 0, \quad x_2 \ge 0$$
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step KKT Algorithmic Trace</div>
+
+          <p class="step"><strong>Step 1: Express in Standard Form:</strong><br>
+          Minimize $f_0(\mathbf{x}) = (x_1 - 4)^2 + (x_2 - 4)^2$ subject to:
+          $$f_1(\mathbf{x}) = x_1 + x_2 - 5 \le 0, \qquad f_2(\mathbf{x}) = -x_1 \le 0, \qquad f_3(\mathbf{x}) = -x_2 \le 0$$
+          Construct the Lagrangian with dual variables $\lambda_1, \lambda_2, \lambda_3 \ge 0$:
+          $$\mathcal{L}(\mathbf{x}, \boldsymbol{\lambda}) = (x_1 - 4)^2 + (x_2 - 4)^2 + \lambda_1(x_1 + x_2 - 5) - \lambda_2 x_1 - \lambda_3 x_2$$</p>
+
+          <p class="step"><strong>Step 2: Write the KKT Conditions:</strong>
+          <ol>
+            <li><strong>Stationarity:</strong>
+            $$\frac{\partial \mathcal{L}}{\partial x_1} = 2(x_1 - 4) + \lambda_1 - \lambda_2 = 0$$
+            $$\frac{\partial \mathcal{L}}{\partial x_2} = 2(x_2 - 4) + \lambda_1 - \lambda_3 = 0$$</li>
+            <li><strong>Primal Feasibility:</strong> $x_1 + x_2 \le 5$, $x_1 \ge 0$, $x_2 \ge 0$.</li>
+            <li><strong>Dual Feasibility:</strong> $\lambda_1 \ge 0$, $\lambda_2 \ge 0$, $\lambda_3 \ge 0$.</li>
+            <li><strong>Complementary Slackness:</strong>
+            $$\lambda_1(x_1 + x_2 - 5) = 0, \quad \lambda_2 x_1 = 0, \quad \lambda_3 x_2 = 0$$</li>
+          </ol></p>
+
+          <p class="step"><strong>Step 3: Systematic Case Analysis of Complementary Slackness:</strong><br>
+          Notice unconstrained minimum is $(4, 4)$, which violates $x_1 + x_2 = 8 \le 5$. Thus the constraint $x_1 + x_2 \le 5$ must be active at the optimum ($\lambda_1 &gt; 0$).<br>
+          Furthermore, since the unconstrained minimizer is in the positive quadrant, the non-negativity constraints $x_1 \ge 0$ and $x_2 \ge 0$ will be inactive ($x_1 &gt; 0, x_2 &gt; 0$), forcing $\lambda_2 = 0$ and $\lambda_3 = 0$.<br>
+          Under this active set ($\lambda_1 &gt; 0, \lambda_2 = 0, \lambda_3 = 0, x_1 + x_2 = 5$):
+          $$2(x_1 - 4) + \lambda_1 = 0 \implies x_1 = 4 - \frac{\lambda_1}{2}$$
+          $$2(x_2 - 4) + \lambda_1 = 0 \implies x_2 = 4 - \frac{\lambda_1}{2}$$
+          By symmetry, $x_1 = x_2$. Substitute into active constraint $x_1 + x_2 = 5$:
+          $$x_1 + x_1 = 5 \implies 2x_1 = 5 \implies \mathbf{x_1^* = 2.5}, \quad \mathbf{x_2^* = 2.5}$$
+          Now solve for multiplier $\lambda_1$:
+          $$2(2.5 - 4) + \lambda_1 = 0 \implies 2(-1.5) + \lambda_1 = 0 \implies \boldsymbol{\lambda_1^* = 3.0}$$</p>
+
+          <p class="step"><strong>Step 4: Verify All KKT Conditions:</strong>
+          <ul>
+            <li>Primal feasibility: $2.5 + 2.5 = 5.0 \le 5$, $2.5 \ge 0$, $2.5 \ge 0$. (Satisfied!)</li>
+            <li>Dual feasibility: $\lambda_1^* = 3.0 \ge 0$, $\lambda_2^* = 0 \ge 0$, $\lambda_3^* = 0 \ge 0$. (Satisfied!)</li>
+            <li>Complementary slackness: $3.0(5 - 5) = 0$, $0(2.5) = 0$, $0(2.5) = 0$. (Satisfied!)</li>
+          </ul>
+          Minimum value: $f^* = (2.5 - 4)^2 + (2.5 - 4)^2 = (-1.5)^2 + (-1.5)^2 = 2.25 + 2.25 = \mathbf{4.50}$.<br>
+          <strong>Result: Unique KKT optimal solution is $\mathbf{x}^* = (2.5, 2.5)$ with $\boldsymbol{\lambda}^* = (3.0, 0, 0)$ and $f^* = 4.50$.</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.5.4</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-google">Google</span>
+          <span class="company-tag company-meta">Meta</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Trace 3 iterations of <strong>Projected Gradient Descent (PGD)</strong> minimizing:
+          $$f(x_1, x_2) = \frac{1}{2}(x_1 - 3)^2 + \frac{1}{2}(x_2 + 2)^2 \quad \text{subject to } x_1 \ge 0, \ x_2 \ge 0$$
+          The projection operator onto the non-negative orthant $\mathbb{R}_+^2$ is $\Pi_+(\mathbf{x}) = [\max(0, x_1), \max(0, x_2)]^T$. Use fixed learning rate $\eta = 0.5$ and start from initial point $\mathbf{x}^{(0)} = [0.0, 0.0]^T$. Show the exact values of the gradient, unprojected update, and projected vector at each step.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Algorithmic Trace</div>
+
+          <p class="step"><strong>Step 1: Analytical Gradient:</strong>
+          $$\nabla f(x_1, x_2) = \begin{bmatrix} x_1 - 3 \\ x_2 + 2 \end{bmatrix}$$
+          PGD Update Rule:
+          $$\mathbf{x}^{(t+1)} = \Pi_+\left( \mathbf{x}^{(t)} - \eta \nabla f(\mathbf{x}^{(t)}) \right)$$</p>
+
+          <p class="step"><strong>Step 2: Iteration 1 ($t = 0 \to 1$):</strong><br>
+          Current point: $\mathbf{x}^{(0)} = [0.0, 0.0]^T$.
+          $$\nabla f(\mathbf{x}^{(0)}) = \begin{bmatrix} 0 - 3 \\ 0 + 2 \end{bmatrix} = \begin{bmatrix} -3.0 \\ 2.0 \end{bmatrix}$$
+          Unprojected intermediate point:
+          $$\mathbf{v}^{(1)} = \mathbf{x}^{(0)} - 0.5 \begin{bmatrix} -3.0 \\ 2.0 \end{bmatrix} = \begin{bmatrix} 0.0 + 1.5 \\ 0.0 - 1.0 \end{bmatrix} = \begin{bmatrix} 1.5 \\ -1.0 \end{bmatrix}$$
+          Project onto non-negative orthant:
+          $$\mathbf{x}^{(1)} = \Pi_+(\mathbf{v}^{(1)}) = \begin{bmatrix} \max(0, 1.5) \\ \max(0, -1.0) \end{bmatrix} = \mathbf{\begin{bmatrix} 1.5 \\ 0.0 \end{bmatrix}}$$</p>
+
+          <p class="step"><strong>Step 3: Iteration 2 ($t = 1 \to 2$):</strong><br>
+          Current point: $\mathbf{x}^{(1)} = [1.5, 0.0]^T$.
+          $$\nabla f(\mathbf{x}^{(1)}) = \begin{bmatrix} 1.5 - 3 \\ 0 + 2 \end{bmatrix} = \begin{bmatrix} -1.5 \\ 2.0 \end{bmatrix}$$
+          Unprojected intermediate point:
+          $$\mathbf{v}^{(2)} = \begin{bmatrix} 1.5 \\ 0.0 \end{bmatrix} - 0.5 \begin{bmatrix} -1.5 \\ 2.0 \end{bmatrix} = \begin{bmatrix} 1.5 + 0.75 \\ 0.0 - 1.0 \end{bmatrix} = \begin{bmatrix} 2.25 \\ -1.0 \end{bmatrix}$$
+          Project onto orthant:
+          $$\mathbf{x}^{(2)} = \Pi_+(\mathbf{v}^{(2)}) = \mathbf{\begin{bmatrix} 2.25 \\ 0.0 \end{bmatrix}}$$</p>
+
+          <p class="step"><strong>Step 4: Iteration 3 ($t = 2 \to 3$):</strong><br>
+          Current point: $\mathbf{x}^{(2)} = [2.25, 0.0]^T$.
+          $$\nabla f(\mathbf{x}^{(2)}) = \begin{bmatrix} 2.25 - 3 \\ 0 + 2 \end{bmatrix} = \begin{bmatrix} -0.75 \\ 2.0 \end{bmatrix}$$
+          Unprojected intermediate point:
+          $$\mathbf{v}^{(3)} = \begin{bmatrix} 2.25 \\ 0.0 \end{bmatrix} - 0.5 \begin{bmatrix} -0.75 \\ 2.0 \end{bmatrix} = \begin{bmatrix} 2.25 + 0.375 \\ 0.0 - 1.0 \end{bmatrix} = \begin{bmatrix} 2.625 \\ -1.0 \end{bmatrix}$$
+          Project onto orthant:
+          $$\mathbf{x}^{(3)} = \Pi_+(\mathbf{v}^{(3)}) = \mathbf{\begin{bmatrix} 2.625 \\ 0.0 \end{bmatrix}}$$
+          <em>Convergence Analysis:</em> As $t \to \infty$, $x_1^{(t)} \to 3.0$ and $x_2^{(t)} = 0.0$ permanently. The true constrained global minimum is $\mathbf{x}^* = [3.0, 0.0]^T$.</p>
+        </div>
+      </div>
+
+      <!-- TIER 3: FAANG / RESEARCH LAB CHALLENGES -->
+      <h4>Tier 3: FAANG &amp; Research Lab Challenges</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.5.5</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-google">Google Brain</span>
+          <span class="company-tag company-meta">Meta FAIR</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In a Hard-Margin Support Vector Machine, we seek an optimal separating hyperplane $(\mathbf{w}, b)$ that separates two classes $\{(\mathbf{x}_i, y_i)\}_{i=1}^N$ ($y_i \in \{-1, +1\}$) with maximum geometric margin $\frac{2}{\|\mathbf{w}\|_2}$. This is formulated as the convex primal quadratic program:</p>
+          $$\min_{\mathbf{w}, b} \frac{1}{2} \|\mathbf{w}\|_2^2 \quad \text{subject to } 1 - y_i(\mathbf{w}^T \mathbf{x}_i + b) \le 0, \quad \forall i=1,\dots,N$$
+          <ol>
+            <li>Formulate the Lagrangian $\mathcal{L}(\mathbf{w}, b, \boldsymbol{\alpha})$ using dual multipliers $\alpha_i \ge 0$.</li>
+            <li>Apply the KKT stationarity conditions to derive $\mathbf{w}^*$ in terms of $\boldsymbol{\alpha}$ and obtain the linear equality constraint on $\boldsymbol{\alpha}$.</li>
+            <li>Substitute these back into the Lagrangian to eliminate all primal variables, deriving the complete <strong>Dual Optimization Problem</strong>.</li>
+            <li>Explain how this dual derivation enables the <strong>Kernel Trick</strong> and why complementary slackness ensures mathematical sparsity.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Derivation</div>
+
+          <p class="step"><strong>Step 1: Formulate the Lagrangian:</strong><br>
+          Associate a Lagrange multiplier $\alpha_i \ge 0$ with each of the $N$ inequality constraints:
+          $$\mathcal{L}(\mathbf{w}, b, \boldsymbol{\alpha}) = \frac{1}{2} \|\mathbf{w}\|_2^2 + \sum_{i=1}^N \alpha_i \left[ 1 - y_i (\mathbf{w}^T \mathbf{x}_i + b) \right]$$
+          Expand the summation:
+          $$\mathcal{L}(\mathbf{w}, b, \boldsymbol{\alpha}) = \frac{1}{2} \mathbf{w}^T \mathbf{w} + \sum_{i=1}^N \alpha_i - \sum_{i=1}^N \alpha_i y_i (\mathbf{w}^T \mathbf{x}_i) - b \sum_{i=1}^N \alpha_i y_i$$</p>
+
+          <p class="step"><strong>Step 2: Apply KKT Stationarity Conditions:</strong><br>
+          Differentiate $\mathcal{L}$ with respect to $\mathbf{w}$ and set to $\mathbf{0}$:
+          $$\nabla_{\mathbf{w}} \mathcal{L} = \mathbf{w} - \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i = \mathbf{0} \implies \mathbf{w}^* = \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i$$
+          Differentiate $\mathcal{L}$ with respect to $b$ and set to $0$:
+          $$\frac{\partial \mathcal{L}}{\partial b} = -\sum_{i=1}^N \alpha_i y_i = 0 \implies \sum_{i=1}^N \alpha_i y_i = 0$$</p>
+
+          <p class="step"><strong>Step 3: Substitute Back into Lagrangian:</strong><br>
+          First, since $\sum_{i=1}^N \alpha_i y_i = 0$, the bias term vanishes completely: $-b(0) = 0$.<br>
+          Second, evaluate the quadratic norm of $\mathbf{w}^*$:
+          $$\frac{1}{2} \mathbf{w}^{*T} \mathbf{w}^* = \frac{1}{2} \left( \sum_{i=1}^N \alpha_i y_i \mathbf{x}_i \right)^T \left( \sum_{j=1}^N \alpha_j y_j \mathbf{x}_j \right) = \frac{1}{2} \sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i^T \mathbf{x}_j)$$
+          Third, evaluate the cross-term:
+          $$-\sum_{i=1}^N \alpha_i y_i (\mathbf{w}^{*T} \mathbf{x}_i) = -\sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i^T \mathbf{x}_j)$$
+          Combining $\frac{1}{2} \sum \sum - \sum \sum = -\frac{1}{2} \sum \sum$, the dual objective becomes:
+          $$g(\boldsymbol{\alpha}) = \sum_{i=1}^N \alpha_i - \frac{1}{2} \sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i^T \mathbf{x}_j)$$
+          This yields the famous <strong>SVM Dual Optimization Problem</strong>:
+          $$\max_{\boldsymbol{\alpha}} \left[ \sum_{i=1}^N \alpha_i - \frac{1}{2} \sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j (\mathbf{x}_i \cdot \mathbf{x}_j) \right]$$
+          $$\text{subject to } \alpha_i \ge 0 \quad (\forall i=1,\dots,N), \qquad \sum_{i=1}^N \alpha_i y_i = 0$$</p>
+
+          <p class="step"><strong>Step 4: The Kernel Trick &amp; Complementary Slackness:</strong>
+          <ul>
+            <li><strong>The Kernel Trick:</strong> Notice that input features $\mathbf{x}_i$ appear <em>strictly as inner products</em> $\mathbf{x}_i^T \mathbf{x}_j$. We can replace $\mathbf{x}_i^T \mathbf{x}_j$ with an arbitrary positive definite kernel function $K(\mathbf{x}_i, \mathbf{x}_j) = \phi(\mathbf{x}_i)^T \phi(\mathbf{x}_j)$ (e.g. Gaussian RBF $e^{-\gamma \|\mathbf{x}_i - \mathbf{x}_j\|^2}$). This maps data into an infinite-dimensional feature space without ever calculating or storing high-dimensional vectors!</li>
+            <li><strong>Sparsity via Complementary Slackness:</strong> $\alpha_i [1 - y_i(\mathbf{w}^T \mathbf{x}_i + b)] = 0$. For any point correctly placed outside the margin ($y_i(\mathbf{w}^T \mathbf{x}_i + b) &gt; 1$), $\alpha_i = 0$. Only data points lying directly on the margin boundary ($y_i(\mathbf{w}^T \mathbf{x}_i + b) = 1$) have $\alpha_i &gt; 0$. These are the <strong>Support Vectors</strong>. In practice, $90\text{--}99\%$ of $\alpha_i$ are exact zeros!</li>
+          </ul></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.5.6</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-apple">Apple</span>
+          <span class="company-tag company-qualcomm">Qualcomm</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In multi-channel wireless communication and GPU resource scheduling, we allocate total power $P$ across $n$ independent parallel channels with noise power levels $\sigma_1^2, \dots, \sigma_n^2$ to maximize total Shannon channel capacity:</p>
+          $$\max_{p_1, \dots, p_n} \sum_{i=1}^n \frac{1}{2} \ln\left( 1 + \frac{p_i}{\sigma_i^2} \right) \quad \text{subject to } \sum_{i=1}^n p_i \le P, \quad p_i \ge 0 \quad (\forall i=1,\dots,n)$$
+          <ol>
+            <li>Use the KKT conditions to derive the famous <strong>Water-Filling Algorithm</strong> solution:
+            $$p_i^* = \max\left(0, \ \frac{1}{\nu^*} - \sigma_i^2\right)$$
+            where $1/\nu^*$ is the equilibrium "water level".</li>
+            <li>For $n = 3$ channels with noise variances $\boldsymbol{\sigma}^2 = [1.0, 2.0, 5.0]$ and total available power $P = 5.0$, solve numerically for the exact water level $1/\nu^*$ and optimal power allocations $p_1^*, p_2^*, p_3^*$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical &amp; Numerical Solution</div>
+
+          <p class="step"><strong>Step 1: KKT Derivation of Water-Filling:</strong><br>
+          Convert to minimization: $\min \sum_{i=1}^n -\frac{1}{2} \ln(1 + p_i/\sigma_i^2)$ subject to $\sum p_i - P \le 0$ and $-p_i \le 0$.<br>
+          Lagrangian with multipliers $\nu \ge 0$ and $\lambda_i \ge 0$:
+          $$\mathcal{L}(\mathbf{p}, \nu, \boldsymbol{\lambda}) = -\frac{1}{2} \sum_{i=1}^n \ln\left(1 + \frac{p_i}{\sigma_i^2}\right) + \nu \left(\sum_{i=1}^n p_i - P\right) - \sum_{i=1}^n \lambda_i p_i$$
+          KKT Stationarity with respect to $p_i$:
+          $$\frac{\partial \mathcal{L}}{\partial p_i} = -\frac{1}{2} \cdot \frac{1/\sigma_i^2}{1 + p_i/\sigma_i^2} + \nu - \lambda_i = -\frac{1}{2(\sigma_i^2 + p_i)} + \nu - \lambda_i = 0$$
+          $$\lambda_i = \nu - \frac{1}{2(\sigma_i^2 + p_i)}$$
+          By complementary slackness $\lambda_i p_i = 0$ and dual feasibility $\lambda_i \ge 0$:
+          <ul>
+            <li>If channel $i$ receives positive power ($p_i &gt; 0$), then $\lambda_i = 0 \implies \frac{1}{2(\sigma_i^2 + p_i)} = \nu \implies p_i = \frac{1}{2\nu} - \sigma_i^2$.</li>
+            <li>If channel $i$ receives zero power ($p_i = 0$), then $\lambda_i \ge 0 \implies \nu \ge \frac{1}{2\sigma_i^2} \implies \frac{1}{2\nu} \le \sigma_i^2$.</li>
+          </ul>
+          Defining the water level $W = \frac{1}{2\nu}$:
+          $$p_i^* = \max(0, \ W - \sigma_i^2)$$
+          where $W$ is chosen such that total power constraint is satisfied: $\sum_{i=1}^n \max(0, W - \sigma_i^2) = P$.</p>
+
+          <p class="step"><strong>Step 2: Numerical Solution for $\boldsymbol{\sigma}^2 = [1.0, 2.0, 5.0]$ and $P = 5.0$:</strong><br>
+          Sort noise levels in ascending order: $\sigma_1^2 = 1.0, \ \sigma_2^2 = 2.0, \ \sigma_3^2 = 5.0$.<br>
+          <strong>Hypothesis 1:</strong> Assume all 3 channels are active ($p_1, p_2, p_3 &gt; 0$):
+          $$(W - 1.0) + (W - 2.0) + (W - 5.0) = 5.0 \implies 3W - 8.0 = 5.0 \implies 3W = 13.0 \implies W = \frac{13}{3} \approx 4.333$$
+          Check channel 3: $p_3 = W - \sigma_3^2 = 4.333 - 5.0 = -0.667 &lt; 0$. Contradiction! (Channel 3 is too noisy and receives zero power: $p_3^* = 0$).<br>
+          <strong>Hypothesis 2:</strong> Assume only channels 1 and 2 are active ($p_1, p_2 &gt; 0, \ p_3 = 0$):
+          $$(W - 1.0) + (W - 2.0) = 5.0 \implies 2W - 3.0 = 5.0 \implies 2W = 8.0 \implies \mathbf{W = 4.0}$$
+          Check validity:
+          $$p_1^* = 4.0 - 1.0 = \mathbf{3.0} &gt; 0 \quad \checkmark$$
+          $$p_2^* = 4.0 - 2.0 = \mathbf{2.0} &gt; 0 \quad \checkmark$$
+          $$p_3^* = \max(0, 4.0 - 5.0) = \mathbf{0.0} \quad \checkmark$$
+          Total power check: $3.0 + 2.0 + 0.0 = 5.0 = P$. (Perfect match!).<br>
+          <strong>Result: Optimal Water Level $W = 4.0$. Power allocations: $p_1^* = 3.0$, $p_2^* = 2.0$, $p_3^* = 0.0$.</strong></p>
+        </div>
+      </div>
+
+      <!-- TIER 4: CONCEPTUAL TRAP MCQS -->
+      <h4>Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.5.7</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Which of the following statements regarding Convex Optimization, Duality, and Slater's Condition is strictly mathematically FALSE?</p>
+          <ol type="A">
+            <li>The Lagrange dual function $g(\boldsymbol{\lambda}, \boldsymbol{\nu})$ is always concave, regardless of whether the primal objective is convex or non-convex.</li>
+            <li>Weak duality ($d^* \le p^*$) holds for all optimization problems, even if they are non-convex, non-differentiable, and discontinuous.</li>
+            <li>If an optimization problem is convex, strong duality ($d^* = p^*$) is mathematically guaranteed to hold under all circumstances, even if no feasible points exist.</li>
+            <li>Complementary slackness asserts that if an inequality constraint is strictly satisfied with a strict inequality at the optimum ($f_i(\mathbf{x}^*) &lt; 0$), its corresponding Lagrange multiplier must be zero.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: C (The false statement)</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of All Options:</strong>
+          <ul>
+            <li><strong>Option C is FALSE:</strong> Convexity alone is NOT sufficient to guarantee strong duality! Strong duality requires a <strong>Constraint Qualification</strong>, most notably <em>Slater's Condition</em> (the existence of at least one strictly feasible interior point). For pathological convex problems (e.g. semidefinite programs with empty relative interiors), a non-zero duality gap $p^* - d^* &gt; 0$ can and does occur.</li>
+            <li><strong>Option A is TRUE:</strong> $g(\boldsymbol{\lambda}, \boldsymbol{\nu}) = \inf_{\mathbf{x}} [f_0(\mathbf{x}) + \boldsymbol{\lambda}^T \mathbf{f}(\mathbf{x}) + \boldsymbol{\nu}^T \mathbf{h}(\mathbf{x})]$. For any fixed $\mathbf{x}$, the expression inside is an affine (linear + constant) function of $(\boldsymbol{\lambda}, \boldsymbol{\nu})$. The pointwise infimum of any collection of concave/affine functions is always concave.</li>
+            <li><strong>Option B is TRUE:</strong> Weak duality $d^* \le p^*$ is a universal theorem derived solely from the non-negativity of multipliers $\boldsymbol{\lambda} \ge 0$; it requires zero assumptions of convexity or smoothness.</li>
+            <li><strong>Option D is TRUE:</strong> $\lambda_i^* f_i(\mathbf{x}^*) = 0$. Since $\lambda_i^* \ge 0$ and $f_i(\mathbf{x}^*) \le 0$, if $f_i(\mathbf{x}^*) &lt; 0$, the only way for the product to be zero is $\lambda_i^* = 0$.</li>
+          </ul></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 1.5.8</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-deepmind">DeepMind</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Consider the following Assertion (A) and Reason (R):</p>
+          <p><strong>Assertion (A):</strong> If a dataset is linearly separable, removing any training sample $(\mathbf{x}_k, y_k)$ from the dataset that is NOT a support vector ($y_k(\mathbf{w}^{*T} \mathbf{x}_k + b^*) &gt; 1$) will leave the optimal Hard-Margin SVM decision boundary $(\mathbf{w}^*, b^*)$ completely unchanged.</p>
+          <p><strong>Reason (R):</strong> By the KKT complementary slackness condition $\alpha_i^* [1 - y_i(\mathbf{w}^{*T} \mathbf{x}_i + b^*)] = 0$, any non-support vector has an optimal Lagrange multiplier of $\alpha_k^* = 0$, meaning its contribution to the optimal weight vector $\mathbf{w}^* = \sum_{i=1}^N \alpha_i^* y_i \mathbf{x}_i$ is identically zero.</p>
+          <ol type="A">
+            <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+            <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+            <li>(A) is true, but (R) is false.</li>
+            <li>(A) is false, but (R) is true.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: A</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of Assertion &amp; Reason:</strong>
+          <ul>
+            <li><strong>Assertion (A) is TRUE:</strong> The optimal separating hyperplane depends only on the active constraints (the support vectors lying on the margins $y_i(\mathbf{w}^T \mathbf{x}_i + b) = 1$). All other points lie strictly outside the margin and do not constrain the solution space. Removing them leaves the optimal solution unchanged.</li>
+            <li><strong>Reason (R) is TRUE:</strong> Complementary slackness dictates that if $1 - y_k(\mathbf{w}^T \mathbf{x}_k + b) &lt; 0$, then $\alpha_k^*$ must be $0$. Since $\mathbf{w}^* = \sum_{i=1}^N \alpha_i^* y_i \mathbf{x}_i$, non-support vectors receive zero weighting ($\alpha_k^* = 0$) and exert zero mathematical pull on the orientation of $\mathbf{w}^*$.</li>
+            <li>Furthermore, Reason (R) directly explains why Assertion (A) is true: because their multipliers are zero, their removal from the Lagrangian leaves the KKT optimality system identical.</li>
+          </ul></p>
+        </div>
       </div>
     </div>
 
-    <!-- SECTION 4: CODE LAB -->
-    <h3>3. Production Code Lab 1.5: Constrained Optimization with Projected Gradient Descent</h3>
+    <!-- SECTION 5: CODE LAB -->
+    <h3>4. Production Code Lab 1.5: Constrained Optimization with Projected Gradient Descent</h3>
     <p>Below is a Python implementation of Projected Gradient Descent solving a constrained resource allocation problem under simplex constraints.</p>
+
+    <!-- FIGURE 1.5.1: optimization_ravine_diagram.png -->
+    <div class="diagram-figure" style="text-align: center; margin: 1.8em 0; page-break-inside: avoid;">
+      <img src="optimization_ravine_diagram.png" alt="Figure 1.5.1: optimization_ravine_diagram.png" style="max-width: 95%; border-radius: 6px; border: 1.5px solid #1b4965; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <p style="font-family: var(--font-ui); font-size: 0.85em; color: #555; margin-top: 8px;">
+        <em>Figure 1.5.1:</em> Optimization dynamics on an ill-conditioned loss surface with high condition number $\kappa \gg 1$. Standard SGD oscillates wildly across the steep ravine walls with slow longitudinal progress, while Momentum dampens orthogonal oscillations and accelerates directly toward the minimum.
+      </p>
+    </div>
+
 
     <div class="code-lab">
       <div class="code-lab-header">Code Lab 1.5 — Projected Gradient Descent on the Probability Simplex</div>
@@ -131,7 +510,7 @@ def solve_constrained_allocation(returns, cov_matrix, lr=0.01, steps=200):
     """
     Minimizes risk: w^T Cov w subject to sum(w) = 1, w >= 0 (Markowitz Simplex).
     """
-    d = len(returns)
+    d = len(returns) if returns is not None else cov_matrix.shape[0]
     w = np.ones(d) / d # Uniform initial allocation
 
     for step in range(steps):
@@ -156,7 +535,7 @@ if __name__ == "__main__":
     print(f"Minimized Portfolio Variance       : {res['portfolio_variance']:.6f}")</code></pre>
     </div>
 
-    <!-- SECTION 5: END OF CHAPTER PROJECT -->
+    <!-- SECTION 6: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 1.5 Dedicated Project &amp; Case Study</span>

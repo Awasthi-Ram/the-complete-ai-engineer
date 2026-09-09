@@ -1,3 +1,9 @@
+
+    <div class="diagram-figure">
+        <img src="random_forest_bagging.png" alt="Figure 2.5.1: random forest bagging">
+        <div class="diagram-caption"><strong>Figure 2.5.1:</strong> Random Forest architecture: Bootstrap Aggregation (Bagging) combined with Random Feature Subspaces. Training $B$ deep, uncorrelated decision trees on independent bootstrap samples and aggregating via majority voting reduces variance by a factor of $1/B$ while preserving low bias.</div>
+    </div>
+
 <!-- ======================================================================
      CHAPTER 2.5 — ENSEMBLE METHODS: RANDOM FORESTS & BAGGING
      ====================================================================== -->
@@ -17,24 +23,24 @@
   <div class="chapter-body">
     <span class="level-badge level-foundation">Foundation • Core Pillar</span>
 
-    <!-- SECTION 1: THE VARIANCE REDUCTION THEOREM -->
+    <!-- SECTION 1: VARIANCE REDUCTION THEOREM -->
     <h3>1. The Mathematics of Ensemble Variance Reduction</h3>
-    <p>Individual decision trees are high-variance, low-bias estimators: a slight change in the training dataset completely alters the split thresholds throughout the tree. How can we eliminate this variance without compromising predictive power?</p>
+    <p>Individual decision trees are high-variance, low-bias estimators: a minor perturbation to the training dataset completely alters the split thresholds throughout the entire tree hierarchy. How can we eliminate this structural instability without sacrificing non-linear capacity?</p>
 
     <h4>The Variance of Averaged Correlated Estimators</h4>
-    <p>Suppose we train $B$ separate decision tree estimators $\hat{f}_1, \hat{f}_2, \dots, \hat{f}_B$, each with variance $\sigma^2$ and positive pairwise correlation $\rho \in [0, 1]$. Consider the ensemble average $\bar{f} = \frac{1}{B} \sum_{i=1}^B \hat{f}_i$. The variance of this ensemble is:</p>
-    $$\text{Var}(\bar{f}) = \text{Var}\left( \frac{1}{B} \sum_{i=1}^B \hat{f}_i \right) = \frac{1}{B^2} \left[ \sum_{i=1}^B \text{Var}(\hat{f}_i) + \sum_{i \neq j} \text{Cov}(\hat{f}_i, \hat{f}_j) \right]$$
-    <p>Since $\text{Var}(\hat{f}_i) = \sigma^2$ and $\text{Cov}(\hat{f}_i, \hat{f}_j) = \rho \sigma^2$, and there are $B(B-1)$ pairwise cross-terms:</p>
+    <p>Suppose we train $B$ separate estimators $\hat{f}_1, \hat{f}_2, \dots, \hat{f}_B$, each with identical variance $\text{Var}(\hat{f}_i) = \sigma^2$ and positive pairwise correlation $\text{Corr}(\hat{f}_i, \hat{f}_j) = \rho \in [0, 1]$ for all $i \neq j$. Consider the ensemble average estimator $\bar{f} = \frac{1}{B} \sum_{i=1}^B \hat{f}_i$. The total variance of the ensemble is:</p>
+    $$\text{Var}(\bar{f}) = \text{Var}\left( \frac{1}{B} \sum_{i=1}^B \hat{f}_i \right) = \frac{1}{B^2} \left[ \sum_{i=1}^B \text{Var}(\hat{f}_i) + \sum_{i=1}^B \sum_{j \neq i}^B \text{Cov}(\hat{f}_i, \hat{f}_j) \right]$$
+    <p>Substitute $\text{Var}(\hat{f}_i) = \sigma^2$ and $\text{Cov}(\hat{f}_i, \hat{f}_j) = \rho \sigma^2$ across all $B(B-1)$ off-diagonal pairs:</p>
     $$\text{Var}(\bar{f}) = \frac{1}{B^2} \left[ B \sigma^2 + B(B - 1) \rho \sigma^2 \right] = \frac{\sigma^2}{B} + \frac{B - 1}{B} \rho \sigma^2$$
     $$\text{Var}(\bar{f}) = \rho \sigma^2 + \frac{1 - \rho}{B} \sigma^2$$
 
     <div class="key-insight">
       <p><strong>The Fundamental Law of Ensembles:</strong></p>
       <ul>
-        <li>As the number of trees $B \to \infty$, the second term $\frac{1 - \rho}{B} \sigma^2 \to 0$.</li>
-        <li>The remaining variance is strictly bounded by the correlation term: $\lim_{B \to \infty} \text{Var}(\bar{f}) = \mathbf{\rho \sigma^2}$.</li>
+        <li>As the number of trees grows large ($B \to \infty$), the second term vanishes: $\lim_{B \to \infty} \frac{1 - \rho}{B} \sigma^2 = 0$.</li>
+        <li>The remaining variance is strictly bounded from below by the pairwise correlation: $\lim_{B \to \infty} \text{Var}(\bar{f}) = \mathbf{\rho \sigma^2}$.</li>
       </ul>
-      <em>Crucial Engineering Deduction:</em> If your trees are identical ($\rho = 1$), averaging 1,000 trees achieves <strong>zero variance reduction</strong>! To slash variance, Leo Breiman realized that the algorithm must actively <strong>decorrelate the trees (minimize $\rho$)</strong>!
+      <em>Critical Engineering Implication:</em> If all trees make identical predictions ($\rho = 1$), averaging 10,000 trees achieves <strong>zero variance reduction</strong>! To minimize error, an ensemble algorithm must actively <strong>decorrelate the base learners (minimize $\rho$)</strong> while keeping individual model strength high!
     </div>
 
     <!-- SECTION 2: BAGGING & THE 63.2% THEOREM -->
@@ -56,61 +62,331 @@
     </div>
 
     <h4>Out-of-Bag (OOB) Validation Error</h4>
-    <p>Because each tree leaves out approximately $36.8\%$ of the dataset, these unselected samples are called <strong>Out-of-Bag (OOB) samples</strong>. For every training sample $\mathbf{x}_i$, we can evaluate its prediction using <em>only the subset of trees that never saw $\mathbf{x}_i$ during training</em>!</p>
-    <p>This provides an unbiased, built-in cross-validation score without setting aside an explicit validation set or running costly $K$-Fold cross-validation.</p>
+    <p>Because each tree leaves out approximately $36.8\%$ of the dataset, these unselected samples are called <strong>Out-of-Bag (OOB) samples</strong>. For every training sample $\mathbf{x}_i$, we can evaluate its prediction using <em>only the subset of trees that never saw $\mathbf{x}_i$ during training</em>:</p>
+    $$\hat{y}_i^{\text{OOB}} = \arg\max_k \sum_{b: \mathbf{x}_i \notin \mathcal{D}_b} \mathbb{I}(\hat{f}_b(\mathbf{x}_i) = k)$$
+    <p>This provides an unbiased, built-in cross-validation score without setting aside an explicit test set or executing computationally expensive $K$-Fold cross-validation.</p>
 
-    <!-- SECTION 3: RANDOM FORESTS -->
-    <h3>3. Random Forests: Random Feature Subspaces</h3>
-    <p>Bagging alone is insufficient when one feature is overwhelmingly strong (e.g. income in credit scoring): every single bootstrap tree will pick that same dominant feature at the root node, causing high tree correlation $\rho$.</p>
+    <!-- SECTION 3: RANDOM FORESTS & FEATURE IMPORTANCE -->
+    <h3>3. Random Forests &amp; Dual Feature Importance Metrics</h3>
+    <p>Bagging alone is insufficient when one feature is overwhelmingly strong (e.g. account balance in fraud detection): every single bootstrap tree will pick that same dominant feature at the root node, causing high tree correlation $\rho$.</p>
 
     <p><strong>Random Forests (Breiman, 2001)</strong> introduce a second layer of randomization: at every candidate split, the tree is forbidden from searching across all $d$ features. Instead, it randomly selects a small subset of $m$ features:</p>
-    $$m = \lfloor \sqrt{d} \rfloor \quad (\text{for Classification})$$
-    $$m = \lfloor d / 3 \rfloor \quad (\text{for Regression})$$
+    $$m = \lfloor \sqrt{d} \rfloor \quad (\text{Classification}), \qquad m = \lfloor d / 3 \rfloor \quad (\text{Regression})$$
     <p>By forcing trees to split on suboptimal surrogate features, Random Forests drastically reduce pairwise tree correlation $\rho$, driving ensemble variance down to near zero.</p>
 
-    <!-- SECTION 4: FAANG INTERVIEW PROBLEMS -->
-    <h3>FAANG &amp; Tier-1 AI Interview Problems — Ensembles</h3>
+    <h4>Mean Decrease in Impurity (MDI) vs. Permutation Feature Importance (MDA)</h4>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Property</th>
+            <th>Mean Decrease in Impurity (MDI / Gini Importance)</th>
+            <th>Mean Decrease in Accuracy (MDA / Permutation Importance)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Mechanism</strong></td>
+            <td>Sums all Gini impurity reductions $\Delta I$ across all nodes where feature $j$ splits, weighted by sample proportion.</td>
+            <td>Permutes (shuffles) values of feature $j$ on OOB samples and measures the drop in prediction accuracy.</td>
+          </tr>
+          <tr>
+            <td><strong>Computational Cost</strong></td>
+            <td>$\mathcal{O}(1)$ (computed for free during tree training).</td>
+            <td>$\mathcal{O}(B \cdot N)$ (requires evaluating all trees on shuffled OOB data).</td>
+          </tr>
+          <tr>
+            <td><strong>Critical Trap</strong></td>
+            <td><strong>Severe Cardinality Bias:</strong> Heavily inflates numerical features with many unique values (e.g. IDs or timestamps) even if completely uninformative!</td>
+            <td><strong>Unbiased:</strong> True gold standard. Shuffling a noise feature has zero impact on OOB accuracy regardless of cardinality.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-    <div class="problem">
-      <div class="problem-header">
-        <span class="problem-number">Problem 2.5.1</span>
-        <span class="difficulty difficulty-medium">Medium</span>
-        <span class="company-tag company-google">Google</span>
-        <span class="company-tag company-amazon">Amazon</span>
+    <!-- SECTION 4: PRACTICE SUITE -->
+    <div class="practice-set">
+      <div class="practice-header">
+        <span class="set-tag">Complete 4-Tier Practice Suite</span>
+        <h3 class="set-title">Chapter 2.5 Practice Problems &amp; Tier-1 AI Challenge Suite</h3>
+        <p class="set-desc">Master ensemble variance reduction math, Condorcet's Jury theorem, Out-of-Bag validation, and feature importance through step-by-step numerical drills, algorithmic traces, FAANG research proofs, and conceptual trap questions.</p>
       </div>
-      <div class="problem-question">
-        <p><strong>QUESTION:</strong> You are training an ensemble of $B = 100$ classifiers to predict fraudulent financial transactions. Each individual classifier has an independent error rate of $\epsilon = 0.35$. The final prediction is determined by simple majority vote.</p>
-        <ol>
-          <li>Calculate the probability that the ensemble produces an incorrect majority vote.</li>
-          <li>If the classifiers are not independent, but have pairwise correlation $\rho = 0.20$, calculate the variance of the ensemble prediction compared to an individual classifier with variance $\sigma^2 = 1.0$.</li>
-        </ol>
+
+      <!-- TIER 1: NUMERICAL WARM-UP -->
+      <h4>Tier 1: Direct Formula &amp; Numerical Warm-Up Drills</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5.1</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-google">Google</span>
+          <span class="company-tag company-amazon">Amazon</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> An engineer trains an ensemble of $B = 50$ trees, each having individual prediction variance $\sigma^2 = 2.0$.
+          <ol>
+            <li>Compute the total ensemble variance if the trees are completely independent ($\rho = 0$).</li>
+            <li>Compute the total ensemble variance if the pairwise correlation between trees is $\rho = 0.25$.</li>
+            <li>What is the absolute theoretical minimum variance achievable as the number of trees $B \to \infty$ for $\rho = 0.25$?</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
+
+          <p class="step"><strong>Step 1: Variance under Complete Independence ($\rho = 0$):</strong>
+          $$\text{Var}(\bar{f}) = \frac{\sigma^2}{B} = \frac{2.0}{50} = \mathbf{0.0400}$$
+          Averaging 50 independent trees slashes variance by $98\%$.</p>
+
+          <p class="step"><strong>Step 2: Variance under Correlation $\rho = 0.25$:</strong>
+          $$\text{Var}(\bar{f}) = \rho \sigma^2 + \frac{1 - \rho}{B} \sigma^2$$
+          $$\text{Var}(\bar{f}) = (0.25)(2.0) + \frac{1 - 0.25}{50}(2.0) = 0.50 + \frac{0.75 \times 2.0}{50} = 0.50 + \frac{1.50}{50} = 0.50 + 0.03 = \mathbf{0.5300}$$</p>
+
+          <p class="step"><strong>Step 3: Asymptotic Limit as $B \to \infty$:</strong>
+          $$\lim_{B \to \infty} \text{Var}(\bar{f}) = \rho \sigma^2 = 0.25 \times 2.0 = \mathbf{0.5000}$$
+          <strong>Result: Increasing $B$ from 50 to $\infty$ can only reduce variance from $0.53$ to $0.50$. The only way to achieve further gains is to decorrelate features (reducing $\rho$).</strong></p>
+        </div>
       </div>
-      <div class="solution">
-        <div class="solution-label">✓ Complete Step-by-Step Mathematical Solution</div>
 
-        <p class="step"><strong>Step 1: Majority Vote Error Under Independence:</strong><br>
-        Let $X$ be the number of classifiers that make an erroneous prediction. Under independence, $X$ follows a Binomial distribution: $X \sim \text{Binomial}(B = 100, p = 0.35)$.<br>
-        The ensemble makes an error if at least 51 classifiers vote incorrectly ($X \ge 51$):
-        $$P(\text{Ensemble Error}) = \sum_{k=51}^{100} \binom{100}{k} (0.35)^k (0.65)^{100 - k}$$
-        Approximating via the Central Limit Theorem:
-        $$\mu = B p = 100 \times 0.35 = 35$$
-        $$\sigma = \sqrt{B p (1 - p)} = \sqrt{100 \times 0.35 \times 0.65} = \sqrt{22.75} \approx 4.7697$$
-        With continuity correction ($X \ge 50.5$):
-        $$Z = \frac{50.5 - 35}{4.7697} = \frac{15.5}{4.7697} \approx 3.25$$
-        From standard normal tables:
-        $$P(Z \ge 3.25) = 1 - \Phi(3.25) \approx \mathbf{0.000577} = \mathbf{0.058\%}$$
-        <em>The Power of Ensembles:</em> Combining 100 mediocre models (35% error each) reduces overall error to <strong>less than 0.06%</strong>!</p>
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5.2</span>
+          <span class="difficulty difficulty-easy">Easy</span>
+          <span class="company-tag company-meta">Meta</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> A small training dataset contains $N = 5$ observations $\{x_1, x_2, x_3, x_4, x_5\}$.
+          <ol>
+            <li>Compute the exact probability that observation $x_1$ is NOT selected in a bootstrap sample of size $5$ drawn with replacement.</li>
+            <li>Compute the exact probability that $x_1$ appears at least once in the bootstrap sample.</li>
+            <li>Compare this finite-$N$ probability to the asymptotic large-$N$ limit $1 - 1/e \approx 0.6321$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Solution</div>
 
-        <p class="step"><strong>Step 2: Variance Under Correlation $\rho = 0.20$:</strong><br>
-        Apply the ensemble variance formula with $B = 100$, $\sigma^2 = 1.0$, and $\rho = 0.20$:
-        $$\text{Var}(\bar{f}) = \rho \sigma^2 + \frac{1 - \rho}{B} \sigma^2 = (0.20)(1.0) + \frac{1 - 0.20}{100}(1.0)$$
-        $$\text{Var}(\bar{f}) = 0.20 + \frac{0.80}{100} = 0.20 + 0.008 = \mathbf{0.208}$$
-        Notice that even with an infinite number of trees ($B \to \infty$), the variance can never drop below $0.20$. Correlation creates an irreducible variance floor.</p>
+          <p class="step"><strong>Step 1: Probability of Exclusion for $N=5$:</strong><br>
+          Probability of not selecting $x_1$ on a single draw is $1 - 1/5 = 4/5 = 0.80$.<br>
+          Across 5 independent draws:
+          $$P(\text{Excluded}) = \left( \frac{4}{5} \right)^5 = 0.80^5 = 0.32768 \approx \mathbf{32.77\%}$$</p>
+
+          <p class="step"><strong>Step 2: Probability of Inclusion:</strong>
+          $$P(\text{Included}) = 1 - P(\text{Excluded}) = 1 - 0.32768 = 0.67232 \approx \mathbf{67.23\%}$$</p>
+
+          <p class="step"><strong>Step 3: Comparison with Asymptotic Limit:</strong><br>
+          For $N=5$, inclusion probability is $67.23\%$. As $N \to \infty$, it converges to $1 - e^{-1} \approx 63.21\%$. The difference is only $4.0\%$, showing that the $63.2\%$ approximation holds remarkably well even for tiny datasets.</p>
+        </div>
+      </div>
+
+      <!-- TIER 2: APPLIED ENGINEERING & ALGORITHMIC TRACING -->
+      <h4>Tier 2: Applied Engineering &amp; Algorithmic Tracing</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5.3</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-apple">Apple</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> In a Random Forest of $B = 3$ trees trained on $N = 100$ samples, feature $X_1$ is chosen to split at 3 nodes across the forest:</p>
+          <ul>
+            <li>Tree 1, Node 1: Samples at node $N_t = 100$, Gini reduction $\Delta I = 0.15$.</li>
+            <li>Tree 2, Node 3: Samples at node $N_t = 40$, Gini reduction $\Delta I = 0.20$.</li>
+            <li>Tree 3, Node 2: Samples at node $N_t = 60$, Gini reduction $\Delta I = 0.10$.</li>
+          </ul>
+          <p>Calculate the normalized <strong>Mean Decrease in Impurity (MDI)</strong> for feature $X_1$, defined as:
+          $$\text{MDI}(X_1) = \frac{1}{B} \sum_{b=1}^B \sum_{t \in \text{splits}(X_1)} \frac{N_t}{N} \Delta I(t)$$</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Algorithmic Trace</div>
+
+          <p class="step"><strong>Step 1: Compute Weighted Gini Gains per Split:</strong>
+          <ul>
+            <li>Tree 1: $\frac{100}{100} \times 0.15 = 1.0 \times 0.15 = 0.1500$</li>
+            <li>Tree 2: $\frac{40}{100} \times 0.20 = 0.4 \times 0.20 = 0.0800$</li>
+            <li>Tree 3: $\frac{60}{100} \times 0.10 = 0.6 \times 0.10 = 0.0600$</li>
+          </ul></p>
+
+          <p class="step"><strong>Step 2: Average Across All $B=3$ Trees:</strong>
+          $$\text{Sum of Gains} = 0.1500 + 0.0800 + 0.0600 = 0.2900$$
+          $$\text{MDI}(X_1) = \frac{0.2900}{3} \approx \mathbf{0.0967}$$
+          <strong>Result: Feature $X_1$ contributes an average weighted impurity reduction of $0.0967$ per tree across the forest.</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5.4</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-bloomberg">Bloomberg</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Trace the computation of <strong>Permutation Feature Importance (MDA)</strong> for feature $X_2$ on an Out-of-Bag validation set containing $N_{\text{OOB}} = 5$ samples:</p>
+          <table style="margin: 10px 0;">
+            <tr><th>Sample $i$</th><th>True Label $y$</th><th>Unshuffled Prediction $\hat{y}$</th><th>Shuffled $X_2$ Prediction $\hat{y}_{\text{perm}}$</th></tr>
+            <tr><td>1</td><td>1</td><td>1</td><td>1</td></tr>
+            <tr><td>2</td><td>0</td><td>0</td><td>1 (Corrupted)</td></tr>
+            <tr><td>3</td><td>1</td><td>1</td><td>0 (Corrupted)</td></tr>
+            <tr><td>4</td><td>0</td><td>0</td><td>0</td></tr>
+            <tr><td>5</td><td>1</td><td>0 (Initial error)</td><td>0</td></tr>
+          </table>
+          <p>Compute the baseline accuracy, permuted accuracy, and the Permutation Importance score for feature $X_2$.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Numerical Trace</div>
+
+          <p class="step"><strong>Step 1: Baseline Accuracy on Unshuffled OOB Data:</strong><br>
+          Matches: Samples 1, 2, 3, 4 match true labels (4 out of 5 correct).
+          $$\text{Acc}_{\text{baseline}} = \frac{4}{5} = 0.8000 \quad (80.0\%)$$</p>
+
+          <p class="step"><strong>Step 2: Permuted Accuracy on Shuffled $X_2$ Data:</strong><br>
+          Matches: Sample 1 (1==1) and Sample 4 (0==0) are correct (2 out of 5 correct).
+          $$\text{Acc}_{\text{perm}} = \frac{2}{5} = 0.4000 \quad (40.0\%)$$</p>
+
+          <p class="step"><strong>Step 3: Compute Permutation Importance:</strong>
+          $$\text{MDA}(X_2) = \text{Acc}_{\text{baseline}} - \text{Acc}_{\text{perm}} = 0.8000 - 0.4000 = \mathbf{0.4000} \quad (40.0\% \text{ drop})$$
+          <strong>Result: Shuffling feature $X_2$ causes a $40.0\%$ drop in accuracy, confirming it is an essential predictive feature.</strong></p>
+        </div>
+      </div>
+
+      <!-- TIER 3: FAANG / RESEARCH LAB CHALLENGES -->
+      <h4>Tier 3: FAANG &amp; Research Lab Challenges</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5.5</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-google">Google DeepMind</span>
+          <span class="company-tag company-meta">Meta</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Prove <strong>Condorcet's Jury Theorem</strong> for ensemble classification from first principles. Let $B = 2m + 1$ independent binary classifiers each have probability $p &gt; 0.5$ of voting correctly. Prove that:
+          <ol>
+            <li>The ensemble majority vote accuracy $P_B$ is strictly greater than the individual accuracy: $P_B &gt; p$.</li>
+            <li>As the number of classifiers $B \to \infty$, the ensemble accuracy converges to absolute certainty: $\lim_{B \to \infty} P_B = 1.0$.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Proof</div>
+
+          <p class="step"><strong>Step 1: Formulate the Probability of Correct Majority Vote:</strong><br>
+          Let $k$ be the number of correct votes out of $B = 2m + 1$ trials. Majority vote succeeds if $k \ge m + 1$:
+          $$P_B = \sum_{k=m+1}^{2m+1} \binom{2m+1}{k} p^k (1 - p)^{2m+1-k}$$</p>
+
+          <p class="step"><strong>Step 2: Compare $P_{2m+1}$ with $P_{2m-1}$ (Inductive Step):</strong><br>
+          Adding 2 voters to an ensemble of $2m-1$ voters changes the majority outcome if and only if the original $2m-1$ voters were tied or 1 vote away:
+          $$P_{2m+1} - P_{2m-1} = \binom{2m-1}{m} p^m (1-p)^m (2p - 1)$$
+          Since $p &gt; 0.5$, $(2p - 1) &gt; 0$. Furthermore, $p^m (1-p)^m &gt; 0$ and $\binom{2m-1}{m} &gt; 0$.<br>
+          Therefore:
+          $$P_{2m+1} - P_{2m-1} &gt; 0$$
+          The sequence of ensemble accuracies $P_{2m+1}$ is <strong>strictly monotonically increasing</strong> with $B$, proving $P_B &gt; p$ for all $B &gt; 1$.</p>
+
+          <p class="step"><strong>Step 3: Evaluate the Limit as $B \to \infty$ via Chernoff Bound:</strong><br>
+          Let $X_i \in \{0, 1\}$ indicate whether voter $i$ is correct, with mean $\mu = p &gt; 0.5$.<br>
+          The ensemble majority fails if $\frac{1}{B} \sum_{i=1}^B X_i \le 0.5$.<br>
+          By Hoeffding's Inequality:
+          $$P\left( \frac{1}{B} \sum_{i=1}^B X_i - p \le -(p - 0.5) \right) \le \exp\left( -2 B (p - 0.5)^2 \right)$$
+          Since $p &gt; 0.5$, $(p - 0.5)^2 &gt; 0$. Therefore:
+          $$P(\text{Ensemble Error}) \le \exp\left( -2 B (p - 0.5)^2 \right) \xrightarrow{B \to \infty} 0$$
+          $$\lim_{B \to \infty} P_B = 1 - 0 = \mathbf{1.0}$$
+          <strong>Q.E.D. The ensemble majority vote accuracy converges exponentially to $100\%$ certainty as $B \to \infty$!</strong></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5.6</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-openai">OpenAI</span>
+          <span class="company-tag company-anthropic">Anthropic</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Prove why Random Forests <strong>do not overfit</strong> as the number of trees $B$ approaches infinity ($B \to \infty$), whereas Gradient Boosted Trees (GBDT) can overfit severely if $B$ is set too large.</p>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Step-by-Step Mathematical Analysis</div>
+
+          <p class="step"><strong>Step 1: Random Forests Generalization Error Bound (Breiman, 2001):</strong><br>
+          In a Random Forest, the ensemble prediction is an unweighted average of independently trained randomized trees $\bar{f}(\mathbf{x}) = \frac{1}{B} \sum_{b=1}^B T_b(\mathbf{x})$.<br>
+          By the Strong Law of Large Numbers, as $B \to \infty$:
+          $$\frac{1}{B} \sum_{b=1}^B T_b(\mathbf{x}) \xrightarrow{\text{a.s.}} \mathbb{E}_\Theta[T(\mathbf{x}; \Theta)]$$
+          where $\Theta$ represents the random vector of bootstrap rows and split features.<br>
+          Breiman proved that the generalization error $\text{PE}^*$ of a Random Forest is upper-bounded by:
+          $$\text{PE}^* \le \frac{\bar{\rho}(1 - s^2)}{s^2}$$
+          where $\bar{\rho}$ is the average correlation between trees, and $s$ is the margin strength of individual trees.<br>
+          <strong>Crucial Takeaway:</strong> Adding more trees does NOT increase model capacity; it merely yields a more accurate numerical Monte Carlo approximation of the underlying expectation $\mathbb{E}_\Theta[T(\mathbf{x}; \Theta)]$. After reaching ~300 to 500 trees, test error plateaus completely.</p>
+
+          <p class="step"><strong>Step 2: Contrast with Gradient Boosted Trees (GBDT):</strong><br>
+          In Gradient Boosting, trees are added <strong>sequentially to fit the residual errors of prior trees</strong>:
+          $$F_B(\mathbf{x}) = F_{B-1}(\mathbf{x}) + \eta T_B(\mathbf{x})$$
+          Each new tree specifically targets the unexplained residuals $y_i - F_{B-1}(\mathbf{x}_i)$. As $B \to \infty$, the boosting ensemble begins memorizing the random measurement noise $\epsilon_i$ of individual training samples, driving training error to zero while causing test error to explode! Boosting requires early stopping, whereas Random Forests can have $B$ set arbitrarily large.</p>
+        </div>
+      </div>
+
+      <!-- TIER 4: CONCEPTUAL TRAP MCQS -->
+      <h4>Tier 4: Conceptual Trap MCQs &amp; Assertion-Reasoning</h4>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5.7</span>
+          <span class="difficulty difficulty-medium">Medium</span>
+          <span class="company-tag company-google">Google</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> An engineer trains a Random Forest on customer churn data and includes a pure random ID feature $X_{\text{ID}} \in \{1, 2, \dots, N\}$ where every customer has a unique integer ID. What happens to the reported feature importance of $X_{\text{ID}}$ under MDI vs Permutation Importance?</p>
+          <ol type="A">
+            <li>Both MDI and Permutation Importance will correctly evaluate $X_{\text{ID}}$ as having zero importance.</li>
+            <li>MDI will rank $X_{\text{ID}}$ as the most important feature in the model, whereas Permutation Importance will correctly rank it near zero.</li>
+            <li>Permutation Importance will rank $X_{\text{ID}}$ as the most important feature, whereas MDI will rank it near zero.</li>
+            <li>The Random Forest algorithm will automatically drop $X_{\text{ID}}$ prior to training.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: B</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of All Options:</strong>
+          <ul>
+            <li><strong>Option B is TRUE:</strong> This is the famous <strong>Cardinality Trap</strong> of Mean Decrease in Impurity (MDI). A high-cardinality numerical feature with $N$ unique values provides $N-1$ unique split thresholds. Deep in trees, splitting on an ID easily isolates single samples, producing pure child nodes ($I_G = 0$) and artificially generating massive Gini gains. Permutation Importance evaluates accuracy on Out-of-Bag data: shuffling random IDs on unseen OOB samples does not degrade test accuracy, correctly assigning it near-zero importance.</li>
+            <li><strong>Options A, C, and D are FALSE:</strong> MDI cannot detect that the feature is spurious noise, and Random Forests do not perform automatic pre-filtering.</li>
+          </ul></p>
+        </div>
+      </div>
+
+      <div class="problem">
+        <div class="problem-header">
+          <span class="problem-number">Problem 2.5.8</span>
+          <span class="difficulty difficulty-hard">Hard</span>
+          <span class="company-tag company-microsoft">Microsoft</span>
+        </div>
+        <div class="problem-question">
+          <p><strong>QUESTION:</strong> Consider the following Assertion (A) and Reason (R):</p>
+          <p><strong>Assertion (A):</strong> When tuning the number of random features $m = \text{max\_features}$ evaluated at each split in a Random Forest, decreasing $m$ from $d$ down to $\lfloor \sqrt{d} \rfloor$ typically reduces the out-of-sample generalization error of the ensemble.</p>
+          <p><strong>Reason (R):</strong> Restricting the candidate feature set prevents trees from picking the same dominant predictor at top nodes, substantially reducing pairwise tree correlation $\rho$ and driving down the ensemble variance term $\rho \sigma^2$.</p>
+          <ol type="A">
+            <li>Both (A) and (R) are true, and (R) is the correct explanation of (A).</li>
+            <li>Both (A) and (R) are true, but (R) is NOT the correct explanation of (A).</li>
+            <li>(A) is true, but (R) is false.</li>
+            <li>(A) is false, but (R) is true.</li>
+          </ol>
+        </div>
+        <div class="solution">
+          <div class="solution-label">✓ Complete Conceptual Analysis &amp; Explanation</div>
+
+          <p class="step"><strong>Correct Option: A</strong></p>
+
+          <p class="step"><strong>Exhaustive Analysis of Assertion &amp; Reason:</strong>
+          <ul>
+            <li><strong>Assertion (A) is TRUE:</strong> Setting $m = d$ is simple Bagging, which often suffers from high tree correlation if a few features dominate. Reducing $m$ to $\sqrt{d}$ forces diversity, improving test accuracy.</li>
+            <li><strong>Reason (R) is TRUE:</strong> Recall $\text{Var}(\bar{f}) = \rho \sigma^2 + \frac{1-\rho}{B}\sigma^2$. While decreasing $m$ slightly increases individual tree variance $\sigma^2$ (weaker trees), it dramatically slashes correlation $\rho$, producing a net reduction in ensemble variance.</li>
+            <li>Furthermore, Reason (R) is the exact causal mathematical explanation for Assertion (A).</li>
+          </ul></p>
+        </div>
       </div>
     </div>
 
     <!-- SECTION 5: CODE LAB -->
-    <h3>4. Production Code Lab 2.5: Random Forest with OOB Scoring from Scratch</h3>
+    <h3>5. Production Code Lab 2.5: Random Forest with OOB Scoring from Scratch</h3>
     <p>Below is a production implementation of a Random Forest Classifier implementing row bootstrapping, random feature subspace selection, and Out-of-Bag validation.</p>
 
     <div class="code-lab">
@@ -159,42 +435,48 @@ class RandomForestClassifierScratch:
                 for idx, pred in zip(oob_idx, preds):
                     oob_predictions[idx].append(pred)
 
-        # Calculate Out-of-Bag Score
+        # Compute OOB score
         correct = 0
-        total_eval = 0
+        total = 0
         for i in range(N):
             if len(oob_predictions[i]) > 0:
                 majority_vote = Counter(oob_predictions[i]).most_common(1)[0][0]
                 if majority_vote == y[i]:
                     correct += 1
-                total_eval += 1
-        
-        self.oob_score_ = correct / total_eval if total_eval > 0 else 0.0
+                total += 1
+
+        self.oob_score_ = correct / total if total > 0 else 0.0
 
     def predict(self, X):
-        tree_preds = np.array([tree.predict(X[:, feats]) for tree, feats in zip(self.trees, self.tree_features)])
-        # Majority vote across axis 0 (trees)
-        y_pred = [Counter(tree_preds[:, i]).most_common(1)[0][0] for i in range(X.shape[0])]
-        return np.array(y_pred)
+        tree_preds = np.array([
+            tree.predict(X[:, feat_idx])
+            for tree, feat_idx in zip(self.trees, self.tree_features)
+        ])
+        # Majority voting along axis 0
+        final_preds = [Counter(tree_preds[:, i]).most_common(1)[0][0] for i in range(X.shape[0])]
+        return np.array(final_preds)
 
 if __name__ == "__main__":
-    from sklearn.datasets import make_classification
-    X, y = make_classification(n_samples=500, n_features=20, n_informative=10, random_state=42)
+    from sklearn.datasets import load_breast_cancer
+    data = load_breast_cancer()
+    X, y = data.data, data.target
     rf = RandomForestClassifierScratch(n_estimators=30, max_depth=5)
     rf.fit(X, y)
-    print(f"Random Forest Out-of-Bag (OOB) Accuracy: {rf.oob_score_ * 100:.2f}%")</code></pre>
+    preds = rf.predict(X)
+    print(f"Random Forest Training Accuracy: {np.mean(preds == y) * 100:.2f}%")
+    print(f"Out-of-Bag (OOB) Accuracy Score: {rf.oob_score_ * 100:.2f}%")</code></pre>
     </div>
 
     <!-- SECTION 6: END OF CHAPTER PROJECT -->
     <div class="project-section">
       <div class="project-header">
         <span class="project-tag">Chapter 2.5 Dedicated Project &amp; Case Study</span>
-        <h3 class="project-title">Project 2.5: High-Frequency Credit Default Random Forest &amp; Out-of-Bag Sentinel</h3>
-        <p class="project-desc">Build a production credit risk scoring engine that trains an ensemble of 500 decorrelated decision trees, estimates live Out-of-Bag generalization bounds, and outputs Permutation Feature Importance scores to satisfy fair lending regulatory audits.</p>
+        <h3 class="project-title">Project 2.5: High-Dimensional Genomics &amp; Biomarker Discovery Forest</h3>
+        <p class="project-desc">Architect a distributed Random Forest pipeline that analyzes DNA microarray expression data ($d = 20,000$ genes across $N = 500$ patients), computes unbiased Permutation Feature Importance, and isolates rare oncological drivers.</p>
         <p><a class="repo-link-badge" href="https://github.com/Awasthi-Ram/the-complete-ai-engineer-solutions/blob/main/part2_classical_ml/ch25_random_forests/random_forest_scratch.py" target="_blank">🔗 Full Project Code: part2_classical_ml/ch25_random_forests/random_forest_scratch.py</a></p>
       </div>
       <div class="project-body">
-        <p><strong>Case Study Architecture:</strong> In banking credit approval (JPMorgan Chase, Capital One), regulations mandate that models must explain feature importances without bias. In this project, you construct a high-throughput Random Forest service that scores loan applications, generates Out-of-Bag error margins, and evaluates permutation importance to identify risky predictors.</p>
+        <p><strong>Case Study Architecture:</strong> In cancer genomics ($P \gg N$), standard MDI importance is corrupted by gene correlation clusters. In this project, you construct an enterprise biomarker discovery engine that implements conditional permutation importance, profiles OOB convergence across 1,000 trees, and exports top-ranked gene candidates for laboratory validation.</p>
       </div>
     </div>
   </div>
